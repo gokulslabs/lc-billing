@@ -12,4 +12,6 @@ export default defineConfig({
     // nitro/vite builds from this
     server: { entry: "server" },
   },
+  // Railway runs a Node process. The default build targets Cloudflare and never listens on PORT.
+  nitro: { preset: "node-server" },
 });
