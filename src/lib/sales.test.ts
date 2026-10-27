@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGroupDiscount, collectionProblem, lineAmount, nextBillNo } from "./sales";
+import { applyGroupDiscount, collectionProblem, lineAmount, nextBillNo, selectBills, type InvoiceSummary } from "./sales";
 
 describe("nextBillNo", () => {
   it("starts at 1 for an empty shop", () => {
@@ -24,6 +24,43 @@ describe("applyGroupDiscount", () => {
 
   it("leaves a line alone when the group has no discount", () => {
     expect(applyGroupDiscount(2, 50, 0)).toEqual({ gross: 100, discount: 0, amount: 100 });
+  });
+});
+
+function bill(patch: Partial<InvoiceSummary>): InvoiceSummary {
+  return {
+    id: patch.id ?? "1",
+    billNo: patch.billNo ?? "1",
+    customerId: "c",
+    customerName: patch.customerName ?? "A",
+    billedOn: patch.billedOn ?? "2026-01-01",
+    status: patch.status ?? "open",
+    remarks: null,
+    gross: patch.gross ?? 100,
+    discount: patch.discount ?? 0,
+    total: patch.total ?? 100,
+    collected: patch.collected ?? 0,
+    balance: patch.balance ?? 100,
+  };
+}
+
+describe("selectBills", () => {
+  const rows = [
+    bill({ id: "a", billNo: "2", customerName: "Meena", billedOn: "2026-02-01", balance: 0, collected: 100, total: 100 }),
+    bill({ id: "b", billNo: "10", customerName: "Anitha", billedOn: "2026-03-01", balance: 400, total: 500, collected: 100 }),
+    bill({ id: "c", billNo: "3", customerName: "Anitha", billedOn: "2026-01-01", balance: 50, status: "cancelled" }),
+  ];
+
+  it("keeps only bills that still have a balance", () => {
+    expect(selectBills(rows, "unpaid", "customer", "asc").map((row) => row.billNo)).toEqual(["10"]);
+  });
+
+  it("sorts bill numbers as numbers", () => {
+    expect(selectBills(rows, "all", "bill", "asc").map((row) => row.billNo)).toEqual(["2", "3", "10"]);
+  });
+
+  it("puts the largest balance first", () => {
+    expect(selectBills(rows, "all", "balance", "desc").map((row) => row.billNo)).toEqual(["10", "3", "2"]);
   });
 });
 

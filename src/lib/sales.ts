@@ -32,10 +32,44 @@ export type InvoiceSummary = {
   billedOn: string;
   status: string;
   remarks: string | null;
+  gross: number;
+  discount: number;
   total: number;
   collected: number;
   balance: number;
 };
+
+export const BILL_SORTS = ["date", "bill", "customer", "gross", "discount", "net", "collected", "balance"] as const;
+export type BillSort = (typeof BILL_SORTS)[number];
+export const BILL_PAYS = ["all", "unpaid", "paid"] as const;
+export type BillPay = (typeof BILL_PAYS)[number];
+
+export function selectBills(
+  rows: readonly InvoiceSummary[],
+  pay: BillPay,
+  sort: BillSort,
+  direction: "asc" | "desc",
+): InvoiceSummary[] {
+  const filtered = rows.filter((row) => {
+    if (pay === "all") return true;
+    if (row.status === "cancelled") return false;
+    const unpaid = row.balance > 0.001;
+    return pay === "unpaid" ? unpaid : !unpaid;
+  });
+  const sign = direction === "asc" ? 1 : -1;
+  return [...filtered].sort((a, b) => compareBills(a, b, sort) * sign || a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+}
+
+function compareBills(a: InvoiceSummary, b: InvoiceSummary, sort: BillSort): number {
+  if (sort === "date") return a.billedOn.localeCompare(b.billedOn) || a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
+  if (sort === "bill") return a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
+  if (sort === "customer") return a.customerName.localeCompare(b.customerName);
+  if (sort === "gross") return a.gross - b.gross;
+  if (sort === "discount") return a.discount - b.discount;
+  if (sort === "collected") return a.collected - b.collected;
+  if (sort === "balance") return a.balance - b.balance;
+  return a.total - b.total;
+}
 
 export type InvoiceDetail = InvoiceSummary & {
   lines: InvoiceLine[];

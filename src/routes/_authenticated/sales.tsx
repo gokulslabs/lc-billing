@@ -5,9 +5,8 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
-import { monthStart } from "@/lib/reports";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
-import { lineAmount, PAYMENT_MODES, shopToday } from "@/lib/sales";
+import { lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -29,7 +28,7 @@ export const Route = createFileRoute("/_authenticated/sales")({
 function SalesPage() {
   const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
   const [billId, setBillId] = useState<string | null>(null);
-  const [list, setList] = useState(opening === "due" || opening === "close");
+  const [list, setList] = useState(true);
   if (billId) {
     return (
       <BillScreen
@@ -70,26 +69,42 @@ function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; 
   const today = shopToday();
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
-  const [from, setFrom] = useState(monthStart(today));
+  const [from, setFrom] = useState("2000-01-01");
   const [to, setTo] = useState(today);
+  const [pay, setPay] = useState<BillPay>("all");
+  const [sort, setSort] = useState<BillSort>("date");
+  const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const bills = useQuery({
-    queryKey: ["invoices", deferred, from, to, page],
+    queryKey: ["invoices", deferred, from, to, pay, sort, direction, page],
     queryFn: () =>
-      apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices${query({ q: deferred, from, to, page })}`),
+      apiFetch<{ invoices: InvoiceSummary[]; total: number }>(
+        `/api/invoices${query({ q: deferred, from, to, page, pay, sort, dir: direction })}`,
+      ),
   });
   const items = useQuery({
     queryKey: ["invoice-items", deferred, from, to, page],
     queryFn: () => apiFetch<{ items: InvoiceItem[]; total: number }>(`/api/invoices/items${query({ q: deferred, from, to, page })}`),
   });
   const rows = bills.data?.invoices ?? [];
+  function chooseSort(column: BillSort) {
+    setPage(1);
+    if (sort === column) {
+      setDirection((current) => (current === "asc" ? "desc" : "asc"));
+      return;
+    }
+    setSort(column);
+    setDirection(column === "customer" || column === "bill" || column === "date" ? "asc" : "desc");
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-semibold">Sales & billing</h1>
-          <p className="mt-2 text-sm text-muted-foreground">A bill is a customer, then lines added by inventory number.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Every bill in the dates, with gross, discount, and net. Not paid keeps only a balance.
+          </p>
         </div>
         <Button className="rounded-full" onClick={onNew}>
           New bill
@@ -125,6 +140,27 @@ function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; 
           aria-label="To date"
           className="w-40"
         />
+        <Select
+          value={pay}
+          onValueChange={(value) => {
+            const next = value as BillPay;
+            setPay(next);
+            setPage(1);
+            if (next === "unpaid") {
+              setSort("balance");
+              setDirection("desc");
+            }
+          }}
+        >
+          <SelectTrigger className="w-40" aria-label="Payment">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All bills</SelectItem>
+            <SelectItem value="unpaid">Not paid</SelectItem>
+            <SelectItem value="paid">Paid in full</SelectItem>
+          </SelectContent>
+        </Select>
       </div>
       <Tabs defaultValue={startTab}>
         <TabsList>
@@ -142,12 +178,14 @@ function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; 
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Bill no.</TableHead>
-                    <TableHead>Date</TableHead>
-                    <TableHead>Customer</TableHead>
-                    <TableHead>Total</TableHead>
-                    <TableHead>Collected</TableHead>
-                    <TableHead>Balance</TableHead>
+                    <SortHead label="Bill no." column="bill" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Date" column="date" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Customer" column="customer" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Gross" column="gross" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Discount" column="discount" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Net" column="net" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Collected" column="collected" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead label="Balance" column="balance" sort={sort} direction={direction} onSort={chooseSort} />
                     <TableHead>Status</TableHead>
                     <TableHead />
                   </TableRow>
@@ -156,12 +194,14 @@ function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; 
                   {rows.map((bill) => (
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.billNo}</TableCell>
-                      <TableCell>{bill.billedOn}</TableCell>
+                      <TableCell className="whitespace-nowrap">{slashDate(bill.billedOn)}</TableCell>
                       <TableCell>
                         <Link to="/customers/$customerId" params={{ customerId: bill.customerId }} className="hover:underline">
                           {bill.customerName}
                         </Link>
                       </TableCell>
+                      <TableCell>{formatRupees(bill.gross)}</TableCell>
+                      <TableCell>{formatRupees(bill.discount)}</TableCell>
                       <TableCell>{formatRupees(bill.total)}</TableCell>
                       <TableCell>{formatRupees(bill.collected)}</TableCell>
                       <TableCell>{formatRupees(bill.balance)}</TableCell>
@@ -734,14 +774,46 @@ function CloseCard({ label, value, note }: { label: string; value: string; note:
   );
 }
 
-function query(input: { q: string; from: string; to: string; page?: number }): string {
+function query(input: { q: string; from: string; to: string; page?: number; pay?: BillPay; sort?: BillSort; dir?: "asc" | "desc" }): string {
   const params = new URLSearchParams();
   if (input.q.trim()) params.set("q", input.q.trim());
   if (input.from) params.set("from", input.from);
   if (input.to) params.set("to", input.to);
+  if (input.pay && input.pay !== "all") params.set("pay", input.pay);
+  if (input.sort) params.set("sort", input.sort);
+  if (input.dir) params.set("dir", input.dir);
   if (input.page) params.set("page", String(input.page));
   const text = params.toString();
   return text ? `?${text}` : "";
+}
+
+function SortHead({
+  label,
+  column,
+  sort,
+  direction,
+  onSort,
+}: {
+  label: string;
+  column: BillSort;
+  sort: BillSort;
+  direction: "asc" | "desc";
+  onSort: (column: BillSort) => void;
+}) {
+  const active = sort === column;
+  return (
+    <TableHead>
+      <button type="button" className="inline-flex items-center gap-1 font-medium" onClick={() => onSort(column)}>
+        {label}
+        {active ? <span aria-hidden="true">{direction === "asc" ? "↑" : "↓"}</span> : null}
+      </button>
+    </TableHead>
+  );
+}
+
+function slashDate(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return day && month && year ? `${day}-${month}-${year}` : value;
 }
 
 function localToday(): string {
