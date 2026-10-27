@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { billTotals, moneyBalance, monthStart, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
-import { shopToday } from "@/lib/sales";
+import { NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
 import { requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -30,6 +30,7 @@ type PaymentRow = {
   amount: number | string;
   paid_on: string;
   showroom: string | null;
+  mode?: string | null;
 };
 
 const reports = new Hono<Env>();
@@ -79,7 +80,7 @@ reports.get("/collections", async (c) => {
   const payments = await readAll<PaymentRow>((from, to) =>
     supabaseAdmin
       .from("payments")
-      .select("invoice_id, amount, paid_on, showroom")
+      .select("invoice_id, amount, paid_on, showroom, mode")
       .eq("paid_on", date)
       .order("paid_on")
       .order("id")
@@ -95,6 +96,7 @@ reports.get("/collections", async (c) => {
       billNo: invoices.get(row.invoice_id)?.bill_no ?? "",
       paidOn: row.paid_on,
       remarks: invoices.get(row.invoice_id)?.remarks ?? null,
+      mode: row.mode ?? null,
       amount: Number(row.amount),
     })),
   });
@@ -125,7 +127,8 @@ reports.get("/showrooms", async (c) => {
 });
 
 reports.get("/pending", async (c) => {
-  const loaded = await readAll<InvoiceRow>((from, to) =>
+  const books = c.req.query("books") === "old" ? "old" : "new";
+  const loaded = await readAll<InvoiceRow>((from, to) => {
     supabaseAdmin
       .from("invoices")
       .select("id, bill_no, customer_id, billed_on, status, remarks")
@@ -135,7 +138,9 @@ reports.get("/pending", async (c) => {
       .range(from, to),
   );
   if (!loaded) return c.json({ error: "Could not load pending bills." }, 500);
-  const invoices = loaded.rows;
+  const invoices = loaded.rows.filter((row) =>
+    books === "old" ? row.billed_on < NEW_COUNTER_FROM : row.billed_on >= NEW_COUNTER_FROM,
+  );
   const [lines, payments] = await Promise.all([loadLines(invoices.map((row) => row.id)), loadPayments(invoices.map((row) => row.id))]);
   if (!lines || !payments) return c.json({ error: "Could not load pending bills." }, 500);
   const pending = invoices.flatMap((invoice) => {

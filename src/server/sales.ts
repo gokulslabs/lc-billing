@@ -4,7 +4,6 @@ import { blankToNull } from "@/lib/customers";
 import { quantityForUnit } from "@/lib/inventory";
 import type { Unit } from "@/lib/products";
 import {
-  applyGroupDiscount,
   BILL_PAYS,
   BILL_SORTS,
   lineAmount,
@@ -17,6 +16,10 @@ import {
   selectBills,
   PAYMENT_MODES,
   paymentSchema,
+  priceLine,
+  removePaymentSchema,
+  returnLineSchema,
+  returnQuantity,
   shopToday,
   zodMessage,
   type InvoiceDetail,
@@ -286,7 +289,13 @@ sales.post("/:id/lines", async (c) => {
     .maybeSingle();
   if (moved.error || !moved.data) return c.json({ error: "Stock changed. Try the line again." }, 409);
 
-  const priced = applyGroupDiscount(parsed.data.quantity, product.price, product.discountPercent);
+  const priced = priceLine(
+    parsed.data.quantity,
+    product.price,
+    product.discountPercent,
+    parsed.data.rate,
+    parsed.data.extraOff,
+  );
   const amount = priced.amount;
   const { data, error } = await supabaseAdmin
     .from("invoice_lines")
@@ -296,7 +305,7 @@ sales.post("/:id/lines", async (c) => {
       product_id: product.id,
       inventory_no: stock.inventory_no,
       quantity: parsed.data.quantity,
-      rate: product.price,
+      rate: priced.rate,
       amount,
     })
     .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
@@ -313,7 +322,9 @@ sales.post("/:id/lines", async (c) => {
   return c.json({ invoice: detail.invoice, line: toLine(data as LineRow, product, left > 0 ? "available" : "sold") }, 201);
 });
 
-sales.delete("/:id/lines/:lineId", async (c) => {
+sales.post("/:id/lines/:lineId/return", async (c) => {
+  const parsed = returnLineSchema.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
   if (invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
@@ -326,12 +337,27 @@ sales.delete("/:id/lines/:lineId", async (c) => {
   if (line.error) return c.json({ error: "Could not check this line." }, 500);
   if (!line.data) return c.json({ error: "Line not found." }, 404);
   const row = line.data as LineRow;
+  const products = await loadProducts([row.product_id]);
+  const product = products?.get(row.product_id);
+  if (!product) return c.json({ error: "Could not load this product." }, 500);
+  const quantityError = quantityForUnit(product.unit, parsed.data.quantity);
+  if (quantityError) return c.json({ error: quantityError }, 400);
+  const next = returnQuantity(Number(row.quantity), Number(row.amount), parsed.data.quantity);
+  if (typeof next === "string") return c.json({ error: next }, 400);
   if (row.inventory_item_id) {
-    const restored = await restoreStock(row.inventory_item_id, Number(row.quantity));
+    const restored = await restoreStock(row.inventory_item_id, parsed.data.quantity);
     if (!restored) return c.json({ error: "Could not return this quantity to stock." }, 500);
   }
-  const removed = await supabaseAdmin.from("invoice_lines").delete().eq("id", row.id);
-  if (removed.error) return c.json({ error: "Could not remove the line." }, 500);
+  if (next.quantity === 0) {
+    const removed = await supabaseAdmin.from("invoice_lines").delete().eq("id", row.id);
+    if (removed.error) return c.json({ error: "Could not remove the line." }, 500);
+  } else {
+    const updated = await supabaseAdmin
+      .from("invoice_lines")
+      .update({ quantity: next.quantity, amount: next.amount })
+      .eq("id", row.id);
+    if (updated.error) return c.json({ error: "Could not update the line." }, 500);
+  }
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
@@ -343,6 +369,12 @@ sales.post("/:id/cancel", async (c) => {
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
   if (invoice.status !== "open") return c.json({ error: "This bill is already cancelled." }, 400);
+  const paid = await supabaseAdmin
+    .from("payments")
+    .select("id", { count: "exact", head: true })
+    .eq("invoice_id", invoice.id);
+  if (paid.error) return c.json({ error: "Could not check the payments." }, 500);
+  if ((paid.count ?? 0) > 0) return c.json({ error: "This bill has a payment. Remove it before cancelling." }, 400);
   const lines = await supabaseAdmin
     .from("invoice_lines")
     .select("id, inventory_item_id, quantity")
@@ -383,6 +415,31 @@ sales.post("/:id/payments", async (c) => {
   const next = await loadDetail(detail.invoice.id);
   if ("error" in next) return c.json({ error: next.error }, next.status);
   return c.json({ invoice: next.invoice }, 201);
+});
+
+sales.post("/:id/payments/:paymentId/remove", async (c) => {
+  const parsed = removePaymentSchema.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const invoice = await findInvoice(c.req.param("id"));
+  if (!invoice) return c.json({ error: "Bill not found." }, 404);
+  if (invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
+  const payment = await supabaseAdmin
+    .from("payments")
+    .select("id, amount, paid_on, mode")
+    .eq("id", c.req.param("paymentId"))
+    .eq("invoice_id", invoice.id)
+    .maybeSingle();
+  if (payment.error) return c.json({ error: "Could not check this payment." }, 500);
+  if (!payment.data) return c.json({ error: "Payment not found." }, 404);
+  if (payment.data.paid_on !== shopToday()) return c.json({ error: "Only a payment taken today can be removed." }, 400);
+  const removed = await supabaseAdmin.from("payments").delete().eq("id", payment.data.id);
+  if (removed.error) return c.json({ error: "Could not remove the payment." }, 500);
+  const note = `Payment removed ${payment.data.paid_on} ${payment.data.amount} ${payment.data.mode ?? "Not recorded"}: ${parsed.data.reason}`;
+  const remarks = [invoice.remarks, note].filter(Boolean).join("\n");
+  await supabaseAdmin.from("invoices").update({ remarks }).eq("id", invoice.id);
+  const detail = await loadDetail(invoice.id);
+  if ("error" in detail) return c.json({ error: detail.error }, detail.status);
+  return c.json({ invoice: detail.invoice });
 });
 
 sales.delete("/:id", async (c) => {
@@ -519,14 +576,21 @@ async function findStock(inventoryNo: string): Promise<StockRow | null> {
 }
 
 async function restoreStock(id: string, quantity: number): Promise<boolean> {
-  const current = await supabaseAdmin.from("inventory_items").select("id, quantity").eq("id", id).maybeSingle();
-  if (current.error || !current.data) return false;
-  const next = round3(Number(current.data.quantity) + quantity);
-  const { error } = await supabaseAdmin
-    .from("inventory_items")
-    .update({ quantity: next, status: next > 0 ? "available" : "sold" })
-    .eq("id", id);
-  return !error;
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const current = await supabaseAdmin.from("inventory_items").select("id, quantity").eq("id", id).maybeSingle();
+    if (current.error || !current.data) return false;
+    const next = round3(Number(current.data.quantity) + quantity);
+    const saved = await supabaseAdmin
+      .from("inventory_items")
+      .update({ quantity: next, status: next > 0 ? "available" : "sold" })
+      .eq("id", id)
+      .eq("quantity", current.data.quantity)
+      .select("id")
+      .maybeSingle();
+    if (saved.error) return false;
+    if (saved.data) return true;
+  }
+  return false;
 }
 
 async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | null> {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyGroupDiscount, collectionProblem, lineAmount, nextBillNo, selectBills, type InvoiceSummary } from "./sales";
+import { applyGroupDiscount, collectionProblem, lineAmount, nextBillNo, priceLine, returnQuantity, selectBills, type InvoiceSummary } from "./sales";
 
 describe("nextBillNo", () => {
   it("starts at 1 for an empty shop", () => {
@@ -61,6 +61,21 @@ describe("selectBills", () => {
 
   it("puts the largest balance first", () => {
     expect(selectBills(rows, "all", "balance", "desc").map((row) => row.billNo)).toEqual(["10", "3", "2"]);
+  });
+});
+
+describe("priceLine", () => {
+  it("uses a typed rate and takes extra rupees off after the group discount", () => {
+    expect(priceLine(1, 1000, 10)).toEqual({ rate: 1000, amount: 900 });
+    expect(priceLine(1, 1000, 10, 800, 50)).toEqual({ rate: 800, amount: 670 });
+  });
+});
+
+describe("returnQuantity", () => {
+  it("returns part of a line and the whole line", () => {
+    expect(returnQuantity(4, 400, 1)).toEqual({ quantity: 3, amount: 300 });
+    expect(returnQuantity(2, 200, 2)).toEqual({ quantity: 0, amount: 0 });
+    expect(returnQuantity(1, 100, 2)).toBe("That is more than this line.");
   });
 });
 

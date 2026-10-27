@@ -40,7 +40,8 @@ function ReportsPage() {
   const [from, setFrom] = useState(monthStart(today));
   const [to, setTo] = useState(today);
   const [date, setDate] = useState(today);
-  const [applied, setApplied] = useState({ from: monthStart(today), to: today, date: today });
+  const [books, setBooks] = useState<"new" | "old">("new");
+  const [applied, setApplied] = useState({ from: monthStart(today), to: today, date: today, books: "new" as "new" | "old" });
   const needsRange = report !== "collections" && report !== "pending" && report !== "mismatch";
   const needsDate = report === "collections";
 
@@ -72,7 +73,7 @@ function ReportsPage() {
           className="flex flex-wrap items-end gap-3"
           onSubmit={(event) => {
             event.preventDefault();
-            setApplied({ from, to, date });
+            setApplied({ from, to, date, books });
           }}
         >
           {needsDate ? (
@@ -96,6 +97,31 @@ function ReportsPage() {
             Get
           </Button>
         </form>
+      ) : null}
+      {report === "pending" ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <Select
+            value={books}
+            onValueChange={(value) => {
+              const next = value === "old" ? "old" : "new";
+              setBooks(next);
+              setApplied((current) => ({ ...current, books: next }));
+            }}
+          >
+            <SelectTrigger className="w-64" aria-label="Which books">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="new">This counter</SelectItem>
+              <SelectItem value="old">Old bills, payment not written</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-sm text-muted-foreground">
+            {books === "old"
+              ? "Copied with a balance. These were not marked paid."
+              : "Bills from 26 Oct 2026 that still have a balance."}
+          </p>
+        </div>
       ) : null}
       {result.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {result.error instanceof Error ? <p className="text-sm text-destructive">{result.error.message}</p> : null}
@@ -144,7 +170,7 @@ function ReportTable({ sheet }: { sheet: Sheet }) {
   );
 }
 
-async function loadReport(report: ReportId, range: { from: string; to: string; date: string }): Promise<Sheet> {
+async function loadReport(report: ReportId, range: { from: string; to: string; date: string; books: "new" | "old" }): Promise<Sheet> {
   const dates = `from=${range.from}&to=${range.to}`;
   if (report === "invoices") {
     const data = await apiFetch<{ invoices: { billNo: string; billedOn: string; customerName: string; gross: number; discount: number; net: number }[] }>(
@@ -203,9 +229,9 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
     };
   }
   if (report === "collections") {
-    const data = await apiFetch<{ collections: { showroom: string | null; billNo: string; paidOn: string; remarks: string | null; amount: number }[] }>(
-      `/api/reports/collections?date=${range.date}`,
-    );
+    const data = await apiFetch<{
+      collections: { showroom: string | null; billNo: string; paidOn: string; remarks: string | null; mode: string | null; amount: number }[];
+    }>(`/api/reports/collections?date=${range.date}`);
     return {
       columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Payment mode", "Remarks", "Amount"],
       rows: data.collections.map((row, index) => [
@@ -213,7 +239,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         row.showroom || "—",
         row.billNo,
         row.paidOn,
-        "—",
+        row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
         row.remarks || "—",
         formatRupees(row.amount),
       ]),
@@ -228,7 +254,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
   }
   if (report === "pending") {
     const data = await apiFetch<{ pending: { billNo: string; billedOn: string; showroom: string | null; invoiced: number; paid: number; balance: number }[] }>(
-      "/api/reports/pending",
+      `/api/reports/pending?books=${range.books}`,
     );
     return {
       columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Inv amount", "Paid", "Balance"],

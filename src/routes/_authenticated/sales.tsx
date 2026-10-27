@@ -319,11 +319,19 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           ) : null}
         </div>
         {invoice ? (
-          <div className="flex items-center gap-3 print:hidden">
-            <p className="font-display text-3xl font-semibold">{formatRupees(invoice.total)}</p>
-            <Button variant="outline" className="rounded-full" onClick={() => window.print()}>
-              Print
-            </Button>
+          <div className="flex w-full max-w-sm flex-col items-stretch gap-3 print:hidden">
+            <div className="flex items-end justify-between gap-3">
+              <div>
+                <p className="text-sm text-muted-foreground">Balance</p>
+                <p className="font-display text-4xl font-semibold tabular-nums">{formatRupees(invoice.balance)}</p>
+              </div>
+              <Button variant="outline" className="rounded-full" onClick={() => window.print()}>
+                Print
+              </Button>
+            </div>
+            {invoice.status === "open" && invoice.balance > 0 ? (
+              <CollectForm key={`${invoice.id}-${invoice.balance}`} invoiceId={invoice.id} balance={invoice.balance} onSaved={refresh} />
+            ) : null}
           </div>
         ) : null}
       </div>
@@ -370,21 +378,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   <TableCell>{formatRupees(line.amount)}</TableCell>
                   <TableCell className="text-right">
                     {invoice.status === "open" ? (
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="rounded-full"
-                        onClick={() => {
-                          void apiFetch(`/api/invoices/${invoice.id}/lines/${line.id}`, { method: "DELETE" })
-                            .then(() => {
-                              toast.success(`${line.inventoryNo} is back on the shelf.`);
-                              refresh();
-                            })
-                            .catch((reason: Error) => toast.error(reason.message));
-                        }}
-                      >
-                        Return
-                      </Button>
+                      <ReturnLine line={line} invoiceId={invoice.id} onSaved={refresh} />
                     ) : null}
                   </TableCell>
                 </TableRow>
@@ -402,15 +396,17 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               {formatRupees(invoice.lines.reduce((sum, line) => sum + line.discount, 0))} · Balance {formatRupees(invoice.balance)}
             </p>
             {invoice.payments.map((payment) => (
-              <p key={payment.id} className="text-sm">
-                {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
-                {payment.showroom ? ` · ${payment.showroom}` : ""}
-              </p>
+              <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                <p>
+                  {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
+                  {payment.showroom ? ` · ${payment.showroom}` : ""}
+                </p>
+                {invoice.status === "open" && payment.paidOn === shopToday() ? (
+                  <RemovePayment invoiceId={invoice.id} paymentId={payment.id} onSaved={refresh} />
+                ) : null}
+              </div>
             ))}
             {invoice.payments.length === 0 ? <p className="text-sm text-muted-foreground">No collection yet.</p> : null}
-            {invoice.status === "open" && invoice.balance > 0 ? (
-              <CollectForm invoiceId={invoice.id} onSaved={refresh} />
-            ) : null}
           </section>
           {invoice.status === "open" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
         </div>
@@ -423,11 +419,17 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
   const [inventoryNo, setInventoryNo] = useState("");
   const [lookup, setLookup] = useState("");
   const [quantity, setQuantity] = useState("1");
+  const [rate, setRate] = useState("");
+  const [extraOff, setExtraOff] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef("");
   const quantityRef = useRef(quantity);
+  const rateRef = useRef(rate);
+  const extraRef = useRef(extraOff);
   const addRef = useRef<(raw: string) => Promise<void>>(async () => {});
   quantityRef.current = quantity;
+  rateRef.current = rate;
+  extraRef.current = extraOff;
   useEffect(() => {
     const handle = window.setTimeout(() => setLookup(inventoryNo.trim()), 300);
     return () => window.clearTimeout(handle);
@@ -484,9 +486,18 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       const amount = Number(quantityRef.current);
       try {
         if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
+        const typedRate = rateRef.current.trim() === "" ? undefined : Number(rateRef.current);
+        const typedExtra = extraRef.current.trim() === "" ? undefined : Number(extraRef.current);
+        if (typedRate !== undefined && !Number.isFinite(typedRate)) throw new Error("Enter a rate.");
+        if (typedExtra !== undefined && !Number.isFinite(typedExtra)) throw new Error("Enter the extra off.");
         await apiFetch(`/api/invoices/${invoiceId}/lines`, {
           method: "POST",
-          body: JSON.stringify({ inventoryNo: next, quantity: amount }),
+          body: JSON.stringify({
+            inventoryNo: next,
+            quantity: amount,
+            ...(typedRate === undefined ? {} : { rate: typedRate }),
+            ...(typedExtra === undefined ? {} : { extraOff: typedExtra }),
+          }),
         });
         toast.success(`${next} added.`);
         onSaved();
@@ -497,6 +508,10 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
     adding.current = false;
     setBusy(false);
     setQuantity("1");
+    setRate("");
+    setExtraOff("");
+    rateRef.current = "";
+    extraRef.current = "";
     inputRef.current?.focus();
   };
 
@@ -527,6 +542,18 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       <Field label="Quantity" id="line-qty">
         <Input id="line-qty" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-28" required />
       </Field>
+      <Field label="Rate" id="line-rate">
+        <Input
+          id="line-rate"
+          value={rate}
+          onChange={(event) => setRate(event.target.value)}
+          className="w-28"
+          placeholder={preview.data ? String(preview.data.preview.rate) : "Catalogue"}
+        />
+      </Field>
+      <Field label="Extra off" id="line-extra">
+        <Input id="line-extra" value={extraOff} onChange={(event) => setExtraOff(event.target.value)} className="w-28" placeholder="₹" />
+      </Field>
       <Button type="submit" className="rounded-full" disabled={busy}>
         {busy ? "Adding…" : "Add"}
       </Button>
@@ -541,14 +568,109 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
         <p className="pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
-      <p className="w-full text-sm text-muted-foreground">Scan the sticker. The piece is added to this bill.</p>
+      <p className="w-full text-sm text-muted-foreground">
+        Scan the sticker. Leave rate blank for the catalogue price. The group discount still comes off, then extra off.
+      </p>
     </form>
   );
 }
 
-function CollectForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => void }) {
-  const [amount, setAmount] = useState("");
-  const [paidOn, setPaidOn] = useState(localToday());
+function paymentLabel(mode: string | null): string {
+  if (mode === "CASH") return "Cash";
+  if (mode === "UPI") return "UPI";
+  if (mode === "CARD") return "Card";
+  return "Not recorded";
+}
+
+function ReturnLine({
+  line,
+  invoiceId,
+  onSaved,
+}: {
+  line: { id: string; inventoryNo: string; quantity: number };
+  invoiceId: string;
+  onSaved: () => void;
+}) {
+  const [qty, setQty] = useState(String(line.quantity));
+  const whole = line.quantity <= 1;
+  return (
+    <div className="flex items-center justify-end gap-2">
+      {whole ? null : (
+        <Input
+          value={qty}
+          onChange={(event) => setQty(event.target.value)}
+          className="h-8 w-16"
+          aria-label={`Quantity of ${line.inventoryNo} to return`}
+        />
+      )}
+      <Button
+        variant="outline"
+        size="sm"
+        className="rounded-full"
+        onClick={() => {
+          const quantity = whole ? line.quantity : Number(qty);
+          if (!Number.isFinite(quantity) || quantity <= 0) {
+            toast.error("Enter a quantity to return.");
+            return;
+          }
+          void apiFetch(`/api/invoices/${invoiceId}/lines/${line.id}/return`, {
+            method: "POST",
+            body: JSON.stringify({ quantity }),
+          })
+            .then(() => {
+              toast.success(quantity >= line.quantity ? `${line.inventoryNo} is back on the shelf.` : `${line.inventoryNo} updated.`);
+              onSaved();
+            })
+            .catch((reason: Error) => toast.error(reason.message));
+        }}
+      >
+        Return
+      </Button>
+    </div>
+  );
+}
+
+function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; paymentId: string; onSaved: () => void }) {
+  const [reason, setReason] = useState("");
+  const [open, setOpen] = useState(false);
+  if (!open) {
+    return (
+      <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setOpen(true)}>
+        Remove
+      </Button>
+    );
+  }
+  return (
+    <form
+      className="flex items-center gap-2"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!reason.trim()) {
+          toast.error("Enter a reason.");
+          return;
+        }
+        void apiFetch(`/api/invoices/${invoiceId}/payments/${paymentId}/remove`, {
+          method: "POST",
+          body: JSON.stringify({ reason: reason.trim() }),
+        })
+          .then(() => {
+            toast.success("Payment removed.");
+            onSaved();
+          })
+          .catch((error: Error) => toast.error(error.message));
+      }}
+    >
+      <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason" className="h-8 w-40" maxLength={300} required />
+      <Button type="submit" size="sm" className="rounded-full">
+        Remove
+      </Button>
+    </form>
+  );
+}
+
+function CollectForm({ invoiceId, balance, onSaved }: { invoiceId: string; balance: number; onSaved: () => void }) {
+  const [amount, setAmount] = useState(String(balance));
+  const [paidOn, setPaidOn] = useState(shopToday());
   const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
   const [showroom, setShowroom] = useState("");
   const save = useMutation({
@@ -582,20 +704,22 @@ function CollectForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () =>
       <Field label="Date" id="collect-date">
         <Input id="collect-date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} required />
       </Field>
-      <Field label="How it was paid" id="collect-mode">
-        <Select value={mode} onValueChange={(value) => setMode(value as (typeof PAYMENT_MODES)[number])}>
-          <SelectTrigger id="collect-mode">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {PAYMENT_MODES.map((item) => (
-              <SelectItem key={item} value={item}>
-                {item === "CASH" ? "Cash" : item === "UPI" ? "UPI" : "Card"}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </Field>
+      <div className="space-y-2">
+        <Label>How the customer is paying</Label>
+        <div className="flex gap-2">
+          {PAYMENT_MODES.map((item) => (
+            <Button
+              key={item}
+              type="button"
+              variant={mode === item ? "default" : "outline"}
+              className="rounded-full"
+              onClick={() => setMode(item)}
+            >
+              {paymentLabel(item)}
+            </Button>
+          ))}
+        </div>
+      </div>
       <Field label="Note" id="collect-showroom">
         <Input id="collect-showroom" value={showroom} onChange={(event) => setShowroom(event.target.value)} maxLength={80} />
       </Field>
@@ -663,9 +787,12 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
     queryKey: ["customers", "bill", q],
     queryFn: () => {
       const params = new URLSearchParams();
-      if (q.trim()) params.set("q", q.trim());
+      if (q.trim()) {
+        params.set("q", q.trim());
+        params.set("picker", "1");
+      }
       const suffix = params.size ? `?${params.toString()}` : "";
-      return apiFetch<{ customers: Customer[] }>(`/api/customers${suffix}`);
+      return apiFetch<{ customers: Customer[]; total: number }>(`/api/customers${suffix}`);
     },
   });
   const create = useMutation({
@@ -673,6 +800,15 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       let id = customerId;
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
+        if (phone.trim()) {
+          const found = await apiFetch<{ customer: Customer | null }>(`/api/customers/lookup?phone=${encodeURIComponent(phone.trim())}`);
+          if (found.customer) {
+            return apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
+              method: "POST",
+              body: JSON.stringify({ customerId: found.customer.id }),
+            });
+          }
+        }
         const saved = await apiFetch<{ customer: Customer }>("/api/customers", {
           method: "POST",
           body: JSON.stringify({ name: walkIn.trim(), address: "", phone: phone.trim(), bookNo: "" }),
@@ -724,6 +860,11 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
             {customers.data && customers.data.customers.length === 0 ? (
               <p className="text-sm text-muted-foreground">No match. Add them below.</p>
             ) : null}
+            {customers.data && customers.data.total > customers.data.customers.length ? (
+              <p className="text-sm text-muted-foreground">
+                Showing {customers.data.customers.length} of {customers.data.total}. Type more of the name or phone.
+              </p>
+            ) : null}
           </div>
           <Field label="Or add a walk-in" id="bill-walk-in">
             <Input
@@ -762,6 +903,7 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
     <section className="receipt hidden print:block">
       <style>{`@media print { body * { visibility: hidden !important; } .receipt, .receipt * { visibility: visible !important; } .receipt { position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; padding: 24px; } }`}</style>
       <p className="text-xs uppercase tracking-[0.2em]">Ladies Collections</p>
+      <p className="text-sm">Thank you.</p>
       <h1 className="mt-2 text-3xl font-semibold">Bill {invoice.billNo}</h1>
       <p className="mt-1 text-sm">{invoice.customerName} · {invoice.billedOn}</p>
       <div className="mt-4 space-y-2 text-sm">
@@ -775,7 +917,7 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
       <p className="mt-4 text-sm">Gross {formatRupees(gross)} · Discount {formatRupees(discount)} · Net {formatRupees(invoice.total)}</p>
       {invoice.payments.map((payment) => (
         <p key={payment.id} className="text-sm">
-          Paid {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
+          Paid {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
         </p>
       ))}
       <p className="mt-2 text-lg font-semibold">Balance {formatRupees(invoice.balance)}</p>

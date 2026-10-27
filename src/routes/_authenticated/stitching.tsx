@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { Customer } from "@/lib/customers";
+import { NEW_COUNTER_FROM } from "@/lib/sales";
 import { STITCHING_STATUSES, type StitchingMeasurement, type StitchingOrder, type StitchingProduct, type StitchingStatus } from "@/lib/stitching";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
@@ -207,6 +208,7 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
+                        if (!confirmOldOrder(order.deliveryOn)) return;
                         void apiFetch(`/api/stitching-orders/${order.id}/status`, {
                           method: "PATCH",
                           body: JSON.stringify({ status: item }),
@@ -231,6 +233,11 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
       ))}
     </div>
   );
+}
+
+function confirmOldOrder(deliveryOn: string | null): boolean {
+  if (!deliveryOn || deliveryOn >= NEW_COUNTER_FROM) return true;
+  return window.confirm("This delivery date is before 26 Oct 2026. Change this one order?");
 }
 
 function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () => void; onCreated: (id: string) => void }) {
@@ -341,6 +348,7 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (order && status !== order.status && !confirmOldOrder(order.deliveryOn)) return;
           save.mutate();
         }}
       >

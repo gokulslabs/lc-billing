@@ -101,6 +101,16 @@ export const createInvoiceSchema = z.object({
 export const invoiceLineSchema = z.object({
   inventoryNo: z.string().trim().min(1, "Enter an inventory number.").max(40, "Inventory number is too long."),
   quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
+  rate: z.number().min(0, "Rate cannot be negative.").max(9_999_999, "Rate is too large.").optional(),
+  extraOff: z.number().min(0, "Extra off cannot be negative.").max(9_999_999, "Extra off is too large.").optional(),
+});
+
+export const returnLineSchema = z.object({
+  quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
+});
+
+export const removePaymentSchema = z.object({
+  reason: z.string().trim().min(1, "Enter a reason.").max(300, "Reason is too long."),
 });
 
 export const cancelInvoiceSchema = z.object({
@@ -127,6 +137,32 @@ export function nextBillNo(existing: readonly string[]): string {
 export function lineAmount(quantity: number, rate: number): number {
   const paise = Math.round((Math.round(quantity * 1000) * Math.round(rate * 100)) / 1000);
   return paise / 100;
+}
+
+export function priceLine(
+  quantity: number,
+  catalogueRate: number,
+  groupPercent: number,
+  typedRate?: number,
+  extraOff?: number,
+): { rate: number; amount: number } {
+  const rate = typedRate == null ? catalogueRate : typedRate;
+  const priced = applyGroupDiscount(quantity, rate, groupPercent);
+  const extra = extraOff == null || extraOff <= 0 ? 0 : Math.min(priced.amount, Math.round(extraOff * 100) / 100);
+  return { rate, amount: Math.round((priced.amount - extra) * 100) / 100 };
+}
+
+export function returnQuantity(
+  lineQty: number,
+  lineAmountValue: number,
+  giveBack: number,
+): { quantity: number; amount: number } | string {
+  if (!(giveBack > 0)) return "Enter a quantity to return.";
+  if (giveBack > lineQty + 0.0001) return "That is more than this line.";
+  if (giveBack >= lineQty - 0.0001) return { quantity: 0, amount: 0 };
+  const quantity = Math.round((lineQty - giveBack) * 1000) / 1000;
+  const amount = lineQty === 0 ? 0 : Math.round(((lineAmountValue * quantity) / lineQty) * 100) / 100;
+  return { quantity, amount };
 }
 
 export function applyGroupDiscount(quantity: number, rate: number, percent: number): { gross: number; discount: number; amount: number } {

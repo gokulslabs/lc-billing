@@ -45,6 +45,8 @@ function AuthPage() {
         const { error } = await supabase.auth.signInWithPassword({ email: signInEmail(email), password });
         if (error) toast.error("Email, mobile, or password is incorrect.");
         else navigate({ to: "/dashboard", replace: true });
+      } else if (!email.includes("@") || signInEmail(email).endsWith("@staff.ladiescollections.local")) {
+        toast.error("A mobile login has no inbox. Ask the owner for the password.");
       } else {
         const { error } = await supabase.auth.resetPasswordForEmail(signInEmail(email), {
           redirectTo: `${window.location.origin}/reset-password`,
@@ -87,7 +89,7 @@ function AuthPage() {
               <h1 className="text-center text-3xl font-semibold">{title}</h1>
               <p className="mt-1 text-center text-sm text-muted-foreground">
                 {mode === "forgot"
-                  ? "Enter your email or mobile number and we'll send a reset link."
+                  ? "Enter the email on the account. A mobile number has no inbox."
                   : "Sign in with your email or mobile number."}
               </p>
               <form onSubmit={onSubmit} className="mt-6 space-y-4">

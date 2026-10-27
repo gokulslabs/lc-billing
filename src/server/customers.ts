@@ -25,11 +25,26 @@ type CustomerRow = {
 const customers = new Hono<Env>();
 customers.use("*", requireShop);
 
+customers.get("/lookup", async (c) => {
+  const phone = (c.req.query("phone") ?? "").trim().slice(0, 20);
+  if (!phone) return c.json({ customer: null });
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id, name, address, phone, book_no")
+    .eq("phone", phone)
+    .order("name")
+    .limit(1);
+  if (error) return c.json({ error: "Could not look up that phone." }, 500);
+  const row = ((data ?? []) as CustomerRow[])[0];
+  return c.json({ customer: row ? toCustomer(row) : null });
+});
+
 customers.get("/", async (c) => {
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
   const safe = q.replace(/[%_,]/g, "");
   const page = readPage(c.req.query("page"));
-  const { from, to } = pageRange(page);
+  const picker = c.req.query("picker") === "1" && Boolean(safe);
+  const { from, to } = picker ? { from: 0, to: 199 } : pageRange(page);
   const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no", { count: "exact" }).order("name").order("id");
   const filtered = safe ? ranked.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%`) : ranked;
   const { data, error, count } = await filtered.range(from, to);

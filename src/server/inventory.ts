@@ -213,13 +213,14 @@ inventory.patch("/:id", async (c) => {
   if (used > 0) {
     const current = await supabaseAdmin
       .from("inventory_items")
-      .select("inventory_no, product_id")
+      .select("inventory_no, product_id, quantity")
       .eq("id", id)
       .maybeSingle();
     if (current.error) return c.json({ error: "Could not check this stock row." }, 500);
     if (!current.data) return c.json({ error: "Stock row not found." }, 404);
-    if (current.data.inventory_no !== parsed.data.inventoryNo || current.data.product_id !== product.id) {
-      return c.json({ error: "This number is already on a bill." }, 400);
+    const sameQuantity = Math.abs(Number(current.data.quantity) - parsed.data.quantity) <= 0.0001;
+    if (current.data.inventory_no !== parsed.data.inventoryNo || current.data.product_id !== product.id || !sameQuantity) {
+      return c.json({ error: "This number is already on a bill. Change the quantity from the bill." }, 400);
     }
   }
 
