@@ -26,7 +26,9 @@ export const Route = createFileRoute("/_authenticated/sales")({
 });
 
 function SalesPage() {
-  const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
+  const search = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const opening = search?.get("view") ?? null;
+  const books = search?.get("books") === "old" ? "old" : "new";
   const [billId, setBillId] = useState<string | null>(null);
   const [list, setList] = useState(true);
   if (billId) {
@@ -46,7 +48,7 @@ function SalesPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-4xl font-semibold">New bill</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Choose the customer in front of you. The inventory box is next.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Find them, or type a new name. The inventory box is next.</p>
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
             Bill list
@@ -61,11 +63,22 @@ function SalesPage() {
       onOpen={setBillId}
       onNew={() => setList(false)}
       startTab={opening === "due" ? "due" : opening === "close" ? "close" : "bills"}
+      books={books}
     />
   );
 }
 
-function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; onNew: () => void; startTab: string }) {
+function SalesHome({
+  onOpen,
+  onNew,
+  startTab,
+  books,
+}: {
+  onOpen: (id: string) => void;
+  onNew: () => void;
+  startTab: string;
+  books: "new" | "old";
+}) {
   const today = shopToday();
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
@@ -264,7 +277,7 @@ function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; 
           ) : null}
         </TabsContent>
         <TabsContent value="due">
-          <DueList onOpen={onOpen} />
+          <DueList onOpen={onOpen} initialBooks={books} />
         </TabsContent>
         <TabsContent value="close">
           <DayClose />
@@ -411,10 +424,39 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
   const [lookup, setLookup] = useState("");
   const [quantity, setQuantity] = useState("1");
   const inputRef = useRef<HTMLInputElement>(null);
+  const valueRef = useRef("");
+  const quantityRef = useRef(quantity);
+  const addRef = useRef<(raw: string) => Promise<void>>(async () => {});
+  quantityRef.current = quantity;
   useEffect(() => {
     const handle = window.setTimeout(() => setLookup(inventoryNo.trim()), 300);
     return () => window.clearTimeout(handle);
   }, [inventoryNo]);
+  useEffect(() => {
+    let buffer = "";
+    let last = 0;
+    function onKey(event: KeyboardEvent) {
+      const now = performance.now();
+      if (event.key === "Enter" || event.key === "Tab") {
+        const scanned = buffer.trim();
+        const fast = scanned.length >= 4 && now - last <= 80;
+        buffer = "";
+        if (!fast) return;
+        event.preventDefault();
+        event.stopPropagation();
+        if (event.target instanceof HTMLInputElement && event.target.id === "line-qty") setQuantity("1");
+        void addRef.current(scanned);
+        return;
+      }
+      if (event.key.length === 1) {
+        if (now - last > 40) buffer = "";
+        buffer += event.key;
+        last = now;
+      }
+    }
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, []);
   const preview = useQuery({
     queryKey: ["invoice-preview", lookup],
     enabled: lookup.length > 0,
@@ -424,32 +466,46 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       }>(`/api/invoices/preview?inventoryNo=${encodeURIComponent(lookup)}`),
     retry: false,
   });
-  const add = useMutation({
-    mutationFn: () => {
-      const amount = Number(quantity);
-      if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
-      return apiFetch(`/api/invoices/${invoiceId}/lines`, {
-        method: "POST",
-        body: JSON.stringify({ inventoryNo, quantity: amount }),
-      });
-    },
-    onSuccess: () => {
-      setInventoryNo("");
-      setLookup("");
-      setQuantity("1");
-      toast.success("Line added.");
-      onSaved();
-      inputRef.current?.focus();
-    },
-    onError: (error: Error) => toast.error(error.message),
-  });
+  const waiting = useRef<string[]>([]);
+  const adding = useRef(false);
+  const [busy, setBusy] = useState(false);
+  addRef.current = async (raw: string) => {
+    const number = raw.replace(/[\r\n]/g, "").trim();
+    if (!number) return;
+    waiting.current.push(number);
+    valueRef.current = "";
+    setInventoryNo("");
+    setLookup("");
+    if (adding.current) return;
+    adding.current = true;
+    setBusy(true);
+    while (waiting.current.length > 0) {
+      const next = waiting.current.shift() ?? "";
+      const amount = Number(quantityRef.current);
+      try {
+        if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
+        await apiFetch(`/api/invoices/${invoiceId}/lines`, {
+          method: "POST",
+          body: JSON.stringify({ inventoryNo: next, quantity: amount }),
+        });
+        toast.success(`${next} added.`);
+        onSaved();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Could not add that piece.");
+      }
+    }
+    adding.current = false;
+    setBusy(false);
+    setQuantity("1");
+    inputRef.current?.focus();
+  };
 
   return (
     <form
       className="flex flex-wrap items-end gap-3"
       onSubmit={(event) => {
         event.preventDefault();
-        add.mutate();
+        void addRef.current(valueRef.current);
       }}
     >
       <Field label="Inventory no." id="line-no">
@@ -457,18 +513,22 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           ref={inputRef}
           id="line-no"
           value={inventoryNo}
-          onChange={(event) => setInventoryNo(event.target.value)}
+          onChange={(event) => {
+            valueRef.current = event.target.value;
+            setInventoryNo(event.target.value);
+          }}
           autoFocus
           autoComplete="off"
           className="w-44 font-mono"
+          placeholder="Scan or type"
           required
         />
       </Field>
       <Field label="Quantity" id="line-qty">
         <Input id="line-qty" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-28" required />
       </Field>
-      <Button type="submit" className="rounded-full" disabled={add.isPending}>
-        {add.isPending ? "Adding…" : "Add"}
+      <Button type="submit" className="rounded-full" disabled={busy}>
+        {busy ? "Adding…" : "Add"}
       </Button>
       {preview.data ? (
         <p className="pb-2 text-sm text-muted-foreground">
@@ -481,6 +541,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
         <p className="pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
+      <p className="w-full text-sm text-muted-foreground">Scan the sticker. The piece is added to this bill.</p>
     </form>
   );
 }
@@ -596,6 +657,8 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
 function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState("");
+  const [walkIn, setWalkIn] = useState("");
+  const [phone, setPhone] = useState("");
   const customers = useQuery({
     queryKey: ["customers", "bill", q],
     queryFn: () => {
@@ -606,16 +669,26 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
     },
   });
   const create = useMutation({
-    mutationFn: () => {
-      if (!customerId) throw new Error("Choose a customer.");
+    mutationFn: async () => {
+      let id = customerId;
+      if (!id) {
+        if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
+        const saved = await apiFetch<{ customer: Customer }>("/api/customers", {
+          method: "POST",
+          body: JSON.stringify({ name: walkIn.trim(), address: "", phone: phone.trim(), bookNo: "" }),
+        });
+        id = saved.customer.id;
+      }
       return apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
         method: "POST",
-        body: JSON.stringify({ customerId }),
+        body: JSON.stringify({ customerId: id }),
       });
     },
     onSuccess: (result) => {
       setQ("");
       setCustomerId("");
+      setWalkIn("");
+      setPhone("");
       onCreated(result.invoice.id);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -638,16 +711,43 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
                 key={customer.id}
                 type="button"
                 className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
-                onClick={() => setCustomerId(customer.id)}
+                onClick={() => {
+                  setCustomerId(customer.id);
+                  setWalkIn("");
+                  setPhone("");
+                }}
               >
                 {customer.name}
                 {customer.phone ? ` · ${customer.phone}` : ""}
               </button>
             ))}
             {customers.data && customers.data.customers.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No customers yet.</p>
+              <p className="text-sm text-muted-foreground">No match. Add them below.</p>
             ) : null}
           </div>
+          <Field label="Or add a walk-in" id="bill-walk-in">
+            <Input
+              id="bill-walk-in"
+              value={walkIn}
+              onChange={(event) => {
+                setWalkIn(event.target.value);
+                setCustomerId("");
+              }}
+              placeholder="Name"
+              maxLength={120}
+              disabled={Boolean(customerId)}
+            />
+          </Field>
+          <Field label="Phone" id="bill-walk-in-phone">
+            <Input
+              id="bill-walk-in-phone"
+              value={phone}
+              onChange={(event) => setPhone(event.target.value)}
+              placeholder="Optional"
+              maxLength={20}
+              disabled={Boolean(customerId)}
+            />
+          </Field>
           <Button type="submit" className="rounded-full" disabled={create.isPending}>
             {create.isPending ? "Opening…" : "Open bill"}
           </Button>
@@ -683,16 +783,38 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
   );
 }
 
-function DueList({ onOpen }: { onOpen: (id: string) => void }) {
+function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initialBooks: "new" | "old" }) {
   const [page, setPage] = useState(1);
+  const [books, setBooks] = useState<"new" | "old">(initialBooks);
   const due = useQuery({
-    queryKey: ["invoices-due", page],
-    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/due?page=${page}`),
+    queryKey: ["invoices-due", books, page],
+    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/due?books=${books}&page=${page}`),
   });
   const rows = due.data?.invoices ?? [];
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Open bills with a balance. Oldest first.</p>
+      <div className="flex flex-wrap items-center gap-3">
+        <Select
+          value={books}
+          onValueChange={(value) => {
+            setBooks(value === "old" ? "old" : "new");
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-64" aria-label="Which books">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="new">This counter</SelectItem>
+            <SelectItem value="old">Old bills, payment not written</SelectItem>
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">
+          {books === "old"
+            ? "Copied with a balance. Recording a payment on one bill leaves the others as they are."
+            : "Bills from 26 Oct 2026 that still have a balance."}
+        </p>
+      </div>
       {due.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {due.error instanceof Error ? <p className="text-sm text-destructive">{due.error.message}</p> : null}
       {!due.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">Nothing is owing.</p> : null}

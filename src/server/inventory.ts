@@ -9,6 +9,7 @@ import {
   kolkataBounds,
   nextInventoryNo,
   quantityForUnit,
+  slipPlan,
   zodMessage,
   type InventoryItem,
   type PurchaseRow,
@@ -178,32 +179,22 @@ inventory.post("/", async (c) => {
   const quantityError = quantityForUnit(product.unit, parsed.data.quantity);
   if (quantityError) return c.json({ error: quantityError }, 400);
 
-  const requested = parsed.data.inventoryNo;
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const inventoryNo = requested || (await allocateNo());
-    if (!inventoryNo) return c.json({ error: "Could not choose an inventory number." }, 500);
-    const { data, error } = await supabaseAdmin
-      .from("inventory_items")
-      .insert({
-        inventory_no: inventoryNo,
-        product_id: product.id,
-        quantity: parsed.data.quantity,
-        received_quantity: parsed.data.quantity,
-        status: "available",
-        supplier_name: parsed.data.supplierName,
-        supplier_bill_no: parsed.data.supplierBillNo,
-        cost: parsed.data.cost,
-      })
-      .select("id, inventory_no, product_id, quantity, status")
-      .single();
-    if (isDuplicate(error)) {
-      if (!requested && attempt === 0) continue;
-      return c.json({ error: "That inventory number is already used." }, 400);
-    }
-    if (error || !data) return c.json({ error: "Could not add stock." }, 500);
-    return c.json({ item: toItem(data as ItemRow, product) }, 201);
+  const requested = parsed.data.inventoryNo ?? "";
+  const plan = slipPlan(product.unit, parsed.data.quantity, requested);
+  if (typeof plan === "string") return c.json({ error: plan }, 400);
+  const numbers = requested.trim() ? [requested.trim()] : await allocateRun(plan.count);
+  if (!numbers) return c.json({ error: "Could not choose an inventory number." }, 500);
+
+  const generated = requested.trim().length === 0;
+  const items: InventoryItem[] = [];
+  for (const inventoryNo of numbers) {
+    const saved = await insertSlip(product, inventoryNo, plan.each, parsed.data, generated);
+    if ("error" in saved) return c.json({ error: saved.error }, saved.status);
+    items.push(saved.item);
   }
-  return c.json({ error: "Could not add stock." }, 500);
+  const first = items[0];
+  if (!first) return c.json({ error: "Could not add stock." }, 500);
+  return c.json({ item: first, items }, 201);
 });
 
 inventory.patch("/:id", async (c) => {
@@ -297,6 +288,52 @@ function productFilter(catalogue: Map<string, CatalogueProduct>, groupId: string
 function matches(product: CatalogueProduct, q: string): boolean {
   const needle = q.toLowerCase();
   return product.name.toLowerCase().includes(needle) || product.code.toLowerCase().includes(needle);
+}
+
+async function insertSlip(
+  product: CatalogueProduct,
+  inventoryNo: string,
+  quantity: number,
+  receipt: { supplierName: string; supplierBillNo: string; cost: number },
+  generated: boolean,
+): Promise<{ item: InventoryItem } | { error: string; status: 400 | 500 }> {
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const number = attempt === 0 ? inventoryNo : await allocateNo();
+    if (!number) return { error: "Could not choose an inventory number.", status: 500 };
+    const { data, error } = await supabaseAdmin
+      .from("inventory_items")
+      .insert({
+        inventory_no: number,
+        product_id: product.id,
+        quantity,
+        received_quantity: quantity,
+        status: "available",
+        supplier_name: receipt.supplierName,
+        supplier_bill_no: receipt.supplierBillNo,
+        cost: receipt.cost,
+      })
+      .select("id, inventory_no, product_id, quantity, status")
+      .single();
+    if (isDuplicate(error)) {
+      if (generated && attempt === 0) continue;
+      return { error: "That inventory number is already used.", status: 400 };
+    }
+    if (error || !data) return { error: "Could not add stock.", status: 500 };
+    return { item: toItem(data as ItemRow, product) };
+  }
+  return { error: "Could not add stock.", status: 500 };
+}
+
+async function allocateRun(count: number): Promise<string[] | null> {
+  const first = await allocateNo();
+  if (!first) return null;
+  const numbers = [first];
+  let last = first;
+  for (let index = 1; index < count; index += 1) {
+    last = nextInventoryNo([last]);
+    numbers.push(last);
+  }
+  return numbers;
 }
 
 async function allocateNo(): Promise<string | null> {

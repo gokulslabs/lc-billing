@@ -32,7 +32,9 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
   const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("board") : null;
-  const [status, setStatus] = useState(opening === "ready" ? "READY" : opening === "today" ? "today" : "");
+  const [status, setStatus] = useState(
+    opening === "ready" ? "READY" : opening === "today" ? "today" : opening === "overdue" ? "overdue" : "",
+  );
   const [page, setPage] = useState(1);
   const orders = useQuery({
     queryKey: ["stitching-orders", deferred, status, page],
@@ -40,7 +42,7 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
     queryFn: () => {
       const params = new URLSearchParams();
       if (deferred.trim()) params.set("q", deferred.trim());
-      if (status === "soon" || status === "today" || status === "week") params.set("due", status === "soon" ? "soon" : status);
+      if (status === "soon" || status === "today" || status === "week" || status === "overdue") params.set("due", status);
       else if (status && status !== "board") params.set("status", status);
       params.set("page", String(page));
       return apiFetch<{ orders: StitchingOrder[]; total: number }>(`/api/stitching-orders?${params.toString()}`);
@@ -55,8 +57,10 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           <h1 className="text-4xl font-semibold">Orders list</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {status === "board"
-              ? "Due today, this week, and ready for pickup."
-              : "Order, bag, customer, garment, and the two dates from the old list."}
+              ? "Past the delivery date, due today, this week, and ready for pickup."
+              : status === "overdue"
+                ? "Delivery date has passed. These stay pending until someone changes one order."
+                : "Order, bag, customer, garment, and the two dates from the old list."}
           </p>
         </div>
         <Button className="rounded-full" onClick={() => onOpen("new")}>
@@ -85,6 +89,7 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="board">Board</SelectItem>
+            <SelectItem value="overdue">Past the delivery date</SelectItem>
             <SelectItem value="today">Due today</SelectItem>
             <SelectItem value="week">This week</SelectItem>
             <SelectItem value="soon">Due soon</SelectItem>
@@ -148,32 +153,45 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
 
 function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
   const queryClient = useQueryClient();
+  const overdue = useQuery({
+    queryKey: ["stitching-board", "overdue"],
+    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=overdue&page=1"),
+  });
   const today = useQuery({
     queryKey: ["stitching-board", "today"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?due=today&page=1"),
+    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=today&page=1"),
   });
   const week = useQuery({
     queryKey: ["stitching-board", "week"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?due=week&page=1"),
+    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=week&page=1"),
   });
   const ready = useQuery({
     queryKey: ["stitching-board", "ready"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?status=READY&page=1"),
+    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?status=READY&page=1"),
   });
   const columns = [
+    ["Past the delivery date", overdue],
     ["Due today", today],
     ["This week", week],
     ["Ready for pickup", ready],
   ] as const;
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 lg:grid-cols-2">
       {columns.map(([title, query]) => (
         <section key={title} className="rounded-2xl border border-border bg-card p-4">
-          <h2 className="text-lg font-semibold">{title}</h2>
+          <h2 className="text-lg font-semibold">
+            {title}
+            {query.data ? ` · ${query.data.total}` : ""}
+          </h2>
+          {query.data && query.data.total > Math.min(8, query.data.orders.length) ? (
+            <p className="mt-1 text-sm text-muted-foreground">
+              Showing 8 of {query.data.total}. The orders list has the rest. Statuses were not changed.
+            </p>
+          ) : null}
           {query.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}
           {query.error instanceof Error ? <p className="mt-3 text-sm text-destructive">{query.error.message}</p> : null}
           <div className="mt-3 space-y-3">
-            {(query.data?.orders ?? []).map((order) => (
+            {(query.data?.orders ?? []).slice(0, 8).map((order) => (
               <article key={order.id} className="rounded-xl border border-border px-3 py-3">
                 <button type="button" className="block w-full text-left" onClick={() => onOpen(order.id)}>
                   <p className="font-medium">{order.customerName || "No name"}</p>

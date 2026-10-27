@@ -7,6 +7,7 @@ import {
   kolkataBounds,
   nextInventoryNo,
   quantityForUnit,
+  slipPlan,
   shopDate,
 } from "./inventory";
 
@@ -21,6 +22,15 @@ describe("nextInventoryNo", () => {
 
   it("continues an IN number instead of starting again at 1", () => {
     expect(nextInventoryNo(["IN0021287", "IN0021288", "1"])).toBe("IN0021289");
+  });
+});
+
+describe("slipPlan", () => {
+  it("gives each piece its own number and keeps metres on one slip", () => {
+    expect(slipPlan("NO", 6, "")).toEqual({ count: 6, each: 1 });
+    expect(slipPlan("NO", 6, "IN009")).toEqual({ count: 1, each: 6 });
+    expect(slipPlan("MT", 2.5, "")).toEqual({ count: 1, each: 2.5 });
+    expect(slipPlan("NO", 201, "")).toBe("Print at most 200 labels.");
   });
 });
 

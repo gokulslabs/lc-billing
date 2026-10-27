@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+export const NEW_COUNTER_FROM = "2026-10-26";
+
 export const PAYMENT_MODES = ["CASH", "UPI", "CARD"] as const;
 export type PaymentMode = (typeof PAYMENT_MODES)[number];
 

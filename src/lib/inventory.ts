@@ -58,6 +58,17 @@ export function quantityForUnit(unit: Unit, value: number): string | null {
   return null;
 }
 
+export const PIECE_LABEL_LIMIT = 200;
+
+export function slipPlan(unit: Unit, quantity: number, inventoryNo: string): { count: number; each: number } | string {
+  const typed = inventoryNo.trim().length > 0;
+  if (unit === "NO" && !typed && Number.isInteger(quantity) && quantity > 1) {
+    if (quantity > PIECE_LABEL_LIMIT) return "Print at most 200 labels.";
+    return { count: quantity, each: 1 };
+  }
+  return { count: 1, each: quantity };
+}
+
 export function nextInventoryNo(existing: readonly string[]): string {
   let max = 0;
   let prefix = "";

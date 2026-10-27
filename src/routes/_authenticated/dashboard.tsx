@@ -19,8 +19,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const NEEDS: { key: keyof DashboardStats; label: string; detail: string; money?: boolean; href: string }[] = [
-  { key: "unpaidBills", label: "Bills still due", detail: "Open the queue of who owes", href: "/sales?view=due" },
-  { key: "unpaidAmount", label: "Amount still due", detail: "Across every open bill", money: true, href: "/sales?view=due" },
+  { key: "unpaidBills", label: "This counter, still due", detail: "Bills written here that are not paid", href: "/sales?view=due" },
+  { key: "unpaidAmount", label: "This counter, amount due", detail: "From 26 Oct 2026 onward", money: true, href: "/sales?view=due" },
+  { key: "oldUnpaidBills", label: "Old bills, payment not written", detail: "Copied balances. They stay unpaid until someone records a payment.", href: "/sales?view=due&books=old" },
+  { key: "overdueStitching", label: "Stitching past the date", detail: "Still pending. Statuses were not changed.", href: "/stitching?board=overdue" },
   { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/stitching?board=ready" },
   { key: "dueTodayStitching", label: "Stitching due today", detail: "Trials and pending for today", href: "/stitching?board=today" },
 ];

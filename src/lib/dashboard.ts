@@ -4,8 +4,11 @@ export type DashboardStats = {
   dueOnToday: number;
   unpaidBills: number;
   unpaidAmount: number;
+  oldUnpaidBills: number;
+  oldUnpaidAmount: number;
   readyStitching: number;
   dueTodayStitching: number;
+  overdueStitching: number;
   cash: number;
   upi: number;
   card: number;

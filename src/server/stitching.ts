@@ -62,20 +62,22 @@ stitching.get("/", async (c) => {
   const filtered =
     due === "today"
       ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
-      : due === "week"
-        ? ranked.in("status", ["PENDING", "TRIAL"]).gt("delivery_on", today).lte("delivery_on", plusDays(today, 7))
-        : soon
-          ? ranked.in("status", ["PENDING", "TRIAL"]).lte("delivery_on", plusDays(today, 7))
-          : status
-            ? ranked.eq("status", status)
-            : ranked;
+      : due === "overdue"
+        ? ranked.in("status", ["PENDING", "TRIAL"]).lt("delivery_on", today)
+        : due === "week"
+          ? ranked.in("status", ["PENDING", "TRIAL"]).gt("delivery_on", today).lte("delivery_on", plusDays(today, 7))
+          : soon
+            ? ranked.in("status", ["PENDING", "TRIAL"]).lte("delivery_on", plusDays(today, 7))
+            : status
+              ? ranked.eq("status", status)
+              : ranked;
   const searched = !safe
     ? filtered
     : customerIds.length > 0
       ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
       : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
   const ordered =
-    due === "today" || due === "week" || soon
+    due === "today" || due === "week" || due === "overdue" || soon
       ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
       : searched.order("ordered_on", { ascending: true }).order("id", { ascending: true });
   const { data, error, count } = await ordered.range(from, to);

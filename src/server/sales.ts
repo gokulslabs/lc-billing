@@ -12,6 +12,7 @@ import {
   collectionProblem,
   createInvoiceSchema,
   invoiceLineSchema,
+  NEW_COUNTER_FROM,
   nextBillNo,
   selectBills,
   PAYMENT_MODES,
@@ -148,6 +149,7 @@ sales.get("/preview", async (c) => {
 
 sales.get("/due", async (c) => {
   const page = readPage(c.req.query("page"));
+  const books = c.req.query("books") === "old" ? "old" : "new";
   const loaded = await readAll<InvoiceRow>((start, end) =>
     supabaseAdmin
       .from("invoices")
@@ -160,9 +162,13 @@ sales.get("/due", async (c) => {
   if (!loaded) return c.json({ error: "Could not load unpaid bills." }, 500);
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
-  const due = summaries.invoices.filter((invoice) => invoice.balance > 0.001);
+  const due = summaries.invoices.filter((invoice) => {
+    if (invoice.balance <= 0.001) return false;
+    const old = invoice.billedOn < NEW_COUNTER_FROM;
+    return books === "old" ? old : !old;
+  });
   const start = (page - 1) * 50;
-  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page });
+  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books });
 });
 
 sales.get("/close", async (c) => {

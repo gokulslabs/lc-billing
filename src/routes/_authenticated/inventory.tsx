@@ -82,12 +82,12 @@ function StockPanel() {
   const [productId, setProductId] = useState("");
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
-  const [sticker, setSticker] = useState<{ number: string; caption: string } | null>(null);
+  const [stickers, setStickers] = useState<{ number: string; caption: string }[]>([]);
   useEffect(() => {
-    if (!sticker) return;
+    if (stickers.length === 0) return;
     const frame = requestAnimationFrame(() => window.print());
     return () => cancelAnimationFrame(frame);
-  }, [sticker]);
+  }, [stickers]);
   const groups = useQuery({
     queryKey: ["product-groups"],
     queryFn: () => apiFetch<{ groups: ProductGroup[] }>("/api/product-groups"),
@@ -165,15 +165,19 @@ function StockPanel() {
           Add stock
         </Button>
       </div>
-      {sticker ? (
+      {stickers.length > 0 ? (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-3 print:hidden">
-            <p className="text-sm text-muted-foreground">Label for {sticker.number}. Stick it on that piece.</p>
+            <p className="text-sm text-muted-foreground">
+              {stickers.length === 1
+                ? `Label for ${stickers[0]?.number}. Stick it on that piece.`
+                : `${stickers.length} labels. One sticker on each piece.`}
+            </p>
             <Button type="button" variant="outline" className="rounded-full" onClick={() => window.print()}>
               Print
             </Button>
           </div>
-          <LabelSheet labels={[sticker]} />
+          <LabelSheet labels={stickers} />
         </div>
       ) : null}
       {stock.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
@@ -247,7 +251,9 @@ function StockPanel() {
         }}
         onSaved={(created) => {
           setEditor(null);
-          if (created) setSticker({ number: created.inventoryNo, caption: created.productName });
+          if (created.length > 0) {
+            setStickers(created.map((row) => ({ number: row.inventoryNo, caption: row.productName })));
+          }
           void queryClient.invalidateQueries({ queryKey: ["inventory"] });
         }}
       />
@@ -264,7 +270,7 @@ function StockDialog({
   open: boolean;
   item: InventoryItem | null;
   onOpenChange: (open: boolean) => void;
-  onSaved: (created: InventoryItem | null) => void;
+  onSaved: (created: InventoryItem[]) => void;
 }) {
   const [productQuery, setProductQuery] = useState("");
   const [productId, setProductId] = useState(item?.productId ?? "");
@@ -320,8 +326,8 @@ function StockDialog({
       return apiFetch("/api/inventory", { method: "POST", body });
     },
     onSuccess: (result) => {
-      toast.success(item ? "Stock updated." : "Stock added.");
-      const created = item ? null : (result as { item: InventoryItem }).item;
+      const created = item ? [] : ((result as { items?: InventoryItem[] }).items ?? []);
+      toast.success(item ? "Stock updated." : created.length > 1 ? `${created.length} pieces added.` : "Stock added.");
       onSaved(created);
     },
     onError: (error: Error) => toast.error(error.message),
@@ -335,7 +341,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "One receipt: supplier, their bill, cost, then the product. Leave the inventory number blank and the next IN number is used. Saving prints that number as bars."}
+              : "One receipt: supplier, their bill, cost, then the product. Pieces with a blank inventory number get one IN number and one sticker each. Metres stay on one number. Saving prints the bars."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -648,9 +654,9 @@ function PurchasesPanel() {
                   <TableCell>{row.productCode}</TableCell>
                   <TableCell>{row.groupName}</TableCell>
                   <TableCell className="font-medium">{row.productName}</TableCell>
-                  <TableCell>{row.supplierName || "—"}</TableCell>
-                  <TableCell>{row.supplierBillNo || "—"}</TableCell>
-                  <TableCell>{row.cost == null ? "—" : formatRupees(row.cost)}</TableCell>
+                  <TableCell>{receiptBlank(row.supplierName)}</TableCell>
+                  <TableCell>{receiptBlank(row.supplierBillNo)}</TableCell>
+                  <TableCell>{row.cost == null ? "Not on the old receipt" : formatRupees(row.cost)}</TableCell>
                   <TableCell>
                     {formatQty(row.quantity)} {row.unit}
                   </TableCell>
@@ -672,9 +678,9 @@ function downloadPurchases(rows: PurchaseLine[]) {
     row.productCode,
     row.groupName,
     row.productName,
-    row.supplierName,
-    row.supplierBillNo,
-    row.cost == null ? "" : String(row.cost),
+    receiptBlank(row.supplierName),
+    receiptBlank(row.supplierBillNo),
+    row.cost == null ? "Not on the old receipt" : String(row.cost),
     String(row.quantity),
     row.unit,
     formatPurchaseNumbers(row.inventoryNos),
@@ -691,6 +697,10 @@ function downloadPurchases(rows: PurchaseLine[]) {
 
 function csvCell(value: string): string {
   return `"${value.replace(/"/g, '""')}"`;
+}
+
+function receiptBlank(value: string): string {
+  return value.trim() ? value : "Not on the old receipt";
 }
 
 function formatQty(value: number): string {
