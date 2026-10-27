@@ -32,15 +32,18 @@ function StitchingPage() {
 function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
-  const [status, setStatus] = useState("soon");
+  const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("board") : null;
+  const [status, setStatus] = useState(opening === "ready" ? "READY" : opening === "today" ? "today" : "board");
   const [page, setPage] = useState(1);
+  const queryClient = useQueryClient();
   const orders = useQuery({
     queryKey: ["stitching-orders", deferred, status, page],
+    enabled: status !== "board",
     queryFn: () => {
       const params = new URLSearchParams();
       if (deferred.trim()) params.set("q", deferred.trim());
-      if (status === "soon") params.set("due", "soon");
-      else if (status) params.set("status", status);
+      if (status === "soon" || status === "today" || status === "week") params.set("due", status === "soon" ? "soon" : status);
+      else if (status && status !== "board") params.set("status", status);
       params.set("page", String(page));
       return apiFetch<{ orders: StitchingOrder[]; total: number }>(`/api/stitching-orders?${params.toString()}`);
     },
@@ -53,8 +56,8 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
         <div>
           <h1 className="text-4xl font-semibold">Stitching</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {status === "soon"
-              ? "Pending orders already due, oldest delivery first."
+            {status === "board"
+              ? "Due today, this week, and ready for pickup."
               : "An order is a customer, a garment, a bag number, and measurements."}
           </p>
         </div>
@@ -83,11 +86,14 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             <SelectValue placeholder="Due soon" />
           </SelectTrigger>
           <SelectContent>
+            <SelectItem value="board">Board</SelectItem>
+            <SelectItem value="today">Due today</SelectItem>
+            <SelectItem value="week">This week</SelectItem>
             <SelectItem value="soon">Due soon</SelectItem>
             <SelectItem value="all">All statuses</SelectItem>
             {STITCHING_STATUSES.map((item) => (
               <SelectItem key={item} value={item}>
-                {item === "PENDING" ? "All pending" : item}
+                {item === "PENDING" ? "All pending" : item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : item === "DELIVERED" ? "Delivered" : item}
               </SelectItem>
             ))}
           </SelectContent>
@@ -95,9 +101,10 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
       </div>
       {orders.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {orders.error instanceof Error ? <p className="text-sm text-destructive">{orders.error.message}</p> : null}
-      {!orders.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No orders yet.</p> : null}
-      <ListFooter page={page} total={orders.data?.total ?? 0} shown={rows.length} onPage={setPage} />
-      {rows.length > 0 ? (
+      {status === "board" ? <StitchingBoard onOpen={onOpen} /> : null}
+      {status !== "board" && !orders.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No orders yet.</p> : null}
+      {status === "board" ? null : <ListFooter page={page} total={orders.data?.total ?? 0} shown={rows.length} onPage={setPage} />}
+      {status !== "board" && rows.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
             <TableHeader>
@@ -122,7 +129,32 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                   <TableCell>{order.productName}</TableCell>
                   <TableCell>{order.orderedOn}</TableCell>
                   <TableCell>{order.deliveryOn || "—"}</TableCell>
-                  <TableCell>{order.status}</TableCell>
+                  <TableCell>
+                    <div className="flex flex-wrap gap-1">
+                      <span className="mr-1">{order.status}</span>
+                      {STITCHING_STATUSES.filter((item) => item !== "PENDING" && item !== order.status).map((item) => (
+                        <Button
+                          key={item}
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => {
+                            void apiFetch(`/api/stitching-orders/${order.id}/status`, {
+                              method: "PATCH",
+                              body: JSON.stringify({ status: item }),
+                            })
+                              .then(() => {
+                                toast.success(`Order ${order.orderNo} is ${item.toLowerCase()}.`);
+                                void queryClient.invalidateQueries({ queryKey: ["stitching-orders"] });
+                              })
+                              .catch((reason: Error) => toast.error(reason.message));
+                          }}
+                        >
+                          {item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered"}
+                        </Button>
+                      ))}
+                    </div>
+                  </TableCell>
                   <TableCell>{formatRupees(order.amount)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(order.id)}>
@@ -135,6 +167,75 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           </Table>
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const today = useQuery({
+    queryKey: ["stitching-board", "today"],
+    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?due=today&page=1"),
+  });
+  const week = useQuery({
+    queryKey: ["stitching-board", "week"],
+    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?due=week&page=1"),
+  });
+  const ready = useQuery({
+    queryKey: ["stitching-board", "ready"],
+    queryFn: () => apiFetch<{ orders: StitchingOrder[] }>("/api/stitching-orders?status=READY&page=1"),
+  });
+  const columns = [
+    ["Due today", today],
+    ["This week", week],
+    ["Ready for pickup", ready],
+  ] as const;
+  return (
+    <div className="grid gap-4 lg:grid-cols-3">
+      {columns.map(([title, query]) => (
+        <section key={title} className="rounded-2xl border border-border bg-card p-4">
+          <h2 className="text-lg font-semibold">{title}</h2>
+          {query.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}
+          {query.error instanceof Error ? <p className="mt-3 text-sm text-destructive">{query.error.message}</p> : null}
+          <div className="mt-3 space-y-3">
+            {(query.data?.orders ?? []).map((order) => (
+              <article key={order.id} className="rounded-xl border border-border px-3 py-3">
+                <button type="button" className="block w-full text-left" onClick={() => onOpen(order.id)}>
+                  <p className="font-medium">{order.customerName || "No name"}</p>
+                  <p className="text-sm text-muted-foreground">
+                    {order.productName} · bag {order.bagNo || "—"} · {order.deliveryOn || "no date"} · {order.status}
+                  </p>
+                </button>
+                <div className="mt-2 flex flex-wrap gap-1">
+                  {STITCHING_STATUSES.filter((item) => item !== "PENDING" && item !== order.status).map((item) => (
+                    <Button
+                      key={item}
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => {
+                        void apiFetch(`/api/stitching-orders/${order.id}/status`, {
+                          method: "PATCH",
+                          body: JSON.stringify({ status: item }),
+                        })
+                          .then(() => {
+                            toast.success(`${order.customerName || "Order"} is ${item.toLowerCase()}.`);
+                            void queryClient.invalidateQueries({ queryKey: ["stitching-board"] });
+                            void queryClient.invalidateQueries({ queryKey: ["stitching-orders"] });
+                          })
+                          .catch((reason: Error) => toast.error(reason.message));
+                      }}
+                    >
+                      {item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered"}
+                    </Button>
+                  ))}
+                </div>
+              </article>
+            ))}
+            {!query.isLoading && (query.data?.orders.length ?? 0) === 0 ? <p className="text-sm text-muted-foreground">None.</p> : null}
+          </div>
+        </section>
+      ))}
     </div>
   );
 }

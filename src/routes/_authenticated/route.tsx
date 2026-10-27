@@ -92,7 +92,7 @@ function AuthenticatedLayout() {
 
   return (
     <SidebarProvider>
-      <Sidebar>
+      <Sidebar className="print:hidden">
         <SidebarHeader className="px-4 py-5">
           <Logo />
         </SidebarHeader>
@@ -137,7 +137,7 @@ function AuthenticatedLayout() {
         </SidebarFooter>
       </Sidebar>
       <SidebarInset>
-        <header className="flex h-14 items-center gap-2 border-b border-border px-4 md:hidden">
+        <header className="flex h-14 items-center gap-2 border-b border-border px-4 print:hidden md:hidden">
           <SidebarTrigger />
           <span className="font-display text-lg font-semibold">Ladies Collections</span>
         </header>

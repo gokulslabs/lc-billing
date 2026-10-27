@@ -1,5 +1,8 @@
 import { z } from "zod";
 
+export const PAYMENT_MODES = ["CASH", "UPI", "CARD"] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number];
+
 export type InvoiceLine = {
   id: string;
   inventoryNo: string;
@@ -8,6 +11,7 @@ export type InvoiceLine = {
   productName: string;
   quantity: number;
   rate: number;
+  discount: number;
   amount: number;
   status: string;
 };
@@ -16,6 +20,7 @@ export type InvoicePayment = {
   id: string;
   amount: number;
   paidOn: string;
+  mode: PaymentMode | null;
   showroom: string | null;
 };
 
@@ -69,6 +74,7 @@ export const cancelInvoiceSchema = z.object({
 export const paymentSchema = z.object({
   amount: z.number().positive("Enter an amount.").max(9_999_999, "Amount is too large."),
   paidOn: day,
+  mode: z.enum(PAYMENT_MODES, { message: "Choose cash, UPI, or card." }),
   showroom: z.string().trim().max(80, "Showroom is too long."),
 });
 
@@ -85,6 +91,13 @@ export function nextBillNo(existing: readonly string[]): string {
 export function lineAmount(quantity: number, rate: number): number {
   const paise = Math.round((Math.round(quantity * 1000) * Math.round(rate * 100)) / 1000);
   return paise / 100;
+}
+
+export function applyGroupDiscount(quantity: number, rate: number, percent: number): { gross: number; discount: number; amount: number } {
+  const gross = lineAmount(quantity, rate);
+  const share = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
+  const discount = Math.round(gross * share) / 100;
+  return { gross, discount, amount: Math.round((gross - discount) * 100) / 100 };
 }
 
 export function collectionProblem(balance: number, amount: number): string | null {

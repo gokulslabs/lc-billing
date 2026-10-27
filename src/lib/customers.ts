@@ -18,6 +18,7 @@ export type CustomerBillLine = {
 export type CustomerPayment = {
   paidOn: string;
   amount: number;
+  mode: string | null;
 };
 
 export type CustomerBill = {

@@ -5,6 +5,7 @@ import {
   cleanMeasurements,
   nextOrderNo,
   stitchingOrderSchema,
+  stitchingStatusSchema,
   zodMessage,
   type StitchingMeasurement,
   type StitchingOrder,
@@ -42,7 +43,8 @@ stitching.get("/products", async (c) => {
 stitching.get("/", async (c) => {
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
   const status = (c.req.query("status") ?? "").trim();
-  const soon = c.req.query("due") === "soon";
+  const due = c.req.query("due") ?? "";
+  const soon = due === "soon";
   const safe = q.replace(/[%_,.()]/g, "").toLowerCase();
   const page = readPage(c.req.query("page"));
   if (q && !safe) return c.json({ orders: [], total: 0, page });
@@ -56,7 +58,16 @@ stitching.get("/", async (c) => {
   const ranked = supabaseAdmin
     .from("stitching_orders")
     .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount", { count: "exact" });
-  const filtered = soon ? ranked.eq("status", "PENDING").lte("delivery_on", plusDays(today, 7)) : status ? ranked.eq("status", status) : ranked;
+  const filtered =
+    due === "today"
+      ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
+      : due === "week"
+        ? ranked.in("status", ["PENDING", "TRIAL"]).gt("delivery_on", today).lte("delivery_on", plusDays(today, 7))
+        : soon
+          ? ranked.in("status", ["PENDING", "TRIAL"]).lte("delivery_on", plusDays(today, 7))
+          : status
+            ? ranked.eq("status", status)
+            : ranked;
   const searched = !safe
     ? filtered
     : customerIds.length > 0
@@ -112,6 +123,22 @@ stitching.post("/", async (c) => {
 stitching.get("/:id", async (c) => {
   const order = await loadOrder(c.req.param("id"));
   if (!order) return c.json({ error: "Order not found." }, 404);
+  return c.json({ order });
+});
+
+stitching.patch("/:id/status", async (c) => {
+  const parsed = stitchingStatusSchema.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const { data, error } = await supabaseAdmin
+    .from("stitching_orders")
+    .update({ status: parsed.data.status })
+    .eq("id", c.req.param("id"))
+    .select("id")
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not move the order." }, 500);
+  if (!data) return c.json({ error: "Order not found." }, 404);
+  const order = await loadOrder(data.id);
+  if (!order) return c.json({ error: "Could not load the order." }, 500);
   return c.json({ order });
 });
 

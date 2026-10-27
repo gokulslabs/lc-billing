@@ -22,12 +22,30 @@ export const inventorySchema = z.object({
   quantity,
 });
 
+const supplierName = z.string().trim().max(80, "Supplier name is too long.");
+const supplierBillNo = z.string().trim().max(40, "Supplier bill number is too long.");
+const cost = z.number().min(0, "Cost cannot be negative.").max(9_999_999, "Cost is too large.");
+
+export const stockReceiptSchema = inventorySchema.extend({
+  supplierName: supplierName.min(1, "Enter the supplier."),
+  supplierBillNo: supplierBillNo.min(1, "Enter the supplier bill number."),
+  cost,
+});
+
 export const inventoryUpdateSchema = inventorySchema.extend({
   quantity: z.number().min(0, "Quantity cannot be negative.").max(999_999, "Quantity is too large."),
+  supplierName,
+  supplierBillNo,
+  cost: cost.optional(),
 });
 
 export const barcodeSchema = z.object({
-  starting: z.string().trim().min(1, "Enter a starting number.").max(12, "Starting number is too long."),
+  starting: z
+    .string()
+    .trim()
+    .min(1, "Enter a starting number.")
+    .max(40, "Starting number is too long.")
+    .regex(/^(\D*)(\d+)$/, "Enter an inventory number such as IN0021288."),
   quantity: z.number().int("Label count must be a whole number.").min(1, "Print at least one label.").max(200, "Print at most 200 labels."),
 });
 
@@ -42,12 +60,23 @@ export function quantityForUnit(unit: Unit, value: number): string | null {
 
 export function nextInventoryNo(existing: readonly string[]): string {
   let max = 0;
+  let prefix = "";
+  let width = 0;
   for (const value of existing) {
-    if (!/^\d+$/.test(value)) continue;
-    const parsed = Number(value);
-    if (Number.isSafeInteger(parsed)) max = Math.max(max, parsed);
+    const match = /^(\D*)(\d+)$/.exec(value.trim());
+    if (!match?.[2]) continue;
+    const parsed = Number(match[2]);
+    const nextPrefix = match[1] ?? "";
+    if (!Number.isSafeInteger(parsed)) continue;
+    if (parsed < max) continue;
+    if (parsed === max && prefix && !nextPrefix) continue;
+    max = parsed;
+    prefix = nextPrefix;
+    width = match[2].length;
   }
-  return String(max + 1);
+  const next = String(max + 1);
+  if (!prefix) return next;
+  return prefix + next.padStart(Math.max(width, next.length), "0");
 }
 
 export type PurchaseLine = {
@@ -59,6 +88,9 @@ export type PurchaseLine = {
   unit: Unit;
   quantity: number;
   inventoryNos: string[];
+  supplierName: string;
+  supplierBillNo: string;
+  cost: number | null;
 };
 
 export type PurchaseRow = {
@@ -66,6 +98,9 @@ export type PurchaseRow = {
   inventoryNo: string;
   productId: string;
   quantity: number;
+  supplierName: string;
+  supplierBillNo: string;
+  cost: number | null;
 };
 
 const day = /^\d{4}-\d{2}-\d{2}$/;
@@ -88,11 +123,15 @@ export function groupPurchases(
     const product = products.get(row.productId);
     if (!product) continue;
     const date = shopDate(row.createdAt);
-    const key = `${date}\u0000${row.productId}`;
+    const supplierName = row.supplierName.trim();
+    const supplierBillNo = row.supplierBillNo.trim();
+    const key = `${date}\u0000${row.productId}\u0000${supplierName}\u0000${supplierBillNo}`;
     const current = grouped.get(key);
+    const lineCost = row.cost == null ? null : Math.round(row.quantity * row.cost * 100) / 100;
     if (current) {
       current.quantity = Math.round((current.quantity + row.quantity) * 1000) / 1000;
       current.inventoryNos.push(row.inventoryNo);
+      if (lineCost != null) current.cost = Math.round(((current.cost ?? 0) + lineCost) * 100) / 100;
     } else {
       grouped.set(key, {
         date,
@@ -103,6 +142,9 @@ export function groupPurchases(
         unit: product.unit,
         quantity: row.quantity,
         inventoryNos: [row.inventoryNo],
+        supplierName,
+        supplierBillNo,
+        cost: lineCost,
       });
     }
   }
@@ -141,11 +183,16 @@ function nextCalendarDay(value: string): string {
 }
 
 export function barcodeNumbers(starting: string, count: number): string[] {
-  const width = starting.length;
-  const origin = Number(starting);
+  const match = /^(\D*)(\d+)$/.exec(starting.trim());
+  if (!match?.[2]) return [];
+  const origin = Number(match[2]);
+  if (!Number.isSafeInteger(origin) || !Number.isSafeInteger(origin + count - 1)) return [];
+  const prefix = match[1] ?? "";
+  const width = match[2].length;
   const numbers: string[] = [];
   for (let offset = 0; offset < count; offset += 1) {
-    numbers.push(String(origin + offset).padStart(width, "0"));
+    const next = String(origin + offset);
+    numbers.push(prefix + next.padStart(Math.max(width, next.length), "0"));
   }
   return numbers;
 }

@@ -153,7 +153,7 @@ type LineRow = {
   quantity: number | string;
   amount: number | string;
 };
-type PaymentRow = { invoice_id: string; paid_on: string; amount: number | string };
+type PaymentRow = { invoice_id: string; paid_on: string; amount: number | string; mode: string | null };
 
 function toCustomer(row: CustomerRow): Customer {
   return {
@@ -202,7 +202,7 @@ async function billDetails(rows: BillRow[]): Promise<Map<string, CustomerBill> |
         .range(from, to),
     ),
     readIn<PaymentRow>(ids, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("invoice_id, paid_on, amount").in("invoice_id", chunk).order("paid_on").range(from, to),
+      supabaseAdmin.from("payments").select("invoice_id, paid_on, amount, mode").in("invoice_id", chunk).order("paid_on").range(from, to),
     ),
   ]);
   if (!lines || !payments) return null;
@@ -224,7 +224,7 @@ async function billDetails(rows: BillRow[]): Promise<Map<string, CustomerBill> |
     const bill = bills.get(payment.invoice_id);
     if (!bill) continue;
     const amount = round2(Number(payment.amount));
-    bill.payments.push({ paidOn: payment.paid_on, amount });
+    bill.payments.push({ paidOn: payment.paid_on, amount, mode: payment.mode ?? null });
     bill.collected = round2(bill.collected + amount);
   }
   for (const bill of bills.values()) bill.balance = round2(bill.total - bill.collected);

@@ -1,12 +1,14 @@
 export type DashboardStats = {
   salesAmount: number;
-  salesQuantity: number;
   collections: number;
-  bills: number;
-  products: number;
-  customers: number;
-  employees: number;
-  openStitching: number;
+  dueOnToday: number;
+  unpaidBills: number;
+  unpaidAmount: number;
+  readyStitching: number;
+  dueTodayStitching: number;
+  cash: number;
+  upi: number;
+  card: number;
 };
 
 export function sumSales(lines: readonly { quantity: number; amount: number }[]): { amount: number; quantity: number } {

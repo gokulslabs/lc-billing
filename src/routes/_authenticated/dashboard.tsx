@@ -1,10 +1,9 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
 import type { DashboardStats } from "@/lib/dashboard";
-import type { AppModule } from "@/lib/modules";
 import { formatRupees } from "@/lib/products";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -19,16 +18,21 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
-const STATS: { key: keyof DashboardStats; label: string; money?: boolean; to?: AppModule["to"] }[] = [
-  { key: "salesAmount", label: "Today's sales", money: true, to: "/sales" },
-  { key: "salesQuantity", label: "Today's sales quantity", to: "/sales" },
-  { key: "collections", label: "Today's collections", money: true, to: "/sales" },
-  { key: "bills", label: "Bills today", to: "/sales" },
-  { key: "products", label: "Products", to: "/products" },
-  { key: "customers", label: "Customers", to: "/customers" },
-  { key: "employees", label: "Employees" },
-  { key: "openStitching", label: "Open stitching orders", to: "/stitching" },
+const NEEDS: { key: keyof DashboardStats; label: string; detail: string; money?: boolean; href: string }[] = [
+  { key: "unpaidBills", label: "Bills still due", detail: "Open the queue of who owes", href: "/sales?view=due" },
+  { key: "unpaidAmount", label: "Amount still due", detail: "Across every open bill", money: true, href: "/sales?view=due" },
+  { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/stitching?board=ready" },
+  { key: "dueTodayStitching", label: "Stitching due today", detail: "Trials and pending for today", href: "/stitching?board=today" },
 ];
+
+function CloseFigure({ label, value }: { label: string; value: number | undefined }) {
+  return (
+    <div>
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value == null ? "…" : formatRupees(value)}</p>
+    </div>
+  );
+}
 
 function greeting() {
   const h = new Date().getHours();
@@ -59,35 +63,37 @@ function Dashboard() {
         <h1 className="mt-3 text-4xl font-semibold md:text-5xl">
           {greeting()}, {name}
         </h1>
-        <p className="mt-2 max-w-lg text-sm opacity-95">
-          Today's sales, the quantity sold, and the collections taken in. Collections stay separate from the bill total.
-        </p>
+        <p className="mt-2 max-w-lg text-sm opacity-95">What needs a person today, then the money that came in.</p>
       </section>
 
       <section>
-        <h2 className="mb-4 text-2xl font-semibold">Today at a glance</h2>
+        <h2 className="mb-4 text-2xl font-semibold">Needs a person</h2>
         {stats.error instanceof Error ? <p className="mb-4 text-sm text-destructive">{stats.error.message}</p> : null}
-        <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-          {STATS.map((stat) => {
-            const value = stats.data?.stats[stat.key];
-            const shown = value == null ? "…" : stat.money ? formatRupees(value) : String(value);
-            const body = (
-              <>
-                <p className="text-sm text-muted-foreground">{stat.label}</p>
+        <div className="grid gap-4 md:grid-cols-2">
+          {NEEDS.map((item) => {
+            const value = stats.data?.stats[item.key];
+            const shown = value == null ? "…" : item.money ? formatRupees(value) : String(value);
+            return (
+              <a key={item.key} href={item.href} className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary">
+                <p className="text-sm text-muted-foreground">{item.label}</p>
                 <p className="mt-2 text-3xl font-semibold tabular-nums">{shown}</p>
-              </>
-            );
-            return stat.to ? (
-              <Link key={stat.key} to={stat.to} className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary">
-                {body}
-              </Link>
-            ) : (
-              <div key={stat.key} className="rounded-2xl border border-border bg-card p-5">
-                {body}
-              </div>
+                <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
+              </a>
             );
           })}
         </div>
+      </section>
+
+      <section>
+        <h2 className="mb-4 text-2xl font-semibold">Today's close</h2>
+        <a href="/sales?view=close" className="grid gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary md:grid-cols-3">
+          <CloseFigure label="Billed" value={stats.data?.stats.salesAmount} />
+          <CloseFigure label="Collected" value={stats.data?.stats.collections} />
+          <CloseFigure label="Still due on today's bills" value={stats.data?.stats.dueOnToday} />
+          <CloseFigure label="Cash" value={stats.data?.stats.cash} />
+          <CloseFigure label="UPI" value={stats.data?.stats.upi} />
+          <CloseFigure label="Card" value={stats.data?.stats.card} />
+        </a>
       </section>
     </div>
   );

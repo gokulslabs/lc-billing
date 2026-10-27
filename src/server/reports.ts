@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { billTotals, moneyBalance, monthStart, rangeProblem, stockGap } from "@/lib/reports";
+import { billTotals, moneyBalance, monthStart, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
 import { shopToday } from "@/lib/sales";
 import { requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
@@ -44,7 +44,11 @@ reports.get("/invoices", async (c) => {
   if (!lines) return c.json({ error: "Could not load invoice lines." }, 500);
   return c.json({
     invoices: loaded.rows.map((row) => {
-      const totals = billTotals(lines.filter((line) => line.invoice_id === row.id).map((line) => Number(line.amount)));
+      const totals = pricedBill(
+        lines
+          .filter((line) => line.invoice_id === row.id)
+          .map((line) => ({ quantity: Number(line.quantity), rate: Number(line.rate), amount: Number(line.amount) })),
+      );
       return {
         billNo: row.bill_no,
         billedOn: row.billed_on,

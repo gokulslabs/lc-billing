@@ -1,4 +1,4 @@
-import { useDeferredValue, useState, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,7 @@ import { formatPurchaseNumbers, type InventoryItem, type PurchaseLine } from "@/
 import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/products";
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
+import { LabelSheet } from "@/components/app/BarcodeLabel";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -81,6 +82,12 @@ function StockPanel() {
   const [productId, setProductId] = useState("");
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
+  const [sticker, setSticker] = useState<{ number: string; caption: string } | null>(null);
+  useEffect(() => {
+    if (!sticker) return;
+    const frame = requestAnimationFrame(() => window.print());
+    return () => cancelAnimationFrame(frame);
+  }, [sticker]);
   const groups = useQuery({
     queryKey: ["product-groups"],
     queryFn: () => apiFetch<{ groups: ProductGroup[] }>("/api/product-groups"),
@@ -158,6 +165,17 @@ function StockPanel() {
           Add stock
         </Button>
       </div>
+      {sticker ? (
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3 print:hidden">
+            <p className="text-sm text-muted-foreground">Label for {sticker.number}. Stick it on that piece.</p>
+            <Button type="button" variant="outline" className="rounded-full" onClick={() => window.print()}>
+              Print
+            </Button>
+          </div>
+          <LabelSheet labels={[sticker]} />
+        </div>
+      ) : null}
       {stock.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {stock.error instanceof Error ? <p className="text-sm text-destructive">{stock.error.message}</p> : null}
       {!stock.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No stock yet.</p> : null}
@@ -227,8 +245,9 @@ function StockPanel() {
         onOpenChange={(open) => {
           if (!open) setEditor(null);
         }}
-        onSaved={() => {
+        onSaved={(created) => {
           setEditor(null);
+          if (created) setSticker({ number: created.inventoryNo, caption: created.productName });
           void queryClient.invalidateQueries({ queryKey: ["inventory"] });
         }}
       />
@@ -245,12 +264,15 @@ function StockDialog({
   open: boolean;
   item: InventoryItem | null;
   onOpenChange: (open: boolean) => void;
-  onSaved: () => void;
+  onSaved: (created: InventoryItem | null) => void;
 }) {
   const [productQuery, setProductQuery] = useState("");
   const [productId, setProductId] = useState(item?.productId ?? "");
   const [inventoryNo, setInventoryNo] = useState(item?.inventoryNo ?? "");
   const [quantity, setQuantity] = useState(item ? String(item.quantity) : "");
+  const [supplierName, setSupplierName] = useState("");
+  const [supplierBillNo, setSupplierBillNo] = useState("");
+  const [cost, setCost] = useState("");
   const [seen, setSeen] = useState<string | null>(null);
   const mode = open ? (item?.id ?? "new") : null;
   if (mode && seen !== mode) {
@@ -259,15 +281,18 @@ function StockDialog({
     setProductId(item?.productId ?? "");
     setInventoryNo(item?.inventoryNo ?? "");
     setQuantity(item ? String(item.quantity) : "");
+    setSupplierName("");
+    setSupplierBillNo("");
+    setCost("");
   }
   const products = useQuery({
     queryKey: ["products", "picker", productQuery],
     enabled: open,
     queryFn: () => {
       const params = new URLSearchParams();
+      params.set("picker", "1");
       if (productQuery.trim()) params.set("q", productQuery.trim());
-      const suffix = params.size ? `?${params.toString()}` : "";
-      return apiFetch<{ products: Product[] }>(`/api/products${suffix}`);
+      return apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
     },
   });
   const choices = products.data?.products ?? [];
@@ -278,13 +303,26 @@ function StockDialog({
       const amount = Number(quantity);
       if (!productId) throw new Error("Choose a product.");
       if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
-      const body = JSON.stringify({ productId, inventoryNo, quantity: amount });
+      const paid = cost.trim() === "" ? undefined : Number(cost);
+      if (paid !== undefined && !Number.isFinite(paid)) throw new Error("Enter the cost.");
+      if (!item && (!supplierName.trim() || !supplierBillNo.trim() || paid === undefined)) {
+        throw new Error("Enter the supplier, their bill number, and the cost.");
+      }
+      const body = JSON.stringify({
+        productId,
+        inventoryNo,
+        quantity: amount,
+        supplierName: supplierName.trim(),
+        supplierBillNo: supplierBillNo.trim(),
+        ...(paid === undefined ? {} : { cost: paid }),
+      });
       if (item) return apiFetch(`/api/inventory/${item.id}`, { method: "PATCH", body });
       return apiFetch("/api/inventory", { method: "POST", body });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       toast.success(item ? "Stock updated." : "Stock added.");
-      onSaved();
+      const created = item ? null : (result as { item: InventoryItem }).item;
+      onSaved(created);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -297,7 +335,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "Leave the inventory number blank and the next number is used."}
+              : "One receipt: supplier, their bill, cost, then the product. Leave the inventory number blank and the next IN number is used. Saving prints that number as bars."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -348,6 +386,15 @@ function StockDialog({
               required={item !== null}
             />
           </Field>
+          <Field label="Supplier" id="stock-supplier">
+            <Input id="stock-supplier" value={supplierName} onChange={(event) => setSupplierName(event.target.value)} required={item === null} />
+          </Field>
+          <Field label="Supplier bill no." id="stock-supplier-bill">
+            <Input id="stock-supplier-bill" value={supplierBillNo} onChange={(event) => setSupplierBillNo(event.target.value)} required={item === null} />
+          </Field>
+          <Field label="Cost each" id="stock-cost">
+            <Input id="stock-cost" value={cost} onChange={(event) => setCost(event.target.value)} inputMode="decimal" required={item === null} />
+          </Field>
           <Field label="Quantity" id="stock-qty">
             <Input
               id="stock-qty"
@@ -385,7 +432,9 @@ function BarcodePanel() {
 
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Labels use a starting number and a count. Printing does not add stock.</p>
+      <p className="text-sm text-muted-foreground">
+        The bars are the inventory number, including IN. The billing gun reads them. Showing labels does not add stock.
+      </p>
       <form
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
@@ -408,15 +457,7 @@ function BarcodePanel() {
           </Button>
         ) : null}
       </form>
-      {numbers.length > 0 ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          {numbers.map((number) => (
-            <div key={number} className="rounded-xl border border-border bg-card px-4 py-6 text-center font-mono text-lg">
-              {number}
-            </div>
-          ))}
-        </div>
-      ) : null}
+      {numbers.length > 0 ? <LabelSheet labels={numbers.map((number) => ({ number, caption: "" }))} /> : null}
     </div>
   );
 }
@@ -592,6 +633,9 @@ function PurchasesPanel() {
                 <TableHead>Code</TableHead>
                 <TableHead>Group</TableHead>
                 <TableHead>Product</TableHead>
+                <TableHead>Supplier</TableHead>
+                <TableHead>Bill</TableHead>
+                <TableHead>Cost</TableHead>
                 <TableHead>Quantity</TableHead>
                 <TableHead>Inventory nos.</TableHead>
               </TableRow>
@@ -604,6 +648,9 @@ function PurchasesPanel() {
                   <TableCell>{row.productCode}</TableCell>
                   <TableCell>{row.groupName}</TableCell>
                   <TableCell className="font-medium">{row.productName}</TableCell>
+                  <TableCell>{row.supplierName || "—"}</TableCell>
+                  <TableCell>{row.supplierBillNo || "—"}</TableCell>
+                  <TableCell>{row.cost == null ? "—" : formatRupees(row.cost)}</TableCell>
                   <TableCell>
                     {formatQty(row.quantity)} {row.unit}
                   </TableCell>
@@ -619,12 +666,15 @@ function PurchasesPanel() {
 }
 
 function downloadPurchases(rows: PurchaseLine[]) {
-  const header = ["Date", "Product code", "Product group", "Product name", "Quantity", "Unit", "Inventory nos."];
+  const header = ["Date", "Product code", "Product group", "Product name", "Supplier", "Supplier bill", "Cost", "Quantity", "Unit", "Inventory nos."];
   const body = rows.map((row) => [
     row.date,
     row.productCode,
     row.groupName,
     row.productName,
+    row.supplierName,
+    row.supplierBillNo,
+    row.cost == null ? "" : String(row.cost),
     String(row.quantity),
     row.unit,
     formatPurchaseNumbers(row.inventoryNos),

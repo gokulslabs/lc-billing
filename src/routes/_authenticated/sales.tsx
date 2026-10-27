@@ -7,18 +7,11 @@ import type { Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import { monthStart } from "@/lib/reports";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
-import { shopToday } from "@/lib/sales";
+import { lineAmount, PAYMENT_MODES, shopToday } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -34,19 +27,52 @@ export const Route = createFileRoute("/_authenticated/sales")({
 });
 
 function SalesPage() {
+  const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("view") : null;
   const [billId, setBillId] = useState<string | null>(null);
-  if (billId) return <BillScreen id={billId} onBack={() => setBillId(null)} />;
-  return <SalesHome onOpen={setBillId} />;
+  const [list, setList] = useState(opening === "due" || opening === "close");
+  if (billId) {
+    return (
+      <BillScreen
+        id={billId}
+        onBack={() => {
+          setBillId(null);
+          setList(true);
+        }}
+      />
+    );
+  }
+  if (!list) {
+    return (
+      <div className="mx-auto max-w-xl space-y-6 p-6 md:p-10">
+        <div className="flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-semibold">New bill</h1>
+            <p className="mt-2 text-sm text-muted-foreground">Choose the customer in front of you. The inventory box is next.</p>
+          </div>
+          <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
+            Bill list
+          </Button>
+        </div>
+        <NewBillForm onCreated={setBillId} />
+      </div>
+    );
+  }
+  return (
+    <SalesHome
+      onOpen={setBillId}
+      onNew={() => setList(false)}
+      startTab={opening === "due" ? "due" : opening === "close" ? "close" : "bills"}
+    />
+  );
 }
 
-function SalesHome({ onOpen }: { onOpen: (id: string) => void }) {
+function SalesHome({ onOpen, onNew, startTab }: { onOpen: (id: string) => void; onNew: () => void; startTab: string }) {
   const today = shopToday();
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
   const [from, setFrom] = useState(monthStart(today));
   const [to, setTo] = useState(today);
   const [page, setPage] = useState(1);
-  const [creating, setCreating] = useState(false);
   const bills = useQuery({
     queryKey: ["invoices", deferred, from, to, page],
     queryFn: () =>
@@ -65,7 +91,7 @@ function SalesHome({ onOpen }: { onOpen: (id: string) => void }) {
           <h1 className="text-4xl font-semibold">Sales & billing</h1>
           <p className="mt-2 text-sm text-muted-foreground">A bill is a customer, then lines added by inventory number.</p>
         </div>
-        <Button className="rounded-full" onClick={() => setCreating(true)}>
+        <Button className="rounded-full" onClick={onNew}>
           New bill
         </Button>
       </div>
@@ -100,10 +126,12 @@ function SalesHome({ onOpen }: { onOpen: (id: string) => void }) {
           className="w-40"
         />
       </div>
-      <Tabs defaultValue="bills">
+      <Tabs defaultValue={startTab}>
         <TabsList>
           <TabsTrigger value="bills">Bills</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
+          <TabsTrigger value="due">Who owes</TabsTrigger>
+          <TabsTrigger value="close">Day close</TabsTrigger>
         </TabsList>
         <TabsContent value="bills" className="space-y-4">
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
@@ -195,8 +223,13 @@ function SalesHome({ onOpen }: { onOpen: (id: string) => void }) {
             <p className="text-sm text-muted-foreground">Lines from the bills on this page.</p>
           ) : null}
         </TabsContent>
+        <TabsContent value="due">
+          <DueList onOpen={onOpen} />
+        </TabsContent>
+        <TabsContent value="close">
+          <DayClose />
+        </TabsContent>
       </Tabs>
-      <NewBillDialog open={creating} onOpenChange={setCreating} onCreated={onOpen} />
     </div>
   );
 }
@@ -232,12 +265,20 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             </p>
           ) : null}
         </div>
-        {invoice ? <p className="font-display text-3xl font-semibold">{formatRupees(invoice.total)}</p> : null}
+        {invoice ? (
+          <div className="flex items-center gap-3 print:hidden">
+            <p className="font-display text-3xl font-semibold">{formatRupees(invoice.total)}</p>
+            <Button variant="outline" className="rounded-full" onClick={() => window.print()}>
+              Print
+            </Button>
+          </div>
+        ) : null}
       </div>
       {bill.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {bill.error instanceof Error ? <p className="text-sm text-destructive">{bill.error.message}</p> : null}
       {invoice?.remarks ? <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p> : null}
       {invoice && invoice.status === "open" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
+      {invoice ? <Receipt invoice={invoice} /> : null}
       {invoice ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -249,6 +290,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                 <TableHead>Product</TableHead>
                 <TableHead>Qty</TableHead>
                 <TableHead>Rate</TableHead>
+                <TableHead>Discount</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Amount</TableHead>
                 <TableHead />
@@ -257,7 +299,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             <TableBody>
               {invoice.lines.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={9} className="text-muted-foreground">
+                  <TableCell colSpan={10} className="text-muted-foreground">
                     No lines yet.
                   </TableCell>
                 </TableRow>
@@ -270,6 +312,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   <TableCell>{line.productName}</TableCell>
                   <TableCell>{line.quantity}</TableCell>
                   <TableCell>{formatRupees(line.rate)}</TableCell>
+                  <TableCell>{formatRupees(line.discount)}</TableCell>
                   <TableCell className="capitalize">{line.status}</TableCell>
                   <TableCell>{formatRupees(line.amount)}</TableCell>
                   <TableCell className="text-right">
@@ -280,11 +323,14 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                         className="rounded-full"
                         onClick={() => {
                           void apiFetch(`/api/invoices/${invoice.id}/lines/${line.id}`, { method: "DELETE" })
-                            .then(refresh)
+                            .then(() => {
+                              toast.success(`${line.inventoryNo} is back on the shelf.`);
+                              refresh();
+                            })
                             .catch((reason: Error) => toast.error(reason.message));
                         }}
                       >
-                        Remove
+                        Return
                       </Button>
                     ) : null}
                   </TableCell>
@@ -298,10 +344,13 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
         <div className="grid gap-6 md:grid-cols-2">
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Collection</h2>
-            <p className="text-sm text-muted-foreground">Balance {formatRupees(invoice.balance)}</p>
+            <p className="text-sm text-muted-foreground">
+              Gross {formatRupees(invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0))} · Discount{" "}
+              {formatRupees(invoice.lines.reduce((sum, line) => sum + line.discount, 0))} · Balance {formatRupees(invoice.balance)}
+            </p>
             {invoice.payments.map((payment) => (
               <p key={payment.id} className="text-sm">
-                {payment.paidOn} · {formatRupees(payment.amount)}
+                {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
                 {payment.showroom ? ` · ${payment.showroom}` : ""}
               </p>
             ))}
@@ -331,7 +380,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
     enabled: lookup.length > 0,
     queryFn: () =>
       apiFetch<{
-        preview: { productCode: string; groupName: string; productName: string; rate: number; status: string; available: number };
+        preview: { productCode: string; groupName: string; productName: string; rate: number; discountPercent: number; status: string; available: number };
       }>(`/api/invoices/preview?inventoryNo=${encodeURIComponent(lookup)}`),
     retry: false,
   });
@@ -384,7 +433,9 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       {preview.data ? (
         <p className="pb-2 text-sm text-muted-foreground">
           {preview.data.preview.productCode} · {preview.data.preview.groupName} · {preview.data.preview.productName} ·{" "}
-          {formatRupees(preview.data.preview.rate)} · {preview.data.preview.status} · {preview.data.preview.available} left
+          {formatRupees(preview.data.preview.rate)}
+          {preview.data.preview.discountPercent ? ` · ${preview.data.preview.discountPercent}% off` : ""} · {preview.data.preview.status} ·{" "}
+          {preview.data.preview.available} left
         </p>
       ) : null}
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
@@ -397,6 +448,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
 function CollectForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => void }) {
   const [amount, setAmount] = useState("");
   const [paidOn, setPaidOn] = useState(localToday());
+  const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
   const [showroom, setShowroom] = useState("");
   const save = useMutation({
     mutationFn: () => {
@@ -404,7 +456,7 @@ function CollectForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () =>
       if (!Number.isFinite(value)) throw new Error("Enter an amount.");
       return apiFetch(`/api/invoices/${invoiceId}/payments`, {
         method: "POST",
-        body: JSON.stringify({ amount: value, paidOn, showroom }),
+        body: JSON.stringify({ amount: value, paidOn, mode, showroom }),
       });
     },
     onSuccess: () => {
@@ -429,7 +481,21 @@ function CollectForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () =>
       <Field label="Date" id="collect-date">
         <Input id="collect-date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} required />
       </Field>
-      <Field label="Showroom" id="collect-showroom">
+      <Field label="How it was paid" id="collect-mode">
+        <Select value={mode} onValueChange={(value) => setMode(value as (typeof PAYMENT_MODES)[number])}>
+          <SelectTrigger id="collect-mode">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {PAYMENT_MODES.map((item) => (
+              <SelectItem key={item} value={item}>
+                {item === "CASH" ? "Cash" : item === "UPI" ? "UPI" : "Card"}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </Field>
+      <Field label="Note" id="collect-showroom">
         <Input id="collect-showroom" value={showroom} onChange={(event) => setShowroom(event.target.value)} maxLength={80} />
       </Field>
       <Button type="submit" className="rounded-full" disabled={save.isPending}>
@@ -487,20 +553,11 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
   );
 }
 
-function NewBillDialog({
-  open,
-  onOpenChange,
-  onCreated,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onCreated: (id: string) => void;
-}) {
+function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [q, setQ] = useState("");
   const [customerId, setCustomerId] = useState("");
   const customers = useQuery({
     queryKey: ["customers", "bill", q],
-    enabled: open,
     queryFn: () => {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
@@ -519,19 +576,12 @@ function NewBillDialog({
     onSuccess: (result) => {
       setQ("");
       setCustomerId("");
-      onOpenChange(false);
       onCreated(result.invoice.id);
     },
     onError: (error: Error) => toast.error(error.message),
   });
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>New bill</DialogTitle>
-          <DialogDescription>The bill number is assigned when the customer is chosen.</DialogDescription>
-        </DialogHeader>
         <form
           className="space-y-4"
           onSubmit={(event) => {
@@ -558,14 +608,129 @@ function NewBillDialog({
               <p className="text-sm text-muted-foreground">No customers yet.</p>
             ) : null}
           </div>
-          <DialogFooter>
-            <Button type="submit" className="rounded-full" disabled={create.isPending}>
-              {create.isPending ? "Opening…" : "Open bill"}
-            </Button>
-          </DialogFooter>
+          <Button type="submit" className="rounded-full" disabled={create.isPending}>
+            {create.isPending ? "Opening…" : "Open bill"}
+          </Button>
         </form>
-      </DialogContent>
-    </Dialog>
+  );
+}
+
+function Receipt({ invoice }: { invoice: InvoiceDetail }) {
+  const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
+  const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
+  return (
+    <section className="receipt hidden print:block">
+      <style>{`@media print { body * { visibility: hidden !important; } .receipt, .receipt * { visibility: visible !important; } .receipt { position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; padding: 24px; } }`}</style>
+      <p className="text-xs uppercase tracking-[0.2em]">Ladies Collections</p>
+      <h1 className="mt-2 text-3xl font-semibold">Bill {invoice.billNo}</h1>
+      <p className="mt-1 text-sm">{invoice.customerName} · {invoice.billedOn}</p>
+      <div className="mt-4 space-y-2 text-sm">
+        {invoice.lines.map((line) => (
+          <p key={line.id}>
+            {line.inventoryNo} · {line.productName} · {line.quantity} × {formatRupees(line.rate)}
+            {line.discount ? ` · off ${formatRupees(line.discount)}` : ""} · {formatRupees(line.amount)}
+          </p>
+        ))}
+      </div>
+      <p className="mt-4 text-sm">Gross {formatRupees(gross)} · Discount {formatRupees(discount)} · Net {formatRupees(invoice.total)}</p>
+      {invoice.payments.map((payment) => (
+        <p key={payment.id} className="text-sm">
+          Paid {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
+        </p>
+      ))}
+      <p className="mt-2 text-lg font-semibold">Balance {formatRupees(invoice.balance)}</p>
+    </section>
+  );
+}
+
+function DueList({ onOpen }: { onOpen: (id: string) => void }) {
+  const [page, setPage] = useState(1);
+  const due = useQuery({
+    queryKey: ["invoices-due", page],
+    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/due?page=${page}`),
+  });
+  const rows = due.data?.invoices ?? [];
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Open bills with a balance. Oldest first.</p>
+      {due.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {due.error instanceof Error ? <p className="text-sm text-destructive">{due.error.message}</p> : null}
+      {!due.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">Nothing is owing.</p> : null}
+      {rows.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bill no.</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Total</TableHead>
+                <TableHead>Balance</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((invoice) => (
+                <TableRow key={invoice.id}>
+                  <TableCell className="font-medium">{invoice.billNo}</TableCell>
+                  <TableCell>{invoice.billedOn}</TableCell>
+                  <TableCell>{invoice.customerName}</TableCell>
+                  <TableCell>{formatRupees(invoice.total)}</TableCell>
+                  <TableCell>{formatRupees(invoice.balance)}</TableCell>
+                  <TableCell className="text-right">
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(invoice.id)}>
+                      Open
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+      <ListFooter page={page} total={due.data?.total ?? 0} shown={rows.length} onPage={setPage} />
+    </div>
+  );
+}
+
+function DayClose() {
+  const [date, setDate] = useState(shopToday());
+  const close = useQuery({
+    queryKey: ["day-close", date],
+    queryFn: () =>
+      apiFetch<{ date: string; bills: number; billed: number; collected: number; due: number; unpaid: number; modes: { mode: string; amount: number }[] }>(
+        `/api/invoices/close?date=${date}`,
+      ),
+  });
+  const day = close.data;
+  return (
+    <div className="space-y-4">
+      <Field label="Date" id="close-date">
+        <Input id="close-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-40" />
+      </Field>
+      {close.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {close.error instanceof Error ? <p className="text-sm text-destructive">{close.error.message}</p> : null}
+      {day ? (
+        <div className="grid gap-4 md:grid-cols-3">
+          <CloseCard label="Billed" value={formatRupees(day.billed)} note={`${day.bills} bills`} />
+          <CloseCard label="Collected today" value={formatRupees(day.collected)} note="Money that came in, including older bills" />
+          <CloseCard label="Still due on these bills" value={formatRupees(day.due)} note={`${day.unpaid} unpaid`} />
+          {day.modes.map((mode) => (
+            <CloseCard key={mode.mode} label={mode.mode === "CASH" ? "Cash" : mode.mode === "UPI" ? "UPI" : "Card"} value={formatRupees(mode.amount)} note="Collected today" />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function CloseCard({ label, value, note }: { label: string; value: string; note: string }) {
+  return (
+    <div className="rounded-2xl border border-border bg-card p-5">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-2 text-2xl font-semibold tabular-nums">{value}</p>
+      <p className="mt-1 text-xs text-muted-foreground">{note}</p>
+    </div>
   );
 }
 

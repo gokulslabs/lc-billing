@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const STITCHING_STATUSES = ["PENDING", "READY", "DELIVERED"] as const;
+export const STITCHING_STATUSES = ["PENDING", "TRIAL", "READY", "DELIVERED"] as const;
 export type StitchingStatus = (typeof STITCHING_STATUSES)[number];
 
 export type StitchingMeasurement = {
@@ -40,6 +40,10 @@ const day = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date."
 export const measurementSchema = z.object({
   label: z.string().trim().max(40, "Measurement name is too long."),
   value: z.string().trim().max(40, "Measurement is too long."),
+});
+
+export const stitchingStatusSchema = z.object({
+  status: z.enum(STITCHING_STATUSES, { message: "Choose a status." }),
 });
 
 export const stitchingOrderSchema = z.object({

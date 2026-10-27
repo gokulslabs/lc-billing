@@ -94,7 +94,7 @@ function CustomerHistoryPage() {
                 )}
                 {bill.payments.map((payment, index) => (
                   <p key={`${payment.paidOn}-${index}`} className="mt-2 text-sm text-muted-foreground">
-                    Paid {payment.paidOn} · {formatRupees(payment.amount)}
+                    Paid {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
                   </p>
                 ))}
               </article>

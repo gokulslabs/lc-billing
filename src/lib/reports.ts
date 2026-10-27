@@ -1,3 +1,5 @@
+import { lineAmount } from "@/lib/sales";
+
 export type InvoiceReportRow = {
   billNo: string;
   billedOn: string;
@@ -41,6 +43,16 @@ export function rangeProblem(from: string, to: string): string | null {
 export function billTotals(amounts: readonly number[]): { gross: number; discount: number; net: number } {
   const gross = amounts.reduce((total, amount) => total + Math.round(amount * 100), 0) / 100;
   return { gross, discount: 0, net: gross };
+}
+
+export function pricedBill(lines: readonly { quantity: number; rate: number; amount: number }[]): { gross: number; discount: number; net: number } {
+  let gross = 0;
+  let net = 0;
+  for (const line of lines) {
+    gross += Math.round(lineAmount(line.quantity, line.rate) * 100);
+    net += Math.round(line.amount * 100);
+  }
+  return { gross: gross / 100, discount: (gross - net) / 100, net: net / 100 };
 }
 
 export function moneyBalance(invoiced: number, paid: number): number {

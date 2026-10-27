@@ -104,6 +104,9 @@ export type Database = {
           quantity: number
           received_quantity: number
           status: string
+          supplier_name: string | null
+          supplier_bill_no: string | null
+          cost: number | null
         }
         Insert: {
           created_at?: string
@@ -113,6 +116,9 @@ export type Database = {
           quantity: number
           received_quantity?: number
           status?: string
+          supplier_name?: string | null
+          supplier_bill_no?: string | null
+          cost?: number | null
         }
         Update: {
           created_at?: string
@@ -122,6 +128,9 @@ export type Database = {
           quantity?: number
           received_quantity?: number
           status?: string
+          supplier_name?: string | null
+          supplier_bill_no?: string | null
+          cost?: number | null
         }
         Relationships: []
       }
@@ -196,6 +205,7 @@ export type Database = {
           invoice_id: string
           paid_on: string
           showroom: string | null
+          mode: string | null
         }
         Insert: {
           amount: number
@@ -204,6 +214,7 @@ export type Database = {
           invoice_id: string
           paid_on?: string
           showroom?: string | null
+          mode?: string | null
         }
         Update: {
           amount?: number
@@ -212,6 +223,7 @@ export type Database = {
           invoice_id?: string
           paid_on?: string
           showroom?: string | null
+          mode?: string | null
         }
         Relationships: []
       }

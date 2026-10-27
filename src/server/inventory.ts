@@ -4,8 +4,8 @@ import {
   barcodeNumbers,
   barcodeSchema,
   groupPurchases,
-  inventorySchema,
   inventoryUpdateSchema,
+  stockReceiptSchema,
   kolkataBounds,
   nextInventoryNo,
   quantityForUnit,
@@ -48,10 +48,9 @@ inventory.get("/barcodes", (c) => {
     quantity: Number(c.req.query("quantity")),
   });
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  if (!/^\d+$/.test(parsed.data.starting) || !Number.isSafeInteger(Number(parsed.data.starting))) {
-    return c.json({ error: "Starting number must be digits." }, 400);
-  }
-  return c.json({ numbers: barcodeNumbers(parsed.data.starting, parsed.data.quantity) });
+  const numbers = barcodeNumbers(parsed.data.starting, parsed.data.quantity);
+  if (numbers.length !== parsed.data.quantity) return c.json({ error: "Enter an inventory number such as IN0021288." }, 400);
+  return c.json({ numbers });
 });
 
 inventory.get("/purchases", async (c) => {
@@ -62,11 +61,19 @@ inventory.get("/purchases", async (c) => {
   const catalogue = await loadCatalogue();
   if (!catalogue) return c.json({ error: "Could not load products." }, 500);
 
-  const loaded = await readAll<{ inventory_no: string; product_id: string; received_quantity: number | string; created_at: string }>(
+  const loaded = await readAll<{
+    inventory_no: string;
+    product_id: string;
+    received_quantity: number | string;
+    created_at: string;
+    supplier_name: string | null;
+    supplier_bill_no: string | null;
+    cost: number | string | null;
+  }>(
     (from, to) =>
       supabaseAdmin
         .from("inventory_items")
-        .select("inventory_no, product_id, received_quantity, created_at")
+        .select("inventory_no, product_id, received_quantity, created_at, supplier_name, supplier_bill_no, cost")
         .gte("created_at", bounds.start)
         .lt("created_at", bounds.end)
         .order("created_at")
@@ -82,6 +89,9 @@ inventory.get("/purchases", async (c) => {
         inventoryNo: row.inventory_no,
         productId: row.product_id,
         quantity: Number(row.received_quantity),
+        supplierName: row.supplier_name ?? "",
+        supplierBillNo: row.supplier_bill_no ?? "",
+        cost: row.cost == null ? null : Number(row.cost),
       }),
     ),
     catalogue,
@@ -160,7 +170,7 @@ inventory.get("/", async (c) => {
 });
 
 inventory.post("/", async (c) => {
-  const parsed = inventorySchema.safeParse(await readJson(c));
+  const parsed = stockReceiptSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const catalogue = await loadCatalogue();
   const product = catalogue?.get(parsed.data.productId);
@@ -180,6 +190,9 @@ inventory.post("/", async (c) => {
         quantity: parsed.data.quantity,
         received_quantity: parsed.data.quantity,
         status: "available",
+        supplier_name: parsed.data.supplierName,
+        supplier_bill_no: parsed.data.supplierBillNo,
+        cost: parsed.data.cost,
       })
       .select("id, inventory_no, product_id, quantity, status")
       .single();
@@ -227,6 +240,9 @@ inventory.patch("/:id", async (c) => {
       quantity: parsed.data.quantity,
       status: parsed.data.quantity > 0 ? "available" : "sold",
       ...(used === 0 ? { received_quantity: parsed.data.quantity } : {}),
+      ...(parsed.data.supplierName ? { supplier_name: parsed.data.supplierName } : {}),
+      ...(parsed.data.supplierBillNo ? { supplier_bill_no: parsed.data.supplierBillNo } : {}),
+      ...(parsed.data.cost !== undefined ? { cost: parsed.data.cost } : {}),
     })
     .eq("id", id)
     .select("id, inventory_no, product_id, quantity, status")

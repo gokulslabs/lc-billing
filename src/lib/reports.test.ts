@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { billTotals, moneyBalance, monthStart, rangeProblem, stockGap } from "./reports";
+import { billTotals, moneyBalance, monthStart, pricedBill, rangeProblem, stockGap } from "./reports";
 
 describe("billTotals", () => {
   it("keeps discount off the bill, the same way billing does", () => {
     expect(billTotals([100, 40.5])).toEqual({ gross: 140.5, discount: 0, net: 140.5 });
+    expect(pricedBill([{ quantity: 1, rate: 1000, amount: 900 }])).toEqual({ gross: 1000, discount: 100, net: 900 });
   });
 });
 

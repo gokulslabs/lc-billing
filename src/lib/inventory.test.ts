@@ -18,6 +18,10 @@ describe("nextInventoryNo", () => {
   it("continues after the highest numeric inventory number", () => {
     expect(nextInventoryNo(["7", "12", "A4"])).toBe("13");
   });
+
+  it("continues an IN number instead of starting again at 1", () => {
+    expect(nextInventoryNo(["IN0021287", "IN0021288", "1"])).toBe("IN0021289");
+  });
 });
 
 describe("quantityForUnit", () => {
@@ -36,8 +40,8 @@ describe("groupPurchases", () => {
     expect(
       groupPurchases(
         [
-          { createdAt: "2025-09-27T04:30:00.000Z", inventoryNo: "1", productId: "p1", quantity: 1 },
-          { createdAt: "2025-09-27T10:00:00.000Z", inventoryNo: "6", productId: "p1", quantity: 5 },
+          { createdAt: "2025-09-27T04:30:00.000Z", inventoryNo: "1", productId: "p1", quantity: 1, supplierName: "Silk mill", supplierBillNo: "44", cost: 800 },
+          { createdAt: "2025-09-27T10:00:00.000Z", inventoryNo: "6", productId: "p1", quantity: 5, supplierName: "Silk mill", supplierBillNo: "44", cost: 800 },
         ],
         products,
       ),
@@ -51,6 +55,9 @@ describe("groupPurchases", () => {
         unit: "NO",
         quantity: 6,
         inventoryNos: ["1", "6"],
+        supplierName: "Silk mill",
+        supplierBillNo: "44",
+        cost: 4800,
       },
     ]);
     expect(kolkataBounds("2025-09-27", "2025-09-27")).toEqual({
@@ -79,5 +86,10 @@ describe("barcodeNumbers", () => {
   it("prints a run of labels from the starting number", () => {
     const parsed = barcodeSchema.parse({ starting: "007", quantity: 3 });
     expect(barcodeNumbers(parsed.starting, parsed.quantity)).toEqual(["007", "008", "009"]);
+  });
+
+  it("keeps the IN prefix on each label", () => {
+    const parsed = barcodeSchema.parse({ starting: "IN0021288", quantity: 2 });
+    expect(barcodeNumbers(parsed.starting, parsed.quantity)).toEqual(["IN0021288", "IN0021289"]);
   });
 });

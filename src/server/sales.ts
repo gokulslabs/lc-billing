@@ -4,12 +4,14 @@ import { blankToNull } from "@/lib/customers";
 import { quantityForUnit } from "@/lib/inventory";
 import type { Unit } from "@/lib/products";
 import {
+  applyGroupDiscount,
+  lineAmount,
   cancelInvoiceSchema,
   collectionProblem,
   createInvoiceSchema,
   invoiceLineSchema,
-  lineAmount,
   nextBillNo,
+  PAYMENT_MODES,
   paymentSchema,
   shopToday,
   zodMessage,
@@ -50,6 +52,7 @@ type PaymentRow = {
   invoice_id: string;
   amount: number | string;
   paid_on: string;
+  mode: string | null;
   showroom: string | null;
 };
 
@@ -68,6 +71,7 @@ type ProductInfo = {
   unit: Unit;
   price: number;
   groupName: string;
+  discountPercent: number;
 };
 
 const sales = new Hono<Env>();
@@ -132,9 +136,67 @@ sales.get("/preview", async (c) => {
       productName: product.name,
       unit: product.unit,
       rate: product.price,
+      discountPercent: product.discountPercent,
       status: stock.status,
       available: Number(stock.quantity),
     },
+  });
+});
+
+sales.get("/due", async (c) => {
+  const page = readPage(c.req.query("page"));
+  const loaded = await readAll<InvoiceRow>((start, end) =>
+    supabaseAdmin
+      .from("invoices")
+      .select("id, bill_no, customer_id, billed_on, status, remarks")
+      .eq("status", "open")
+      .order("billed_on", { ascending: true })
+      .order("id")
+      .range(start, end),
+  );
+  if (!loaded) return c.json({ error: "Could not load unpaid bills." }, 500);
+  const summaries = await summarize(loaded.rows);
+  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+  const due = summaries.invoices.filter((invoice) => invoice.balance > 0.001);
+  const start = (page - 1) * 50;
+  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page });
+});
+
+sales.get("/close", async (c) => {
+  const date = (c.req.query("date") ?? shopToday()).trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: "Enter a valid date." }, 400);
+  const [invoices, payments] = await Promise.all([
+    readAll<InvoiceRow>((start, end) =>
+      supabaseAdmin
+        .from("invoices")
+        .select("id, bill_no, customer_id, billed_on, status, remarks")
+        .eq("billed_on", date)
+        .neq("status", "cancelled")
+        .order("id")
+        .range(start, end),
+    ),
+    readAll<{ amount: number | string; mode: string | null; invoice_id: string }>((start, end) =>
+      supabaseAdmin.from("payments").select("amount, mode, invoice_id").eq("paid_on", date).order("id").range(start, end),
+    ),
+  ]);
+  if (!invoices || !payments) return c.json({ error: "Could not close the day." }, 500);
+  const summaries = await summarize(invoices.rows);
+  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+  const billed = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.total, 0));
+  const stillDue = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.balance, 0));
+  const modes = PAYMENT_MODES.map((mode) => ({
+    mode,
+    amount: round2(payments.rows.filter((row) => row.mode === mode).reduce((sum, row) => sum + Number(row.amount), 0)),
+  }));
+  const collected = round2(payments.rows.reduce((sum, row) => sum + Number(row.amount), 0));
+  return c.json({
+    date,
+    bills: summaries.invoices.length,
+    billed,
+    collected,
+    due: stillDue,
+    unpaid: summaries.invoices.filter((invoice) => invoice.balance > 0.001).length,
+    modes,
   });
 });
 
@@ -209,7 +271,8 @@ sales.post("/:id/lines", async (c) => {
     .maybeSingle();
   if (moved.error || !moved.data) return c.json({ error: "Stock changed. Try the line again." }, 409);
 
-  const amount = lineAmount(parsed.data.quantity, product.price);
+  const priced = applyGroupDiscount(parsed.data.quantity, product.price, product.discountPercent);
+  const amount = priced.amount;
   const { data, error } = await supabaseAdmin
     .from("invoice_lines")
     .insert({
@@ -298,6 +361,7 @@ sales.post("/:id/payments", async (c) => {
     invoice_id: detail.invoice.id,
     amount: round2(parsed.data.amount),
     paid_on: parsed.data.paidOn,
+    mode: parsed.data.mode,
     showroom: blankToNull(parsed.data.showroom),
   });
   if (error) return c.json({ error: "Could not save the collection." }, 500);
@@ -382,7 +446,7 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
       .from("invoice_lines")
       .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
       .eq("invoice_id", id),
-    supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, showroom").eq("invoice_id", id).order("paid_on"),
+    supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, mode, showroom").eq("invoice_id", id).order("paid_on"),
     supabaseAdmin.from("customers").select("name").eq("id", invoice.customer_id).maybeSingle(),
   ]);
   if (lines.error || payments.error || customer.error) return { error: "Could not load the bill.", status: 500 };
@@ -453,19 +517,21 @@ async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | n
   if (!products) return null;
   const groupIds = [...new Set(products.map((row) => row.group_id))];
   if (groupIds.length === 0) return catalogue;
-  const groups = await readIn<{ id: string; name: string }>(groupIds, (chunk, start, end) =>
-    supabaseAdmin.from("product_groups").select("id, name").in("id", chunk).order("id").range(start, end),
+  const groups = await readIn<{ id: string; name: string; discount_percent: number | string }>(groupIds, (chunk, start, end) =>
+    supabaseAdmin.from("product_groups").select("id, name, discount_percent").in("id", chunk).order("id").range(start, end),
   );
   if (!groups) return null;
-  const names = new Map(groups.map((group) => [group.id, group.name]));
+  const named = new Map(groups.map((group) => [group.id, group]));
   for (const row of products) {
+    const group = named.get(row.group_id);
     catalogue.set(row.id, {
       id: row.id,
       code: row.code,
       name: row.name,
       unit: row.unit === "MT" ? "MT" : "NO",
       price: Number(row.price),
-      groupName: names.get(row.group_id) ?? "",
+      groupName: group?.name ?? "",
+      discountPercent: Number(group?.discount_percent ?? 0),
     });
   }
   return catalogue;
@@ -531,16 +597,19 @@ function toLine(row: LineRow, product: ProductInfo, status: string): InvoiceLine
     productName: product.name,
     quantity: Number(row.quantity),
     rate: Number(row.rate),
+    discount: round2(lineAmount(Number(row.quantity), Number(row.rate)) - Number(row.amount)),
     amount: Number(row.amount),
     status,
   };
 }
 
 function toPayment(row: PaymentRow): InvoicePayment {
+  const mode = PAYMENT_MODES.find((item) => item === row.mode) ?? null;
   return {
     id: row.id,
     amount: Number(row.amount),
     paidOn: row.paid_on,
+    mode,
     showroom: row.showroom,
   };
 }
