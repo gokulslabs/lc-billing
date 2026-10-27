@@ -25,6 +25,7 @@ export type StitchingOrder = {
   orderNo: string;
   customerId: string;
   customerName: string;
+  customerPhone: string;
   productId: string;
   productName: string;
   bagNo: string | null;

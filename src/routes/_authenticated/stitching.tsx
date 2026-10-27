@@ -4,7 +4,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { Customer } from "@/lib/customers";
-import { formatRupees } from "@/lib/products";
 import { STITCHING_STATUSES, type StitchingMeasurement, type StitchingOrder, type StitchingProduct, type StitchingStatus } from "@/lib/stitching";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
@@ -33,9 +32,8 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
   const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("board") : null;
-  const [status, setStatus] = useState(opening === "ready" ? "READY" : opening === "today" ? "today" : "board");
+  const [status, setStatus] = useState(opening === "ready" ? "READY" : opening === "today" ? "today" : "");
   const [page, setPage] = useState(1);
-  const queryClient = useQueryClient();
   const orders = useQuery({
     queryKey: ["stitching-orders", deferred, status, page],
     enabled: status !== "board",
@@ -54,11 +52,11 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-semibold">Stitching</h1>
+          <h1 className="text-4xl font-semibold">Orders list</h1>
           <p className="mt-2 text-sm text-muted-foreground">
             {status === "board"
               ? "Due today, this week, and ready for pickup."
-              : "An order is a customer, a garment, a bag number, and measurements."}
+              : "Order, bag, customer, garment, and the two dates from the old list."}
           </p>
         </div>
         <Button className="rounded-full" onClick={() => onOpen("new")}>
@@ -112,11 +110,9 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                 <TableHead>Order</TableHead>
                 <TableHead>Bag</TableHead>
                 <TableHead>Customer</TableHead>
-                <TableHead>Garment</TableHead>
+                <TableHead>Product</TableHead>
                 <TableHead>Date</TableHead>
-                <TableHead>Delivery</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead>Amount</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -125,37 +121,16 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                 <TableRow key={order.id}>
                   <TableCell className="font-medium">{order.orderNo}</TableCell>
                   <TableCell>{order.bagNo || "—"}</TableCell>
-                  <TableCell>{order.customerName}</TableCell>
-                  <TableCell>{order.productName}</TableCell>
-                  <TableCell>{order.orderedOn}</TableCell>
-                  <TableCell>{order.deliveryOn || "—"}</TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      <span className="mr-1">{order.status}</span>
-                      {STITCHING_STATUSES.filter((item) => item !== "PENDING" && item !== order.status).map((item) => (
-                        <Button
-                          key={item}
-                          variant="outline"
-                          size="sm"
-                          className="rounded-full"
-                          onClick={() => {
-                            void apiFetch(`/api/stitching-orders/${order.id}/status`, {
-                              method: "PATCH",
-                              body: JSON.stringify({ status: item }),
-                            })
-                              .then(() => {
-                                toast.success(`Order ${order.orderNo} is ${item.toLowerCase()}.`);
-                                void queryClient.invalidateQueries({ queryKey: ["stitching-orders"] });
-                              })
-                              .catch((reason: Error) => toast.error(reason.message));
-                          }}
-                        >
-                          {item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered"}
-                        </Button>
-                      ))}
-                    </div>
+                    <div>{order.customerName || "—"}</div>
+                    {order.customerPhone ? <div className="text-xs text-muted-foreground">{order.customerPhone}</div> : null}
                   </TableCell>
-                  <TableCell>{formatRupees(order.amount)}</TableCell>
+                  <TableCell>{order.productName.replace(/ stitching$/i, "")}</TableCell>
+                  <TableCell className="whitespace-nowrap">
+                    <div>{slashDate(order.orderedOn)}</div>
+                    <div className="text-xs text-muted-foreground">{order.deliveryOn ? slashDate(order.deliveryOn) : "—"}</div>
+                  </TableCell>
+                  <TableCell>{order.status}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(order.id)}>
                       Open
@@ -484,6 +459,11 @@ function updateRow(
   patch: Partial<StitchingMeasurement>,
 ) {
   setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+}
+
+function slashDate(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return day && month && year ? `${day}-${month}-${year}` : value;
 }
 
 function localToday(): string {

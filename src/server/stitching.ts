@@ -4,6 +4,7 @@ import { blankToNull } from "@/lib/customers";
 import {
   cleanMeasurements,
   nextOrderNo,
+  STITCHING_STATUSES,
   stitchingOrderSchema,
   stitchingStatusSchema,
   zodMessage,
@@ -73,9 +74,10 @@ stitching.get("/", async (c) => {
     : customerIds.length > 0
       ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
       : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
-  const ordered = soon
-    ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
-    : searched.order("ordered_on", { ascending: false }).order("id", { ascending: false });
+  const ordered =
+    due === "today" || due === "week" || soon
+      ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
+      : searched.order("ordered_on", { ascending: true }).order("id", { ascending: true });
   const { data, error, count } = await ordered.range(from, to);
   if (error) return c.json({ error: "Could not load orders." }, 500);
   const rows = (data ?? []) as OrderRow[];
@@ -239,18 +241,18 @@ function plusDays(iso: string, days: number): string {
   return next.toISOString().slice(0, 10);
 }
 
-async function withNames(rows: OrderRow[]): Promise<{ customers: Map<string, string>; products: Map<string, string> } | null> {
+async function withNames(rows: OrderRow[]): Promise<{ customers: Map<string, { name: string; phone: string }>; products: Map<string, string> } | null> {
   const customerIds = [...new Set(rows.map((row) => row.customer_id))];
   const productIds = [...new Set(rows.flatMap((row) => (row.stitching_product_id ? [row.stitching_product_id] : [])))];
-  const customers = await readIn<{ id: string; name: string }>(customerIds, (chunk, from, to) =>
-    supabaseAdmin.from("customers").select("id, name").in("id", chunk).order("id").range(from, to),
+  const customers = await readIn<{ id: string; name: string; phone: string | null }>(customerIds, (chunk, from, to) =>
+    supabaseAdmin.from("customers").select("id, name, phone").in("id", chunk).order("id").range(from, to),
   );
   const products = await readIn<{ id: string; name: string }>(productIds, (chunk, from, to) =>
     supabaseAdmin.from("stitching_products").select("id, name").in("id", chunk).order("id").range(from, to),
   );
   if (!customers || !products) return null;
   return {
-    customers: new Map(customers.map((row) => [row.id, row.name])),
+    customers: new Map(customers.map((row) => [row.id, { name: row.name, phone: row.phone ?? "" }])),
     products: new Map(products.map((row) => [row.id, row.name])),
   };
 }
@@ -301,7 +303,7 @@ async function allocateOrderNo(): Promise<string | null> {
 
 function toOrder(
   row: OrderRow,
-  customers: Map<string, string>,
+  customers: Map<string, { name: string; phone: string }>,
   products: Map<string, string>,
   measurements: Map<string, StitchingMeasurement[]>,
 ): StitchingOrder {
@@ -309,7 +311,8 @@ function toOrder(
     id: row.id,
     orderNo: row.order_no,
     customerId: row.customer_id,
-    customerName: customers.get(row.customer_id) ?? "",
+    customerName: customers.get(row.customer_id)?.name ?? "",
+    customerPhone: customers.get(row.customer_id)?.phone ?? "",
     productId: row.stitching_product_id ?? "",
     productName: row.stitching_product_id ? (products.get(row.stitching_product_id) ?? "") : "",
     bagNo: row.bag_no,
@@ -322,7 +325,7 @@ function toOrder(
 }
 
 function isStatus(value: string): value is StitchingStatus {
-  return value === "PENDING" || value === "READY" || value === "DELIVERED";
+  return (STITCHING_STATUSES as readonly string[]).includes(value);
 }
 
 function isDuplicate(error: { code?: string } | null): boolean {
