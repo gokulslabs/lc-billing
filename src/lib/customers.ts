@@ -58,11 +58,24 @@ export type CustomerHistory = {
 
 const optionalText = (max: number) => z.string().trim().max(max);
 
+export const UNRECORDED_NAME = "NOT RECORDED";
+export const UNRECORDED_BILL_ERROR = "Choose a customer, or type a walk-in name. NOT RECORDED cannot take a bill.";
+
+export function isUnrecordedName(name: string): boolean {
+  return name.trim().toUpperCase() === UNRECORDED_NAME;
+}
+
 export const customerSchema = z.object({
-  name: z.string().trim().min(1, "Enter a name.").max(120, "Name is too long."),
+  name: z
+    .string()
+    .trim()
+    .min(1, "Enter a name.")
+    .max(120, "Name is too long.")
+    .refine((name) => !isUnrecordedName(name), UNRECORDED_BILL_ERROR),
   address: optionalText(300),
   phone: optionalText(20),
   bookNo: optionalText(40),
+  confirmDuplicate: z.boolean().optional(),
 });
 
 export type CustomerInput = z.infer<typeof customerSchema>;

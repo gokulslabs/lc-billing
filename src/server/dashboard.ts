@@ -19,6 +19,7 @@ dashboard.get("/", async (c) => {
         .select("id")
         .eq("billed_on", today)
         .neq("status", "cancelled")
+        .neq("status", "draft")
         .order("id")
         .range(from, to),
     ),
@@ -26,7 +27,7 @@ dashboard.get("/", async (c) => {
       supabaseAdmin.from("payments").select("amount, mode").eq("paid_on", today).order("id").range(from, to),
     ),
     readAll<{ id: string; billed_on: string }>((from, to) =>
-      supabaseAdmin.from("invoices").select("id, billed_on").eq("status", "open").order("id").range(from, to),
+      supabaseAdmin.from("invoices").select("id, billed_on").in("status", ["open", "partial"]).order("id").range(from, to),
     ),
     supabaseAdmin.from("stitching_orders").select("id", { count: "exact", head: true }).eq("status", "READY"),
     supabaseAdmin

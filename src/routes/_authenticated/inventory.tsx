@@ -225,7 +225,7 @@ function StockPanel() {
                         <DropdownMenuItem onSelect={() => setEditor(item)}>Edit</DropdownMenuItem>
                         <DropdownMenuItem
                           onSelect={() => {
-                            if (!window.confirm(`Remove inventory ${item.inventoryNo}?`)) return;
+                            if (!window.confirm(`Remove inventory ${item.inventoryNo}? This cannot be undone.`)) return;
                             void apiFetch(`/api/inventory/${item.id}`, { method: "DELETE" })
                               .then(() => queryClient.invalidateQueries({ queryKey: ["inventory"] }))
                               .catch((reason: Error) => toast.error(reason.message));
@@ -475,7 +475,7 @@ function CurrentStockPanel() {
   const [page, setPage] = useState(1);
   const summary = useQuery({
     queryKey: ["inventory-summary"],
-    queryFn: () => apiFetch<{ groups: StockGroup[] }>("/api/inventory/summary"),
+    queryFn: () => apiFetch<{ groups: StockGroup[]; slips: number; quantity: number }>("/api/inventory/summary"),
   });
   const detail = useQuery({
     queryKey: ["inventory", "available", groupId, page],
@@ -543,6 +543,10 @@ function CurrentStockPanel() {
       {summary.error instanceof Error ? <p className="text-sm text-destructive">{summary.error.message}</p> : null}
       {!summary.isLoading && groups.length === 0 ? <p className="text-sm text-muted-foreground">No available stock.</p> : null}
       {groups.length > 0 ? (
+        <div className="space-y-3">
+          <p className="text-sm text-muted-foreground">
+            {formatQty(summary.data?.quantity ?? 0)} on the shelf across {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. A piece counts as 1 and fabric counts as metres, so this is not the number of rows on the stock list. Sold numbers stay on that list and are not in this total.
+          </p>
         <div className="rounded-2xl border border-border bg-card">
           <Table>
             <TableHeader>
@@ -578,6 +582,7 @@ function CurrentStockPanel() {
               ))}
             </TableBody>
           </Table>
+        </div>
         </div>
       ) : null}
     </div>
@@ -656,7 +661,7 @@ function PurchasesPanel() {
                   <TableCell className="font-medium">{row.productName}</TableCell>
                   <TableCell>{receiptBlank(row.supplierName)}</TableCell>
                   <TableCell>{receiptBlank(row.supplierBillNo)}</TableCell>
-                  <TableCell>{row.cost == null ? "Not on the old receipt" : formatRupees(row.cost)}</TableCell>
+                  <TableCell>{row.cost == null ? "Migrated — not recorded" : formatRupees(row.cost)}</TableCell>
                   <TableCell>
                     {formatQty(row.quantity)} {row.unit}
                   </TableCell>
@@ -680,7 +685,7 @@ function downloadPurchases(rows: PurchaseLine[]) {
     row.productName,
     receiptBlank(row.supplierName),
     receiptBlank(row.supplierBillNo),
-    row.cost == null ? "Not on the old receipt" : String(row.cost),
+    row.cost == null ? "Migrated — not recorded" : String(row.cost),
     String(row.quantity),
     row.unit,
     formatPurchaseNumbers(row.inventoryNos),
@@ -700,7 +705,7 @@ function csvCell(value: string): string {
 }
 
 function receiptBlank(value: string): string {
-  return value.trim() ? value : "Not on the old receipt";
+  return value.trim() ? value : "Migrated — not recorded";
 }
 
 function formatQty(value: number): string {

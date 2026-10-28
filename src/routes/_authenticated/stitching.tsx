@@ -208,6 +208,8 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
+                        const label = item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered";
+                        if (!window.confirm(`Mark order ${order.orderNo} ${label}?`)) return;
                         if (!confirmOldOrder(order.deliveryOn)) return;
                         void apiFetch(`/api/stitching-orders/${order.id}/status`, {
                           method: "PATCH",
@@ -348,6 +350,7 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
+          if (order && status !== order.status && !window.confirm(`Mark order ${order.orderNo} ${status}?`)) return;
           if (order && status !== order.status && !confirmOldOrder(order.deliveryOn)) return;
           save.mutate();
         }}
@@ -466,7 +469,7 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
               className="rounded-full"
               disabled={remove.isPending}
               onClick={() => {
-                if (!window.confirm(`Remove order ${order?.orderNo ?? ""}?`)) return;
+                if (!window.confirm(`Remove order ${order?.orderNo ?? ""}? This cannot be undone.`)) return;
                 remove.mutate();
               }}
             >

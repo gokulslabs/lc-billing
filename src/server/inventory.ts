@@ -114,17 +114,21 @@ inventory.get("/summary", async (c) => {
   if (!loaded) return c.json({ error: "Could not load current stock." }, 500);
 
   const groups = new Map<string, { id: string; name: string; quantity: number; amount: number }>();
+  let quantity = 0;
+  let slips = 0;
   for (const row of loaded.rows) {
     const product = catalogue.get(row.product_id);
     if (!product) continue;
-    const quantity = Number(row.quantity);
+    const rowQuantity = Number(row.quantity);
+    slips += 1;
+    quantity = Math.round((quantity + rowQuantity) * 1000) / 1000;
     const current = groups.get(product.groupId) ?? { id: product.groupId, name: product.groupName, quantity: 0, amount: 0 };
-    current.quantity = Math.round((current.quantity + quantity) * 1000) / 1000;
-    current.amount = Math.round((current.amount + lineAmount(quantity, product.price)) * 100) / 100;
+    current.quantity = Math.round((current.quantity + rowQuantity) * 1000) / 1000;
+    current.amount = Math.round((current.amount + lineAmount(rowQuantity, product.price)) * 100) / 100;
     groups.set(product.groupId, current);
   }
   const summary = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
-  return c.json({ groups: summary });
+  return c.json({ groups: summary, slips, quantity });
 });
 
 inventory.get("/", async (c) => {

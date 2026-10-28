@@ -97,7 +97,7 @@ function Garments({ garments }: { garments: StitchingGarment[] }) {
         heading="Product name"
         rows={garments.map((garment) => ({ id: garment.id, name: garment.name }))}
         onRemove={(row) => {
-          if (!window.confirm(`Remove ${row.name}? Its measurement heads are removed with it.`)) return;
+          if (!window.confirm(`Remove ${row.name}? Its measurement heads are removed with it. This cannot be undone.`)) return;
           remove.mutate(row.id);
         }}
       />
@@ -155,7 +155,7 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
             heading="Measurement head"
             rows={garment.measurements.map((field) => ({ id: field.id, name: field.label }))}
             onRemove={(row) => {
-              if (!window.confirm(`Remove ${row.name} from ${garment.name}? Saved orders keep the measurements already written on them.`)) {
+              if (!window.confirm(`Remove ${row.name} from ${garment.name}? Saved orders keep the measurements already written on them. This cannot be undone.`)) {
                 return;
               }
               remove.mutate(row.id);
@@ -205,7 +205,7 @@ function Processes({ processes }: { processes: StitchingProcess[] }) {
         heading="Process"
         rows={processes.map((process) => ({ id: process.id, name: process.name }))}
         onRemove={(row) => {
-          if (!window.confirm(`Remove ${row.name}?`)) return;
+          if (!window.confirm(`Remove ${row.name}? This cannot be undone.`)) return;
           remove.mutate(row.id);
         }}
       />

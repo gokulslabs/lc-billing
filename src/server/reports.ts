@@ -1,7 +1,8 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { billTotals, moneyBalance, monthStart, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
-import { NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
+import { PAGE_SIZE, readPage } from "@/lib/paging";
+import { billTotals, moneyBalance, monthStart, pendingTotals, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
+import { billBook, paymentStatus, shopToday } from "@/lib/sales";
 import { requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -108,39 +109,47 @@ reports.get("/showrooms", async (c) => {
   const payments = await readAll<PaymentRow>((from, to) =>
     supabaseAdmin
       .from("payments")
-      .select("invoice_id, amount, paid_on, showroom")
+      .select("invoice_id, amount, paid_on, showroom, mode")
       .gte("paid_on", range.from)
       .lte("paid_on", range.to)
+      .order("paid_on")
       .order("id")
       .range(from, to),
   );
   if (!payments) return c.json({ error: "Could not load collections." }, 500);
-  const grouped = new Map<string, { showroom: string | null; count: number; amount: number }>();
-  for (const row of payments.rows) {
-    const key = row.showroom ?? "";
-    const current = grouped.get(key) ?? { showroom: row.showroom, count: 0, amount: 0 };
-    current.count += 1;
-    current.amount = (Math.round(current.amount * 100) + Math.round(Number(row.amount) * 100)) / 100;
-    grouped.set(key, current);
-  }
-  return c.json({ showrooms: [...grouped.values()] });
+  const invoices = await loadInvoiceMap(payments.rows.map((row) => row.invoice_id));
+  if (!invoices) return c.json({ error: "Could not load bills." }, 500);
+  const customers = await loadCustomers([...invoices.values()].map((row) => row.customer_id));
+  if (!customers) return c.json({ error: "Could not load customers." }, 500);
+  return c.json({
+    payments: payments.rows.map((row) => {
+      const invoice = invoices.get(row.invoice_id);
+      return {
+        paidOn: row.paid_on,
+        billNo: invoice?.bill_no ?? "",
+        customerName: invoice ? (customers.get(invoice.customer_id) ?? "") : "",
+        mode: row.mode ?? null,
+        showroom: row.showroom,
+        amount: Number(row.amount),
+      };
+    }),
+  });
 });
 
 reports.get("/pending", async (c) => {
   const books = c.req.query("books") === "old" ? "old" : "new";
-  const loaded = await readAll<InvoiceRow>((from, to) => {
+  const page = readPage(c.req.query("page"));
+  const loaded = await readAll<InvoiceRow>((from, to) =>
     supabaseAdmin
       .from("invoices")
       .select("id, bill_no, customer_id, billed_on, status, remarks")
-      .eq("status", "open")
+      .in("status", ["open", "partial"])
       .order("billed_on")
       .order("id")
       .range(from, to),
   );
   if (!loaded) return c.json({ error: "Could not load pending bills." }, 500);
-  const invoices = loaded.rows.filter((row) =>
-    books === "old" ? row.billed_on < NEW_COUNTER_FROM : row.billed_on >= NEW_COUNTER_FROM,
-  );
+  const invoices = loaded.rows.filter((row) => billBook(row.billed_on) === books);
   const [lines, payments] = await Promise.all([loadLines(invoices.map((row) => row.id)), loadPayments(invoices.map((row) => row.id))]);
   if (!lines || !payments) return c.json({ error: "Could not load pending bills." }, 500);
   const pending = invoices.flatMap((invoice) => {
@@ -152,16 +161,38 @@ reports.get("/pending", async (c) => {
     const showrooms = [...new Set(paidRows.flatMap((row) => (row.showroom ? [row.showroom] : [])))];
     return [
       {
+        customerId: invoice.customer_id,
         billNo: invoice.bill_no,
         billedOn: invoice.billed_on,
         showroom: showrooms.length ? showrooms.join(", ") : null,
         invoiced,
         paid,
         balance,
+        status: paymentStatus(invoiced, paid, invoice.status),
       },
     ];
   });
-  return c.json({ pending });
+  const totals = pendingTotals(pending);
+  const start = (page - 1) * PAGE_SIZE;
+  const slice = pending.slice(start, start + PAGE_SIZE);
+  const customers = await loadCustomers(slice.map((row) => row.customerId));
+  if (!customers) return c.json({ error: "Could not load pending bills." }, 500);
+  return c.json({
+    pending: slice.map((row) => ({
+      customerName: customers.get(row.customerId) ?? "",
+      billNo: row.billNo,
+      billedOn: row.billedOn,
+      showroom: row.showroom,
+      invoiced: row.invoiced,
+      paid: row.paid,
+      balance: row.balance,
+      status: row.status,
+    })),
+    total: pending.length,
+    page,
+    books,
+    totals,
+  });
 });
 
 reports.get("/mismatch", async (c) => {
@@ -257,7 +288,7 @@ async function loadInvoices(
       .lte("billed_on", to)
       .order("billed_on")
       .order("id");
-    const filtered = which === "cancelled" ? ranked.eq("status", "cancelled") : ranked.neq("status", "cancelled");
+    const filtered = which === "cancelled" ? ranked.eq("status", "cancelled") : ranked.neq("status", "cancelled").neq("status", "draft");
     return filtered.range(start, end);
   });
   if (!loaded) return null;

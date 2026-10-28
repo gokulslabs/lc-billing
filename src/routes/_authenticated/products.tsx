@@ -198,7 +198,7 @@ function ProductPanel({
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
-                        if (!window.confirm(`Remove ${product.name}?`)) return;
+                        if (!window.confirm(`Remove ${product.name || "this product"}? This cannot be undone.`)) return;
                         void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
                           .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
                           .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
@@ -273,7 +273,7 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
-                        if (!window.confirm(`Remove ${group.name}?`)) return;
+                        if (!window.confirm(`Remove ${group.name}? This cannot be undone.`)) return;
                         void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
                           .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
                           .catch((reason: Error) => toast.error(reason.message));

@@ -10,6 +10,7 @@ import {
   type Unit,
 } from "@/lib/products";
 import { PAGE_SIZE, pageRange, readPage } from "@/lib/paging";
+import { correctedSpelling } from "@/lib/settings";
 import { requireShop } from "@/server/guard";
 import { readAll } from "@/server/read-all";
 
@@ -45,10 +46,13 @@ groups.get("/", async (c) => {
 groups.post("/", async (c) => {
   const parsed = productGroupSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const taken = await groupCodeTaken(parsed.data.code);
+  if (taken === "error") return c.json({ error: "Could not check the group code." }, 500);
+  if (taken) return c.json({ error: "That group code is already used." }, 400);
   const { data, error } = await supabaseAdmin
     .from("product_groups")
     .insert({
-      name: parsed.data.name,
+      name: correctedSpelling(parsed.data.name),
       code: parsed.data.code,
       discount_percent: parsed.data.discountPercent,
     })
@@ -62,10 +66,13 @@ groups.patch("/:id", async (c) => {
   const parsed = productGroupSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const id = c.req.param("id");
+  const taken = await groupCodeTaken(parsed.data.code, id);
+  if (taken === "error") return c.json({ error: "Could not check the group code." }, 500);
+  if (taken) return c.json({ error: "That group code is already used." }, 400);
   const { data, error } = await supabaseAdmin
     .from("product_groups")
     .update({
-      name: parsed.data.name,
+      name: correctedSpelling(parsed.data.name),
       code: parsed.data.code,
       discount_percent: parsed.data.discountPercent,
     })
@@ -207,6 +214,12 @@ async function productCounts(): Promise<Map<string, number> | null> {
     counts.set(row.group_id, (counts.get(row.group_id) ?? 0) + 1);
   }
   return counts;
+}
+
+async function groupCodeTaken(code: string, exceptId?: string): Promise<boolean | "error"> {
+  const { data, error } = await supabaseAdmin.from("product_groups").select("id").eq("code", code);
+  if (error) return "error";
+  return (data ?? []).some((row) => row.id !== exceptId);
 }
 
 async function findGroup(id: string): Promise<ProductGroup | null> {

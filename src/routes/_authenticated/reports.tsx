@@ -2,14 +2,15 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
-import { shopToday } from "@/lib/sales";
+import { billStatusLabel, shopToday } from "@/lib/sales";
 import { formatRupees } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
@@ -34,6 +35,17 @@ const REPORTS = [
 
 type ReportId = (typeof REPORTS)[number]["id"];
 
+const REPORT_NOTES: Record<ReportId, string> = {
+  invoices: "One row per bill in the dates, excluding drafts and cancelled bills. Gross, discount and net are on the bill.",
+  items: "One row per line on those bills. This is the same list as Extract, without the customer.",
+  extract: "The same lines as Items, with the customer name added.",
+  collections: "Payments taken on the chosen date, one row per payment.",
+  showrooms: "Each payment in the dates, with its date, bill, customer and method. Showroom is the note on that payment.",
+  pending: "Bills in the chosen book that still have a balance. The total is the whole book, not only this page.",
+  mismatch: "Inventory numbers whose shelf quantity does not equal what was received minus what was billed. Matching numbers stay on the stock list.",
+  returns: "Cancelled bills in the dates, one row per bill.",
+};
+
 function ReportsPage() {
   const today = shopToday();
   const [report, setReport] = useState<ReportId>("invoices");
@@ -41,13 +53,14 @@ function ReportsPage() {
   const [to, setTo] = useState(today);
   const [date, setDate] = useState(today);
   const [books, setBooks] = useState<"new" | "old">("new");
+  const [page, setPage] = useState(1);
   const [applied, setApplied] = useState({ from: monthStart(today), to: today, date: today, books: "new" as "new" | "old" });
   const needsRange = report !== "collections" && report !== "pending" && report !== "mismatch";
   const needsDate = report === "collections";
 
   const result = useQuery({
-    queryKey: ["reports", report, applied],
-    queryFn: () => loadReport(report, applied),
+    queryKey: ["reports", report, applied, page],
+    queryFn: () => loadReport(report, applied, page),
   });
 
   return (
@@ -56,7 +69,13 @@ function ReportsPage() {
         <h1 className="text-4xl font-semibold">Reports</h1>
         <p className="mt-2 text-sm text-muted-foreground">Bills, collections, pending payments, and stock.</p>
       </div>
-      <Select value={report} onValueChange={(value) => setReport(value as ReportId)}>
+      <Select
+        value={report}
+        onValueChange={(value) => {
+          setReport(value as ReportId);
+          setPage(1);
+        }}
+      >
         <SelectTrigger className="w-full max-w-sm">
           <SelectValue />
         </SelectTrigger>
@@ -68,6 +87,7 @@ function ReportsPage() {
           ))}
         </SelectContent>
       </Select>
+      <p className="text-sm text-muted-foreground">{REPORT_NOTES[report]}</p>
       {needsRange || needsDate ? (
         <form
           className="flex flex-wrap items-end gap-3"
@@ -105,6 +125,7 @@ function ReportsPage() {
             onValueChange={(value) => {
               const next = value === "old" ? "old" : "new";
               setBooks(next);
+              setPage(1);
               setApplied((current) => ({ ...current, books: next }));
             }}
           >
@@ -112,37 +133,36 @@ function ReportsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="new">This counter</SelectItem>
-              <SelectItem value="old">Old bills, payment not written</SelectItem>
-            </SelectContent>
-          </Select>
-          <p className="text-sm text-muted-foreground">
-            {books === "old"
-              ? "Copied with a balance. These were not marked paid."
-              : "Bills from 26 Oct 2026 that still have a balance."}
-          </p>
-        </div>
+            <SelectItem value="new">Live book</SelectItem>
+            <SelectItem value="old">Old book — copied balances</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       ) : null}
       {result.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {result.error instanceof Error ? <p className="text-sm text-destructive">{result.error.message}</p> : null}
+      {result.data?.note ? <p className="text-sm text-muted-foreground">{result.data.note}</p> : null}
       {result.data ? <ReportTable sheet={result.data} /> : null}
+      {report === "pending" && result.data ? (
+        <ListFooter page={page} total={result.data.total ?? 0} shown={result.data.rows.length} onPage={setPage} />
+      ) : null}
     </div>
   );
 }
 
-type Sheet = { columns: string[]; rows: string[][] };
+type Sheet = { columns: string[]; rows: string[][]; note?: string; totalRow?: string[]; total?: number };
 
 function ReportTable({ sheet }: { sheet: Sheet }) {
   return (
     <div className="space-y-3">
-      {sheet.rows.length > 0 ? (
+      {sheet.rows.length > 0 || sheet.totalRow ? (
         <Button type="button" variant="outline" className="rounded-full" onClick={() => downloadSheet(sheet)}>
           Spreadsheet
         </Button>
       ) : (
         <p className="text-sm text-muted-foreground">Nothing in this report.</p>
       )}
-      {sheet.rows.length > 0 ? (
+      {sheet.rows.length > 0 || sheet.totalRow ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
             <TableHeader>
@@ -163,6 +183,15 @@ function ReportTable({ sheet }: { sheet: Sheet }) {
                 </TableRow>
               ))}
             </TableBody>
+            {sheet.totalRow ? (
+              <TableFooter>
+                <TableRow>
+                  {sheet.totalRow.map((cell, cellIndex) => (
+                    <TableCell key={cellIndex}>{cell}</TableCell>
+                  ))}
+                </TableRow>
+              </TableFooter>
+            ) : null}
           </Table>
         </div>
       ) : null}
@@ -170,12 +199,21 @@ function ReportTable({ sheet }: { sheet: Sheet }) {
   );
 }
 
-async function loadReport(report: ReportId, range: { from: string; to: string; date: string; books: "new" | "old" }): Promise<Sheet> {
+function bookNote(books: "new" | "old"): string {
+  return books === "old"
+    ? "Old book — copied balances. Every bill dated before 26 Oct 2026 that still has a balance is here. The total is every bill in this book, not only this page. The live book is the other choice. Do not add the two lists together."
+    : "Live book. Every bill from 26 Oct 2026 that still has a balance is here. The total is every bill in this book, not only this page. Old book — copied balances is the other choice. Do not add the two lists together.";
+}
+
+async function loadReport(report: ReportId, range: { from: string; to: string; date: string; books: "new" | "old" }, page: number): Promise<Sheet> {
   const dates = `from=${range.from}&to=${range.to}`;
   if (report === "invoices") {
     const data = await apiFetch<{ invoices: { billNo: string; billedOn: string; customerName: string; gross: number; discount: number; net: number }[] }>(
       `/api/reports/invoices?${dates}`,
     );
+    const gross = sumRupees(data.invoices.map((row) => row.gross));
+    const discount = sumRupees(data.invoices.map((row) => row.discount));
+    const net = sumRupees(data.invoices.map((row) => row.net));
     return {
       columns: ["Sl.no.", "Invoice no.", "Date", "Customer", "Gross", "Disc.", "Net"],
       rows: data.invoices.map((row, index) => [
@@ -187,6 +225,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         formatRupees(row.discount),
         formatRupees(row.net),
       ]),
+      totalRow: ["Total", "", "", "", formatRupees(gross), formatRupees(discount), formatRupees(net)],
     };
   }
   if (report === "items" || report === "extract") {
@@ -197,6 +236,8 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
     );
     const rows = data[key] ?? [];
     const withCustomer = report === "extract";
+    const quantity = sumQty(rows.map((row) => row.quantity));
+    const amount = sumRupees(rows.map((row) => row.amount));
     return {
       columns: [
         "Sl.no.",
@@ -226,6 +267,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         formatRupees(row.rate),
         formatRupees(row.amount),
       ]),
+      totalRow: ["Total", "", "", "", ...(withCustomer ? [""] : []), "", "", "", "", String(quantity), "", formatRupees(amount)],
     };
   }
   if (report === "collections") {
@@ -243,37 +285,71 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         row.remarks || "—",
         formatRupees(row.amount),
       ]),
+      totalRow: ["Total", "", "", "", "", "", formatRupees(sumRupees(data.collections.map((row) => row.amount)))],
     };
   }
   if (report === "showrooms") {
-    const data = await apiFetch<{ showrooms: { showroom: string | null; count: number; amount: number }[] }>(`/api/reports/showrooms?${dates}`);
+    const data = await apiFetch<{
+      payments: { paidOn: string; billNo: string; customerName: string; mode: string | null; showroom: string | null; amount: number }[];
+    }>(`/api/reports/showrooms?${dates}`);
     return {
-      columns: ["Showroom", "Payments", "Amount"],
-      rows: data.showrooms.map((row) => [row.showroom || "—", String(row.count), formatRupees(row.amount)]),
+      columns: ["Date", "Bill no.", "Customer", "Method", "Showroom", "Amount"],
+      rows: data.payments.map((row) => [
+        row.paidOn,
+        row.billNo || "—",
+        row.customerName || "—",
+        row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
+        row.showroom || "—",
+        formatRupees(row.amount),
+      ]),
+      totalRow: ["Total", "", "", "", "", formatRupees(sumRupees(data.payments.map((row) => row.amount)))],
     };
   }
   if (report === "pending") {
-    const data = await apiFetch<{ pending: { billNo: string; billedOn: string; showroom: string | null; invoiced: number; paid: number; balance: number }[] }>(
-      `/api/reports/pending?books=${range.books}`,
-    );
+    const data = await apiFetch<{
+      pending: { customerName: string; billNo: string; billedOn: string; showroom: string | null; invoiced: number; paid: number; balance: number; status: string }[];
+      total: number;
+      totals: { invoiced: number; paid: number; balance: number };
+    }>(`/api/reports/pending?books=${range.books}&page=${page}`);
+    const start = (page - 1) * 50;
     return {
-      columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Inv amount", "Paid", "Balance"],
+      note: bookNote(range.books),
+      columns: ["Sl.no.", "Customer", "Showroom", "Bill no.", "Date", "Inv amount", "Paid", "Balance", "Status"],
       rows: data.pending.map((row, index) => [
-        String(index + 1),
+        String(start + index + 1),
+        row.customerName || "—",
         row.showroom || "—",
         row.billNo,
         row.billedOn,
         formatRupees(row.invoiced),
         formatRupees(row.paid),
         formatRupees(row.balance),
+        billStatusLabel(row.status),
       ]),
+      total: data.total,
+      totalRow: [
+        "Total",
+        "",
+        "",
+        "",
+        "",
+        formatRupees(data.totals.invoiced),
+        formatRupees(data.totals.paid),
+        formatRupees(data.totals.balance),
+        "",
+      ],
     };
   }
   if (report === "mismatch") {
     const data = await apiFetch<{
       mismatches: { inventoryNo: string; productCode: string; productName: string; received: number; billed: number; onHand: number; difference: number }[];
     }>("/api/reports/mismatch");
+    const received = sumQty(data.mismatches.map((row) => row.received));
+    const billed = sumQty(data.mismatches.map((row) => row.billed));
+    const onHand = sumQty(data.mismatches.map((row) => row.onHand));
+    const difference = sumQty(data.mismatches.map((row) => row.difference));
     return {
+      note: "Received is what came in on the number. Billed is the quantity on bills that were not cancelled. On hand is the shelf now. Difference is on hand minus (received − billed). Every inventory number is still on the stock list. This list only highlights the ones that do not add up. None of them have been changed.",
       columns: ["Inventory no.", "Code", "Product", "Received", "Billed", "On hand", "Difference"],
       rows: data.mismatches.map((row) => [
         row.inventoryNo,
@@ -284,6 +360,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         String(row.onHand),
         String(row.difference),
       ]),
+      totalRow: ["Total", "", "", String(received), String(billed), String(onHand), String(difference)],
     };
   }
   const data = await apiFetch<{ returns: { billNo: string; billedOn: string; customerName: string; net: number; remarks: string | null }[] }>(
@@ -299,11 +376,21 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
       formatRupees(row.net),
       row.remarks || "—",
     ]),
+    totalRow: ["Total", "", "", "", formatRupees(sumRupees(data.returns.map((row) => row.net))), ""],
   };
 }
 
+function sumQty(values: number[]): number {
+  return Math.round(values.reduce((sum, value) => sum + value, 0) * 1000) / 1000;
+}
+
+function sumRupees(values: number[]): number {
+  return values.reduce((sum, value) => (Math.round(sum * 100) + Math.round(value * 100)) / 100, 0);
+}
+
 function downloadSheet(sheet: Sheet) {
-  const csv = [sheet.columns, ...sheet.rows].map((line) => line.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
+  const lines = sheet.totalRow ? [sheet.columns, ...sheet.rows, sheet.totalRow] : [sheet.columns, ...sheet.rows];
+  const csv = lines.map((line) => line.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
   const blob = new Blob([csv], { type: "text/csv" });
   const url = URL.createObjectURL(blob);
   const link = document.createElement("a");

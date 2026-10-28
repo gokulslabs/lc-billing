@@ -100,7 +100,7 @@ function CustomersPage() {
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
-                        if (!window.confirm(`Remove ${customer.name}?`)) return;
+                        if (!window.confirm(`Remove ${customer.name}? This cannot be undone.`)) return;
                         void apiFetch(`/api/customers/${customer.id}`, { method: "DELETE" })
                           .then(() => queryClient.invalidateQueries({ queryKey: ["customers"] }))
                           .catch((reason: Error) => toast.error(reason.message));
@@ -157,8 +157,8 @@ function CustomerDialog({
   }
 
   const save = useMutation({
-    mutationFn: () => {
-      const body = JSON.stringify({ name, phone, bookNo, address });
+    mutationFn: (confirmDuplicate: boolean) => {
+      const body = JSON.stringify({ name, phone, bookNo, address, confirmDuplicate });
       if (customer) return apiFetch(`/api/customers/${customer.id}`, { method: "PATCH", body });
       return apiFetch("/api/customers", { method: "POST", body });
     },
@@ -166,7 +166,13 @@ function CustomerDialog({
       toast.success(customer ? "Customer updated." : "Customer added.");
       onSaved();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error, confirmDuplicate) => {
+      if (!confirmDuplicate && error.message.includes("already on another customer")) {
+        if (window.confirm(`${error.message}`)) save.mutate(true);
+        return;
+      }
+      toast.error(error.message);
+    },
   });
 
   return (
@@ -180,7 +186,7 @@ function CustomerDialog({
           className="space-y-4"
           onSubmit={(event) => {
             event.preventDefault();
-            save.mutate();
+            save.mutate(false);
           }}
         >
           <Field label="Name" id="customer-name">

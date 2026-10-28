@@ -59,6 +59,22 @@ export function moneyBalance(invoiced: number, paid: number): number {
   return (Math.round(invoiced * 100) - Math.round(paid * 100)) / 100;
 }
 
+export function pendingTotals(rows: { invoiced: number; paid: number; balance: number }[]): {
+  invoiced: number;
+  paid: number;
+  balance: number;
+} {
+  let invoiced = 0;
+  let paid = 0;
+  let balance = 0;
+  for (const row of rows) {
+    invoiced = (Math.round(invoiced * 100) + Math.round(row.invoiced * 100)) / 100;
+    paid = (Math.round(paid * 100) + Math.round(row.paid * 100)) / 100;
+    balance = (Math.round(balance * 100) + Math.round(row.balance * 100)) / 100;
+  }
+  return { invoiced, paid, balance };
+}
+
 export function stockGap(received: number, onHand: number, billed: number): number {
   const expected = Math.round((received - billed) * 1000) / 1000;
   return Math.round((onHand - expected) * 1000) / 1000;

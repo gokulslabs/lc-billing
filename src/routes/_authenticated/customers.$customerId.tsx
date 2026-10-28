@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import type { CustomerHistory } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
+import { billStatusLabel } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -65,7 +66,7 @@ function CustomerHistoryPage() {
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {formatRupees(bill.total)} · collected {formatRupees(bill.collected)} · balance {formatRupees(bill.balance)} ·{" "}
-                    <span className="capitalize">{bill.status}</span>
+                    <span>{billStatusLabel(bill.status)}</span>
                   </p>
                 </div>
                 {bill.lines.length > 0 ? (

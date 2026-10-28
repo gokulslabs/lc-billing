@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { paymentStatus } from "@/lib/sales";
 import {
   blankToNull,
   customerSchema,
@@ -103,6 +104,11 @@ customers.get("/:id/history", async (c) => {
 customers.post("/", async (c) => {
   const parsed = customerSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const duplicate = await phoneInUse(parsed.data.phone, null);
+  if (duplicate === "error") return c.json({ error: "Could not check the phone number." }, 500);
+  if (duplicate && !parsed.data.confirmDuplicate) {
+    return c.json({ error: "This phone number is already on another customer. Save again to keep both." }, 409);
+  }
   const { data, error } = await supabaseAdmin
     .from("customers")
     .insert(toRow(parsed.data))
@@ -115,6 +121,11 @@ customers.post("/", async (c) => {
 customers.patch("/:id", async (c) => {
   const parsed = customerSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const duplicate = await phoneInUse(parsed.data.phone, c.req.param("id"));
+  if (duplicate === "error") return c.json({ error: "Could not check the phone number." }, 500);
+  if (duplicate && !parsed.data.confirmDuplicate) {
+    return c.json({ error: "This phone number is already on another customer. Save again to keep both." }, 409);
+  }
   const { data, error } = await supabaseAdmin
     .from("customers")
     .update(toRow(parsed.data))
@@ -140,6 +151,14 @@ customers.delete("/:id", async (c) => {
   if (error) return c.json({ error: "Could not remove the customer." }, 500);
   return c.json({ ok: true });
 });
+
+async function phoneInUse(phone: string, exceptId: string | null): Promise<boolean | "error"> {
+  const value = blankToNull(phone);
+  if (!value) return false;
+  const { data, error } = await supabaseAdmin.from("customers").select("id").eq("phone", value).limit(5);
+  if (error) return "error";
+  return (data ?? []).some((row) => row.id !== exceptId);
+}
 
 function toRow(input: { name: string; address: string; phone: string; bookNo: string }) {
   return {
@@ -242,7 +261,10 @@ async function billDetails(rows: BillRow[]): Promise<Map<string, CustomerBill> |
     bill.payments.push({ paidOn: payment.paid_on, amount, mode: payment.mode ?? null });
     bill.collected = round2(bill.collected + amount);
   }
-  for (const bill of bills.values()) bill.balance = round2(bill.total - bill.collected);
+  for (const bill of bills.values()) {
+    bill.balance = round2(bill.total - bill.collected);
+    bill.status = paymentStatus(bill.total, bill.collected, bill.status);
+  }
   return bills;
 }
 

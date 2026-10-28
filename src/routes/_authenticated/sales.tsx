@@ -3,10 +3,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import type { Customer } from "@/lib/customers";
+import { isUnrecordedName, type Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
-import { lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
+import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -180,6 +180,7 @@ function SalesHome({
           <TabsTrigger value="bills">Bills</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="due">Who owes</TabsTrigger>
+          <TabsTrigger value="unrecorded">Not recorded</TabsTrigger>
           <TabsTrigger value="close">Day close</TabsTrigger>
         </TabsList>
         <TabsContent value="bills" className="space-y-4">
@@ -218,7 +219,7 @@ function SalesHome({
                       <TableCell>{formatRupees(bill.total)}</TableCell>
                       <TableCell>{formatRupees(bill.collected)}</TableCell>
                       <TableCell>{formatRupees(bill.balance)}</TableCell>
-                      <TableCell className="capitalize">{bill.status}</TableCell>
+                      <TableCell>{billStatusLabel(bill.status)}</TableCell>
                       <TableCell className="text-right">
                         <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(bill.id)}>
                           Open
@@ -279,6 +280,9 @@ function SalesHome({
         <TabsContent value="due">
           <DueList onOpen={onOpen} initialBooks={books} />
         </TabsContent>
+        <TabsContent value="unrecorded">
+          <UnrecordedBills onOpen={onOpen} />
+        </TabsContent>
         <TabsContent value="close">
           <DayClose />
         </TabsContent>
@@ -305,7 +309,20 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <Button variant="outline" className="rounded-full" onClick={onBack}>
+          <Button
+            variant="outline"
+            className="rounded-full"
+            onClick={() => {
+              if (invoice && invoice.status === "draft" && invoice.lines.length === 0 && invoice.payments.length === 0) {
+                void apiFetch(`/api/invoices/${invoice.id}/cancel`, {
+                  method: "POST",
+                  body: JSON.stringify({ remarks: "Empty draft discarded." }),
+                }).finally(onBack);
+                return;
+              }
+              onBack();
+            }}
+          >
             Back
           </Button>
           <h1 className="mt-4 text-4xl font-semibold">{invoice ? `Bill ${invoice.billNo}` : "Bill"}</h1>
@@ -314,7 +331,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               <Link to="/customers/$customerId" params={{ customerId: invoice.customerId }} className="hover:underline">
                 {invoice.customerName}
               </Link>{" "}
-              · {invoice.billedOn} · <span className="capitalize">{invoice.status}</span>
+              · {invoice.billedOn} · {billStatusLabel(invoice.status)}
             </p>
           ) : null}
         </div>
@@ -329,8 +346,8 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                 Print
               </Button>
             </div>
-            {invoice.status === "open" && invoice.balance > 0 ? (
-              <CollectForm key={`${invoice.id}-${invoice.balance}`} invoiceId={invoice.id} balance={invoice.balance} onSaved={refresh} />
+            {invoice.status !== "cancelled" && invoice.balance > 0 ? (
+              <CollectForm key={`${invoice.id}-${invoice.balance}`} invoiceId={invoice.id} billNo={invoice.billNo} balance={invoice.balance} onSaved={refresh} />
             ) : null}
           </div>
         ) : null}
@@ -338,7 +355,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
       {bill.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {bill.error instanceof Error ? <p className="text-sm text-destructive">{bill.error.message}</p> : null}
       {invoice?.remarks ? <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p> : null}
-      {invoice && invoice.status === "open" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
+      {invoice && invoice.status !== "cancelled" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
       {invoice ? <Receipt invoice={invoice} /> : null}
       {invoice ? (
         <div className="rounded-2xl border border-border bg-card">
@@ -377,7 +394,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   <TableCell className="capitalize">{line.status}</TableCell>
                   <TableCell>{formatRupees(line.amount)}</TableCell>
                   <TableCell className="text-right">
-                    {invoice.status === "open" ? (
+                    {invoice.status !== "cancelled" ? (
                       <ReturnLine line={line} invoiceId={invoice.id} onSaved={refresh} />
                     ) : null}
                   </TableCell>
@@ -386,6 +403,11 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             </TableBody>
           </Table>
         </div>
+      ) : null}
+      {invoice && invoice.lines.length > 0 ? (
+        <p className="text-sm text-muted-foreground">
+          Discount is entered as an amount and shared across lines in proportion to line value; paise rounding is adjusted on the last line. Rate is the price before that share. Amount is the line after it.
+        </p>
       ) : null}
       {invoice ? (
         <div className="grid gap-6 md:grid-cols-2">
@@ -401,14 +423,14 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
                   {payment.showroom ? ` · ${payment.showroom}` : ""}
                 </p>
-                {invoice.status === "open" && payment.paidOn === shopToday() ? (
+                {invoice.status !== "cancelled" && payment.paidOn === shopToday() ? (
                   <RemovePayment invoiceId={invoice.id} paymentId={payment.id} onSaved={refresh} />
                 ) : null}
               </div>
             ))}
             {invoice.payments.length === 0 ? <p className="text-sm text-muted-foreground">No collection yet.</p> : null}
           </section>
-          {invoice.status === "open" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
+          {invoice.status !== "cancelled" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
         </div>
       ) : null}
     </div>
@@ -613,6 +635,7 @@ function ReturnLine({
             toast.error("Enter a quantity to return.");
             return;
           }
+          if (!window.confirm(`Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`)) return;
           void apiFetch(`/api/invoices/${invoiceId}/lines/${line.id}/return`, {
             method: "POST",
             body: JSON.stringify({ quantity }),
@@ -649,6 +672,7 @@ function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; p
           toast.error("Enter a reason.");
           return;
         }
+        if (!window.confirm("Remove this payment? This cannot be undone.")) return;
         void apiFetch(`/api/invoices/${invoiceId}/payments/${paymentId}/remove`, {
           method: "POST",
           body: JSON.stringify({ reason: reason.trim() }),
@@ -668,7 +692,7 @@ function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; p
   );
 }
 
-function CollectForm({ invoiceId, balance, onSaved }: { invoiceId: string; balance: number; onSaved: () => void }) {
+function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: string; billNo: string; balance: number; onSaved: () => void }) {
   const [amount, setAmount] = useState(String(balance));
   const [paidOn, setPaidOn] = useState(shopToday());
   const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
@@ -695,6 +719,8 @@ function CollectForm({ invoiceId, balance, onSaved }: { invoiceId: string; balan
       className="space-y-3"
       onSubmit={(event) => {
         event.preventDefault();
+        const value = Number(amount);
+        if (!window.confirm(`Collect ${formatRupees(Number.isFinite(value) ? value : 0)} on bill ${billNo}?`)) return;
         save.mutate();
       }}
     >
@@ -742,10 +768,14 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
     },
     onError: (error: Error) => toast.error(error.message),
   });
-  const remove = useMutation({
-    mutationFn: () => apiFetch(`/api/invoices/${invoice.id}`, { method: "DELETE" }),
+  const discard = useMutation({
+    mutationFn: () =>
+      apiFetch(`/api/invoices/${invoice.id}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ remarks: "Empty draft discarded." }),
+      }),
     onSuccess: () => {
-      toast.success("Bill removed.");
+      toast.success("Empty bill discarded.");
       onRemoved();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -755,14 +785,23 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
     <section className="space-y-3">
       <h2 className="text-lg font-semibold">Cancel</h2>
       {empty ? (
-        <Button variant="outline" className="rounded-full" disabled={remove.isPending} onClick={() => remove.mutate()}>
-          {remove.isPending ? "Removing…" : "Remove empty bill"}
+        <Button
+          variant="outline"
+          className="rounded-full"
+          disabled={discard.isPending}
+          onClick={() => {
+            if (!window.confirm(`Discard empty bill ${invoice.billNo}? This cannot be undone.`)) return;
+            discard.mutate();
+          }}
+        >
+          {discard.isPending ? "Discarding…" : "Discard empty bill"}
         </Button>
       ) : (
         <form
           className="space-y-3"
           onSubmit={(event) => {
             event.preventDefault();
+            if (!window.confirm(`Cancel bill ${invoice.billNo}? This cannot be undone.`)) return;
             cancel.mutate();
           }}
         >
@@ -842,7 +881,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
             <Input id="bill-customer-search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Name, phone or book no." />
           </Field>
           <div className="max-h-48 space-y-1 overflow-auto">
-            {(customers.data?.customers ?? []).map((customer) => (
+            {(customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name)).map((customer) => (
               <button
                 key={customer.id}
                 type="button"
@@ -915,6 +954,7 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
         ))}
       </div>
       <p className="mt-4 text-sm">Gross {formatRupees(gross)} · Discount {formatRupees(discount)} · Net {formatRupees(invoice.total)}</p>
+      <p className="mt-2 text-xs">Discount is entered as an amount and shared across lines in proportion to line value; paise rounding is adjusted on the last line.</p>
       {invoice.payments.map((payment) => (
         <p key={payment.id} className="text-sm">
           Paid {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
@@ -925,12 +965,139 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
   );
 }
 
+function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
+  const queryClient = useQueryClient();
+  const [page, setPage] = useState(1);
+  const [billId, setBillId] = useState<string | null>(null);
+  const [q, setQ] = useState("");
+  const deferred = useDeferredValue(q);
+  const [customerId, setCustomerId] = useState("");
+  const bills = useQuery({
+    queryKey: ["invoices-unrecorded", page],
+    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/unrecorded?page=${page}`),
+  });
+  const customers = useQuery({
+    queryKey: ["customers", "attach", deferred],
+    enabled: deferred.trim().length > 0,
+    queryFn: () => apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`),
+  });
+  const attach = useMutation({
+    mutationFn: () => {
+      if (!billId || !customerId) throw new Error("Choose the bill and a customer.");
+      return apiFetch<{ invoice: InvoiceDetail }>(`/api/invoices/${billId}/customer`, {
+        method: "POST",
+        body: JSON.stringify({ customerId }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Customer attached.");
+      setBillId(null);
+      setCustomerId("");
+      setQ("");
+      void queryClient.invalidateQueries({ queryKey: ["invoices-unrecorded"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices"] });
+      void queryClient.invalidateQueries({ queryKey: ["invoices-due"] });
+      void queryClient.invalidateQueries({ queryKey: ["customer"] });
+      void queryClient.invalidateQueries({ queryKey: ["customer-history"] });
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  const rows = bills.data?.invoices ?? [];
+  const chosen = rows.find((row) => row.id === billId);
+  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">
+        These bills are on NOT RECORDED. Attach the real customer, or a named walk-in. The bill then shows in that customer’s history and in Who owes.
+      </p>
+      {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
+      {!bills.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No bills are waiting for a customer.</p> : null}
+      {rows.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Bill no.</TableHead>
+                <TableHead>Date</TableHead>
+                <TableHead>Net</TableHead>
+                <TableHead>Balance</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((invoice) => (
+                <TableRow key={invoice.id}>
+                  <TableCell className="font-medium">{invoice.billNo}</TableCell>
+                  <TableCell>{invoice.billedOn}</TableCell>
+                  <TableCell>{formatRupees(invoice.total)}</TableCell>
+                  <TableCell>{formatRupees(invoice.balance)}</TableCell>
+                  <TableCell>{billStatusLabel(invoice.status)}</TableCell>
+                  <TableCell className="space-x-2 text-right">
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(invoice.id)}>
+                      Open
+                    </Button>
+                    <Button
+                      variant={billId === invoice.id ? "default" : "outline"}
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => {
+                        setBillId(invoice.id);
+                        setCustomerId("");
+                      }}
+                    >
+                      Attach
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+      <ListFooter page={page} total={bills.data?.total ?? 0} shown={rows.length} onPage={setPage} />
+      {chosen ? (
+        <form
+          className="space-y-3 rounded-2xl border border-border bg-card p-4"
+          onSubmit={(event) => {
+            event.preventDefault();
+            attach.mutate();
+          }}
+        >
+          <p className="text-sm font-medium">Attach bill {chosen.billNo}</p>
+          <Field label="Find customer" id="attach-customer">
+            <Input id="attach-customer" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Name, phone or book no." />
+          </Field>
+          <div className="max-h-48 space-y-1 overflow-auto">
+            {matches.map((customer) => (
+              <button
+                key={customer.id}
+                type="button"
+                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
+                onClick={() => setCustomerId(customer.id)}
+              >
+                {customer.name}
+                {customer.phone ? ` · ${customer.phone}` : ""}
+              </button>
+            ))}
+          </div>
+          <Button type="submit" className="rounded-full" disabled={attach.isPending || !customerId}>
+            {attach.isPending ? "Attaching…" : "Attach customer"}
+          </Button>
+        </form>
+      ) : null}
+    </div>
+  );
+}
+
 function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initialBooks: "new" | "old" }) {
   const [page, setPage] = useState(1);
   const [books, setBooks] = useState<"new" | "old">(initialBooks);
   const due = useQuery({
     queryKey: ["invoices-due", books, page],
-    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/due?books=${books}&page=${page}`),
+    queryFn: () =>
+      apiFetch<{ invoices: InvoiceSummary[]; total: number; balance: number }>(`/api/invoices/due?books=${books}&page=${page}`),
   });
   const rows = due.data?.invoices ?? [];
   return (
@@ -947,16 +1114,21 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="new">This counter</SelectItem>
-            <SelectItem value="old">Old bills, payment not written</SelectItem>
+            <SelectItem value="new">Live book</SelectItem>
+            <SelectItem value="old">Old book — copied balances</SelectItem>
           </SelectContent>
         </Select>
         <p className="text-sm text-muted-foreground">
           {books === "old"
-            ? "Copied with a balance. Recording a payment on one bill leaves the others as they are."
-            : "Bills from 26 Oct 2026 that still have a balance."}
+            ? "Old book — copied balances. Every bill dated before 26 Oct 2026 that still has a balance is here. Recording a payment on one bill leaves the others as they are. The live book is the other choice. Do not add the two lists together."
+            : "Live book. Every bill from 26 Oct 2026 that still has a balance is here. Old book — copied balances is the other choice. Do not add the two lists together."}
         </p>
       </div>
+      {due.data ? (
+        <p className="text-sm text-muted-foreground">
+          Total balance {formatRupees(due.data.balance)} across {due.data.total.toLocaleString("en-IN")} bills.
+        </p>
+      ) : null}
       {due.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {due.error instanceof Error ? <p className="text-sm text-destructive">{due.error.message}</p> : null}
       {!due.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">Nothing is owing.</p> : null}
@@ -970,6 +1142,7 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
                 <TableHead>Customer</TableHead>
                 <TableHead>Total</TableHead>
                 <TableHead>Balance</TableHead>
+                <TableHead>Status</TableHead>
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -981,6 +1154,7 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
                   <TableCell>{invoice.customerName}</TableCell>
                   <TableCell>{formatRupees(invoice.total)}</TableCell>
                   <TableCell>{formatRupees(invoice.balance)}</TableCell>
+                  <TableCell>{billStatusLabel(invoice.status)}</TableCell>
                   <TableCell className="text-right">
                     <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(invoice.id)}>
                       Open

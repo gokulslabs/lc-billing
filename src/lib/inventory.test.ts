@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stockGap } from "./reports";
 import {
   barcodeNumbers,
   barcodeSchema,
@@ -6,6 +7,8 @@ import {
   groupPurchases,
   kolkataBounds,
   nextInventoryNo,
+  quantityAfterReturn,
+  quantityAfterSale,
   quantityForUnit,
   slipPlan,
   shopDate,
@@ -38,6 +41,20 @@ describe("quantityForUnit", () => {
   it("keeps metres fractional and pieces whole", () => {
     expect(quantityForUnit("MT", 2.5)).toBeNull();
     expect(quantityForUnit("NO", 2.5)).toBe("Pieces must be a whole number.");
+  });
+});
+
+describe("shelf movement", () => {
+  it("takes a piece and a length of fabric off the shelf when they are billed", () => {
+    expect(quantityAfterSale(1, 1)).toBe(0);
+    expect(stockGap(1, quantityAfterSale(1, 1), 1)).toBe(0);
+    expect(quantityAfterSale(20.5, 9)).toBe(11.5);
+    expect(stockGap(20.5, quantityAfterSale(20.5, 9), 9)).toBe(0);
+  });
+
+  it("puts a return back on the same number", () => {
+    expect(quantityAfterReturn(0, 1)).toBe(1);
+    expect(quantityAfterReturn(11.5, 2)).toBe(13.5);
   });
 });
 

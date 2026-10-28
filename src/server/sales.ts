@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { blankToNull } from "@/lib/customers";
-import { quantityForUnit } from "@/lib/inventory";
+import { blankToNull, isUnrecordedName, UNRECORDED_BILL_ERROR, UNRECORDED_NAME } from "@/lib/customers";
+import { quantityAfterReturn, quantityAfterSale, quantityForUnit } from "@/lib/inventory";
 import type { Unit } from "@/lib/products";
 import {
   BILL_PAYS,
@@ -9,13 +9,15 @@ import {
   lineAmount,
   cancelInvoiceSchema,
   collectionProblem,
+  assignCustomerSchema,
   createInvoiceSchema,
   invoiceLineSchema,
-  NEW_COUNTER_FROM,
+  billBook,
   nextBillNo,
   selectBills,
   PAYMENT_MODES,
   paymentSchema,
+  paymentStatus,
   priceLine,
   removePaymentSchema,
   returnLineSchema,
@@ -157,7 +159,7 @@ sales.get("/due", async (c) => {
     supabaseAdmin
       .from("invoices")
       .select("id, bill_no, customer_id, billed_on, status, remarks")
-      .eq("status", "open")
+      .in("status", ["open", "partial"])
       .order("billed_on", { ascending: true })
       .order("id")
       .range(start, end),
@@ -165,13 +167,10 @@ sales.get("/due", async (c) => {
   if (!loaded) return c.json({ error: "Could not load unpaid bills." }, 500);
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
-  const due = summaries.invoices.filter((invoice) => {
-    if (invoice.balance <= 0.001) return false;
-    const old = invoice.billedOn < NEW_COUNTER_FROM;
-    return books === "old" ? old : !old;
-  });
+  const due = summaries.invoices.filter((invoice) => invoice.balance > 0.001 && billBook(invoice.billedOn) === books);
   const start = (page - 1) * 50;
-  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books });
+  const balance = due.reduce((sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100, 0);
+  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books, balance });
 });
 
 sales.get("/close", async (c) => {
@@ -184,6 +183,7 @@ sales.get("/close", async (c) => {
         .select("id, bill_no, customer_id, billed_on, status, remarks")
         .eq("billed_on", date)
         .neq("status", "cancelled")
+        .neq("status", "draft")
         .order("id")
         .range(start, end),
     ),
@@ -234,7 +234,7 @@ sales.post("/", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const customer = await supabaseAdmin.from("customers").select("id, name").eq("id", parsed.data.customerId).maybeSingle();
   if (customer.error) return c.json({ error: "Could not check the customer." }, 500);
-  if (!customer.data) return c.json({ error: "Choose a customer." }, 400);
+  if (!customer.data || isUnrecordedName(customer.data.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const billNo = await allocateBillNo();
@@ -245,7 +245,7 @@ sales.post("/", async (c) => {
         bill_no: billNo,
         customer_id: customer.data.id,
         billed_on: shopToday(),
-        status: "open",
+        status: "draft",
       })
       .select("id, bill_no, customer_id, billed_on, status, remarks")
       .single();
@@ -256,8 +256,47 @@ sales.post("/", async (c) => {
   return c.json({ error: "Could not open the bill." }, 500);
 });
 
+sales.get("/unrecorded", async (c) => {
+  const page = readPage(c.req.query("page"));
+  const people = await readAll<{ id: string; name: string }>((from, to) =>
+    supabaseAdmin.from("customers").select("id, name").ilike("name", `%${UNRECORDED_NAME}%`).order("id").range(from, to),
+  );
+  if (!people) return c.json({ error: "Could not load these bills." }, 500);
+  const ids = people.rows.filter((row) => isUnrecordedName(row.name)).map((row) => row.id);
+  if (ids.length === 0) return c.json({ invoices: [], total: 0, page });
+  const loaded = await readAll<InvoiceRow>((from, to) =>
+    supabaseAdmin
+      .from("invoices")
+      .select("id, bill_no, customer_id, billed_on, status, remarks")
+      .in("customer_id", ids)
+      .order("billed_on", { ascending: false })
+      .order("id", { ascending: false })
+      .range(from, to),
+  );
+  if (!loaded) return c.json({ error: "Could not load these bills." }, 500);
+  const summaries = await summarize(loaded.rows);
+  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+  const start = (page - 1) * PAGE_SIZE;
+  return c.json({ invoices: summaries.invoices.slice(start, start + PAGE_SIZE), total: summaries.invoices.length, page });
+});
+
 sales.get("/:id", async (c) => {
   const detail = await loadDetail(c.req.param("id"));
+  if ("error" in detail) return c.json({ error: detail.error }, detail.status);
+  return c.json({ invoice: detail.invoice });
+});
+
+sales.post("/:id/customer", async (c) => {
+  const parsed = assignCustomerSchema.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const invoice = await findInvoice(c.req.param("id"));
+  if (!invoice) return c.json({ error: "Bill not found." }, 404);
+  const customer = await customerRecord(parsed.data.customerId);
+  if (customer === "error") return c.json({ error: "Could not check the customer." }, 500);
+  if (!customer || isUnrecordedName(customer.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
+  const { error } = await supabaseAdmin.from("invoices").update({ customer_id: customer.id }).eq("id", invoice.id);
+  if (error) return c.json({ error: "Could not attach the customer." }, 500);
+  const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
 });
@@ -267,7 +306,10 @@ sales.post("/:id/lines", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
+  if (invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
+  const named = await customerRecord(invoice.customer_id);
+  if (named === "error") return c.json({ error: "Could not check the customer." }, 500);
+  if (!named || isUnrecordedName(named.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
 
   const stock = await findStock(parsed.data.inventoryNo);
   if (!stock) return c.json({ error: "Inventory number not found." }, 400);
@@ -276,10 +318,15 @@ sales.post("/:id/lines", async (c) => {
   if (!product) return c.json({ error: "Could not load this product." }, 500);
   const quantityError = quantityForUnit(product.unit, parsed.data.quantity);
   if (quantityError) return c.json({ error: quantityError }, 400);
+  if (product.unit === "NO") {
+    const already = await pieceAlreadyBilled(stock.id);
+    if (already === "error") return c.json({ error: "Could not check this piece." }, 500);
+    if (already) return c.json({ error: "This piece is already on a bill." }, 400);
+  }
   const available = Number(stock.quantity);
   if (parsed.data.quantity > available + 0.0001) return c.json({ error: "Not enough stock on this inventory number." }, 400);
 
-  const left = round3(available - parsed.data.quantity);
+  const left = quantityAfterSale(available, parsed.data.quantity);
   const moved = await supabaseAdmin
     .from("inventory_items")
     .update({ quantity: left, status: left > 0 ? "available" : "sold" })
@@ -317,6 +364,7 @@ sales.post("/:id/lines", async (c) => {
       .eq("id", stock.id);
     return c.json({ error: "Could not add the line." }, 500);
   }
+  await syncInvoiceStatus(invoice.id);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice, line: toLine(data as LineRow, product, left > 0 ? "available" : "sold") }, 201);
@@ -327,7 +375,7 @@ sales.post("/:id/lines/:lineId/return", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
+  if (invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
   const line = await supabaseAdmin
     .from("invoice_lines")
     .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
@@ -358,6 +406,7 @@ sales.post("/:id/lines/:lineId/return", async (c) => {
       .eq("id", row.id);
     if (updated.error) return c.json({ error: "Could not update the line." }, 500);
   }
+  await syncInvoiceStatus(invoice.id);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
@@ -368,7 +417,7 @@ sales.post("/:id/cancel", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status !== "open") return c.json({ error: "This bill is already cancelled." }, 400);
+  if (invoice.status === "cancelled") return c.json({ error: "This bill is already cancelled." }, 400);
   const paid = await supabaseAdmin
     .from("payments")
     .select("id", { count: "exact", head: true })
@@ -389,7 +438,7 @@ sales.post("/:id/cancel", async (c) => {
     .from("invoices")
     .update({ status: "cancelled", remarks: parsed.data.remarks })
     .eq("id", invoice.id)
-    .eq("status", "open");
+    .neq("status", "cancelled");
   if (error) return c.json({ error: "Could not cancel the bill." }, 500);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
@@ -401,7 +450,7 @@ sales.post("/:id/payments", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const detail = await loadDetail(c.req.param("id"));
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
-  if (detail.invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
+  if (detail.invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
   const problem = collectionProblem(detail.invoice.balance, parsed.data.amount);
   if (problem) return c.json({ error: problem }, 400);
   const { error } = await supabaseAdmin.from("payments").insert({
@@ -412,6 +461,7 @@ sales.post("/:id/payments", async (c) => {
     showroom: blankToNull(parsed.data.showroom),
   });
   if (error) return c.json({ error: "Could not save the collection." }, 500);
+  await syncInvoiceStatus(detail.invoice.id);
   const next = await loadDetail(detail.invoice.id);
   if ("error" in next) return c.json({ error: next.error }, next.status);
   return c.json({ invoice: next.invoice }, 201);
@@ -422,7 +472,7 @@ sales.post("/:id/payments/:paymentId/remove", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status !== "open") return c.json({ error: "This bill is cancelled." }, 400);
+  if (invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
   const payment = await supabaseAdmin
     .from("payments")
     .select("id, amount, paid_on, mode")
@@ -437,6 +487,7 @@ sales.post("/:id/payments/:paymentId/remove", async (c) => {
   const note = `Payment removed ${payment.data.paid_on} ${payment.data.amount} ${payment.data.mode ?? "Not recorded"}: ${parsed.data.reason}`;
   const remarks = [invoice.remarks, note].filter(Boolean).join("\n");
   await supabaseAdmin.from("invoices").update({ remarks }).eq("id", invoice.id);
+  await syncInvoiceStatus(invoice.id);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
@@ -445,7 +496,7 @@ sales.post("/:id/payments/:paymentId/remove", async (c) => {
 sales.delete("/:id", async (c) => {
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status !== "open") return c.json({ error: "A cancelled bill stays on record." }, 400);
+  if (invoice.status === "cancelled") return c.json({ error: "A cancelled bill stays on record." }, 400);
   const [lines, payments] = await Promise.all([
     supabaseAdmin.from("invoice_lines").select("id", { count: "exact", head: true }).eq("invoice_id", invoice.id),
     supabaseAdmin.from("payments").select("id", { count: "exact", head: true }).eq("invoice_id", invoice.id),
@@ -454,9 +505,7 @@ sales.delete("/:id", async (c) => {
   if ((lines.count ?? 0) > 0 || (payments.count ?? 0) > 0) {
     return c.json({ error: "Cancel the bill instead. It already has lines or a collection." }, 400);
   }
-  const { error } = await supabaseAdmin.from("invoices").delete().eq("id", invoice.id);
-  if (error) return c.json({ error: "Could not remove the bill." }, 500);
-  return c.json({ ok: true });
+  return c.json({ error: "Cancel the bill instead. Empty bills stay on record." }, 400);
 });
 
 async function loadInvoices(
@@ -555,6 +604,39 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
   };
 }
 
+async function syncInvoiceStatus(id: string): Promise<void> {
+  const invoice = await findInvoice(id);
+  if (!invoice || invoice.status === "cancelled") return;
+  const [lines, payments] = await Promise.all([
+    supabaseAdmin.from("invoice_lines").select("amount").eq("invoice_id", id),
+    supabaseAdmin.from("payments").select("amount").eq("invoice_id", id),
+  ]);
+  if (lines.error || payments.error) return;
+  const lineCount = (lines.data ?? []).length;
+  const net = round2((lines.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
+  const collected = round2((payments.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
+  const next = lineCount === 0 && collected <= 0.001 ? "draft" : paymentStatus(net, collected, "open");
+  if (next === invoice.status) return;
+  await supabaseAdmin.from("invoices").update({ status: next }).eq("id", id).neq("status", "cancelled");
+}
+
+async function pieceAlreadyBilled(itemId: string): Promise<boolean | "error"> {
+  const { data, error } = await supabaseAdmin.from("invoice_lines").select("invoice_id").eq("inventory_item_id", itemId);
+  if (error || !data) return "error";
+  if (data.length === 0) return false;
+  const ids = [...new Set(data.map((row) => row.invoice_id))];
+  const { data: invoices, error: invoiceError } = await supabaseAdmin.from("invoices").select("id, status").in("id", ids);
+  if (invoiceError || !invoices) return "error";
+  return invoices.some((row) => row.status !== "cancelled");
+}
+
+async function customerRecord(id: string): Promise<{ id: string; name: string } | null | "error"> {
+  const { data, error } = await supabaseAdmin.from("customers").select("id, name").eq("id", id).maybeSingle();
+  if (error) return "error";
+  if (!data) return null;
+  return data;
+}
+
 async function findInvoice(id: string): Promise<InvoiceRow | null> {
   const { data, error } = await supabaseAdmin
     .from("invoices")
@@ -579,7 +661,7 @@ async function restoreStock(id: string, quantity: number): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const current = await supabaseAdmin.from("inventory_items").select("id, quantity").eq("id", id).maybeSingle();
     if (current.error || !current.data) return false;
-    const next = round3(Number(current.data.quantity) + quantity);
+    const next = quantityAfterReturn(Number(current.data.quantity), quantity);
     const saved = await supabaseAdmin
       .from("inventory_items")
       .update({ quantity: next, status: next > 0 ? "available" : "sold" })
@@ -677,7 +759,7 @@ function toSummary(row: InvoiceRow, customerName: string, total: number, collect
     customerId: row.customer_id,
     customerName,
     billedOn: row.billed_on,
-    status: row.status,
+    status: paymentStatus(net, round2(collected), row.status),
     remarks: row.remarks,
     gross: full,
     discount: round2(full - net),
@@ -728,10 +810,6 @@ function readRange(from: string | undefined, to: string | undefined): { from: st
 
 function round2(value: number): number {
   return Math.round(value * 100) / 100;
-}
-
-function round3(value: number): number {
-  return Math.round(value * 1000) / 1000;
 }
 
 function isDuplicate(error: { code?: string } | null): boolean {

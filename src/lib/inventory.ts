@@ -58,6 +58,18 @@ export function quantityForUnit(unit: Unit, value: number): string | null {
   return null;
 }
 
+function round3(value: number): number {
+  return Math.round(value * 1000) / 1000;
+}
+
+export function quantityAfterSale(onHand: number, sold: number): number {
+  return round3(onHand - sold);
+}
+
+export function quantityAfterReturn(onHand: number, returned: number): number {
+  return round3(onHand + returned);
+}
+
 export const PIECE_LABEL_LIMIT = 200;
 
 export function slipPlan(unit: Unit, quantity: number, inventoryNo: string): { count: number; each: number } | string {

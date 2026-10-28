@@ -2,6 +2,10 @@ import { z } from "zod";
 
 export const NEW_COUNTER_FROM = "2026-10-26";
 
+export function billBook(billedOn: string): "new" | "old" {
+  return billedOn < NEW_COUNTER_FROM ? "old" : "new";
+}
+
 export const PAYMENT_MODES = ["CASH", "UPI", "CARD"] as const;
 export type PaymentMode = (typeof PAYMENT_MODES)[number];
 
@@ -46,6 +50,23 @@ export type BillSort = (typeof BILL_SORTS)[number];
 export const BILL_PAYS = ["all", "unpaid", "paid"] as const;
 export type BillPay = (typeof BILL_PAYS)[number];
 
+export function paymentStatus(net: number, collected: number, stored: string): "open" | "partial" | "paid" | "cancelled" | "draft" {
+  if (stored === "cancelled") return "cancelled";
+  const balance = Math.round((net - collected) * 100) / 100;
+  if (collected > 0.001 && balance <= 0.001) return "paid";
+  if (collected > 0.001 && balance > 0.001) return "partial";
+  if (stored === "draft" && net <= 0.001 && collected <= 0.001) return "draft";
+  return "open";
+}
+
+export function billStatusLabel(status: string): string {
+  if (status === "paid") return "Paid";
+  if (status === "partial") return "Partially paid";
+  if (status === "cancelled") return "Cancelled";
+  if (status === "draft") return "Draft";
+  return "Open";
+}
+
 export function selectBills(
   rows: readonly InvoiceSummary[],
   pay: BillPay,
@@ -53,6 +74,7 @@ export function selectBills(
   direction: "asc" | "desc",
 ): InvoiceSummary[] {
   const filtered = rows.filter((row) => {
+    if (row.status === "draft") return false;
     if (pay === "all") return true;
     if (row.status === "cancelled") return false;
     const unpaid = row.balance > 0.001;
@@ -95,6 +117,10 @@ export type InvoiceItem = {
 const day = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
 
 export const createInvoiceSchema = z.object({
+  customerId: z.string().uuid("Choose a customer."),
+});
+
+export const assignCustomerSchema = z.object({
   customerId: z.string().uuid("Choose a customer."),
 });
 

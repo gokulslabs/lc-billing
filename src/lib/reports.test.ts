@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { billTotals, moneyBalance, monthStart, pricedBill, rangeProblem, stockGap } from "./reports";
+import { billTotals, moneyBalance, monthStart, pendingTotals, pricedBill, rangeProblem, stockGap } from "./reports";
 
 describe("billTotals", () => {
   it("keeps discount off the bill, the same way billing does", () => {
@@ -11,6 +11,17 @@ describe("billTotals", () => {
 describe("moneyBalance", () => {
   it("is what is still owed on an open bill", () => {
     expect(moneyBalance(100, 40)).toBe(60);
+  });
+});
+
+describe("pendingTotals", () => {
+  it("equals the sum of the rows in one book", () => {
+    const rows = [
+      { invoiced: 1000, paid: 200, balance: 800 },
+      { invoiced: 450.5, paid: 0, balance: 450.5 },
+    ];
+    expect(pendingTotals(rows)).toEqual({ invoiced: 1450.5, paid: 200, balance: 1250.5 });
+    expect(pendingTotals(rows).balance).toBe(rows.reduce((sum, row) => sum + row.balance, 0));
   });
 });
 

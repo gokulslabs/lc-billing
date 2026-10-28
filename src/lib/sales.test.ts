@@ -1,5 +1,17 @@
 import { describe, expect, it } from "vitest";
-import { applyGroupDiscount, collectionProblem, lineAmount, nextBillNo, priceLine, returnQuantity, selectBills, type InvoiceSummary } from "./sales";
+import {
+  applyGroupDiscount,
+  billBook,
+  billStatusLabel,
+  collectionProblem,
+  lineAmount,
+  nextBillNo,
+  paymentStatus,
+  priceLine,
+  returnQuantity,
+  selectBills,
+  type InvoiceSummary,
+} from "./sales";
 
 describe("nextBillNo", () => {
   it("starts at 1 for an empty shop", () => {
@@ -76,6 +88,38 @@ describe("returnQuantity", () => {
     expect(returnQuantity(4, 400, 1)).toEqual({ quantity: 3, amount: 300 });
     expect(returnQuantity(2, 200, 2)).toEqual({ quantity: 0, amount: 0 });
     expect(returnQuantity(1, 100, 2)).toBe("That is more than this line.");
+  });
+});
+
+describe("billBook", () => {
+  it("puts a bill in one book", () => {
+    expect(billBook("2026-10-25")).toBe("old");
+    expect(billBook("2026-10-26")).toBe("new");
+    expect(billBook("2026-10-25") === billBook("2026-10-26")).toBe(false);
+  });
+});
+
+describe("paymentStatus", () => {
+  it("marks a fully collected bill paid and a part payment partial", () => {
+    expect(paymentStatus(5445, 5445, "open")).toBe("paid");
+    expect(paymentStatus(5445, 2000, "open")).toBe("partial");
+    expect(paymentStatus(5445, 0, "open")).toBe("open");
+  });
+
+  it("never calls a bill with a balance paid", () => {
+    expect(paymentStatus(100, 99.99, "open")).toBe("partial");
+    expect(paymentStatus(0, 0, "open")).toBe("open");
+    expect(paymentStatus(0, 0, "draft")).toBe("draft");
+    expect(paymentStatus(5445, 0, "draft")).toBe("open");
+    expect(paymentStatus(5445, 5445, "cancelled")).toBe("cancelled");
+  });
+
+  it("labels the four states for the counter", () => {
+    expect(billStatusLabel("paid")).toBe("Paid");
+    expect(billStatusLabel("partial")).toBe("Partially paid");
+    expect(billStatusLabel("open")).toBe("Open");
+    expect(billStatusLabel("cancelled")).toBe("Cancelled");
+    expect(billStatusLabel("draft")).toBe("Draft");
   });
 });
 
