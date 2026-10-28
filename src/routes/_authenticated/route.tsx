@@ -1,8 +1,11 @@
+import { useRef } from "react";
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { LogOut } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
+import { useIdleLogout } from "@/hooks/use-idle-logout";
+import { clearActivity, idleWarningText } from "@/lib/idle";
 import { MODULES } from "@/lib/modules";
 import { Logo } from "@/components/app/Logo";
 import { Badge } from "@/components/ui/badge";
@@ -35,6 +38,7 @@ function AuthenticatedLayout() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const signingOut = useRef(false);
 
   const { data: profile } = useQuery({
     queryKey: ["profile", user?.id],
@@ -59,15 +63,26 @@ function AuthenticatedLayout() {
   });
 
   async function signOut() {
+    if (signingOut.current) return;
+    signingOut.current = true;
+    clearActivity();
     await queryClient.cancelQueries();
     queryClient.clear();
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut({ scope: "global" });
+    } catch {
+      await supabase.auth.signOut({ scope: "local" });
+    }
     navigate({ to: "/auth", replace: true });
   }
+
+  const idle = useIdleLogout(Boolean(user), signOut);
 
   if (isLoading || !user) {
     return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>;
   }
+
+  const idleWarning = idle.warning ? <IdleWarning unsaved={idle.unsaved} onStay={idle.stay} /> : null;
 
   if (!roles || roles.length === 0) {
     return (
@@ -84,6 +99,7 @@ function AuthenticatedLayout() {
             Sign out
           </Button>
         </div>
+        {idleWarning}
       </main>
     );
   }
@@ -92,6 +108,7 @@ function AuthenticatedLayout() {
 
   return (
     <SidebarProvider>
+      {idleWarning}
       <Sidebar className="print:hidden">
         <SidebarHeader className="px-4 py-5">
           <Logo />
@@ -144,5 +161,22 @@ function AuthenticatedLayout() {
         <Outlet />
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+function IdleWarning({ unsaved, onStay }: { unsaved: boolean; onStay: () => void }) {
+  return (
+    <div
+      role="alertdialog"
+      aria-labelledby="idle-warning-title"
+      className="fixed inset-x-4 bottom-4 z-50 mx-auto max-w-lg rounded-2xl border border-border bg-card p-4 shadow-[var(--shadow-soft)] print:hidden"
+    >
+      <p id="idle-warning-title" className="text-sm font-medium">
+        {idleWarningText(unsaved)}
+      </p>
+      <Button type="button" className="mt-3 rounded-full" onClick={onStay}>
+        Stay logged in
+      </Button>
+    </div>
   );
 }

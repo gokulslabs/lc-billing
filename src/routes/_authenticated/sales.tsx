@@ -7,6 +7,7 @@ import { isUnrecordedName, type Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
 import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
+import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -452,6 +453,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
   quantityRef.current = quantity;
   rateRef.current = rate;
   extraRef.current = extraOff;
+  useUnsavedWork("bill-line", inventoryNo.trim().length > 0 || rate.trim().length > 0 || extraOff.trim().length > 0 || quantity !== "1");
   useEffect(() => {
     const handle = window.setTimeout(() => setLookup(inventoryNo.trim()), 300);
     return () => window.clearTimeout(handle);
@@ -697,6 +699,10 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
   const [paidOn, setPaidOn] = useState(shopToday());
   const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
   const [showroom, setShowroom] = useState("");
+  useUnsavedWork(
+    "bill-collect",
+    amount !== String(balance) || paidOn !== shopToday() || mode !== "CASH" || showroom.trim().length > 0,
+  );
   const save = useMutation({
     mutationFn: () => {
       const value = Number(amount);
@@ -758,6 +764,7 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
 
 function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; onSaved: () => void; onRemoved: () => void }) {
   const [remarks, setRemarks] = useState("");
+  useUnsavedWork("bill-cancel", remarks.trim().length > 0);
   const empty = invoice.lines.length === 0 && invoice.payments.length === 0;
   const cancel = useMutation({
     mutationFn: () =>
@@ -822,6 +829,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [customerId, setCustomerId] = useState("");
   const [walkIn, setWalkIn] = useState("");
   const [phone, setPhone] = useState("");
+  useUnsavedWork("new-bill", q.trim().length > 0 || customerId.length > 0 || walkIn.trim().length > 0 || phone.trim().length > 0);
   const customers = useQuery({
     queryKey: ["customers", "bill", q],
     queryFn: () => {

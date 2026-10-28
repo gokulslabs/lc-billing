@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
 import { STITCHING_STATUSES, type StitchingMeasurement, type StitchingOrder, type StitchingProduct, type StitchingStatus } from "@/lib/stitching";
@@ -265,6 +266,24 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
   const [amount, setAmount] = useState("0");
   const [measurements, setMeasurements] = useState<StitchingMeasurement[]>([{ label: "", value: "" }]);
   const [seen, setSeen] = useState<string | null>(null);
+  const savedMeasurements = order?.measurements.length ? order.measurements : [{ label: "", value: "" }];
+  const orderDirty = order
+    ? customerId !== order.customerId ||
+      productId !== order.productId ||
+      bagNo !== (order.bagNo ?? "") ||
+      orderedOn !== order.orderedOn ||
+      deliveryOn !== (order.deliveryOn ?? "") ||
+      status !== order.status ||
+      amount !== String(order.amount) ||
+      JSON.stringify(measurements) !== JSON.stringify(savedMeasurements)
+    : customerQuery.trim().length > 0 ||
+      customerId.length > 0 ||
+      productId.length > 0 ||
+      bagNo.trim().length > 0 ||
+      deliveryOn.length > 0 ||
+      amount !== "0" ||
+      measurements.some((row) => row.label.trim().length > 0 || row.value.trim().length > 0);
+  useUnsavedWork(id ? `stitch-${id}` : "stitch-new", orderDirty);
   const mode = id ?? "new";
   if (order && seen !== order.id) {
     setSeen(order.id);
