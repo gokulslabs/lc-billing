@@ -128,6 +128,7 @@ export const invoiceLineSchema = z.object({
   inventoryNo: z.string().trim().min(1, "Enter an inventory number.").max(40, "Inventory number is too long."),
   quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
   rate: z.number().min(0, "Rate cannot be negative.").max(9_999_999, "Rate is too large.").optional(),
+  discountPercent: z.number().min(0, "Discount cannot be negative.").max(100, "Discount cannot pass 100.").optional(),
   extraOff: z.number().min(0, "Extra off cannot be negative.").max(9_999_999, "Extra off is too large.").optional(),
 });
 
@@ -171,9 +172,11 @@ export function priceLine(
   groupPercent: number,
   typedRate?: number,
   extraOff?: number,
+  discountPercent?: number,
 ): { rate: number; amount: number } {
   const rate = typedRate == null ? catalogueRate : typedRate;
-  const priced = applyGroupDiscount(quantity, rate, groupPercent);
+  const percent = discountPercent == null ? groupPercent : discountPercent;
+  const priced = applyGroupDiscount(quantity, rate, percent);
   const extra = extraOff == null || extraOff <= 0 ? 0 : Math.min(priced.amount, Math.round(extraOff * 100) / 100);
   return { rate, amount: Math.round((priced.amount - extra) * 100) / 100 };
 }

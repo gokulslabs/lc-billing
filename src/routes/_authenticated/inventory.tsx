@@ -8,6 +8,7 @@ import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
 import { LabelSheet } from "@/components/app/BarcodeLabel";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -112,6 +113,23 @@ function StockPanel() {
 
   return (
     <div className="space-y-4">
+      <ExportExcelButton
+        filename="stock"
+        load={async () => {
+          const params = new URLSearchParams({ export: "1" });
+          if (deferred.trim()) params.set("q", deferred.trim());
+          if (groupId) params.set("groupId", groupId);
+          if (productId) params.set("productId", productId);
+          const data = await apiFetch<{ items: InventoryItem[] }>(`/api/inventory?${params.toString()}`);
+          return [
+            {
+              name: "Stock",
+              columns: ["Inventory no.", "Code", "Product", "Group", "Unit", "Price", "Quantity", "Status"],
+              rows: data.items.map((item) => [item.inventoryNo, item.productCode, item.productName, item.groupName, item.unit, item.price, item.quantity, item.status]),
+            },
+          ];
+        }}
+      />
       <div className="grid items-center gap-2 md:grid-cols-[minmax(12rem,1fr)_10.5rem_12rem_auto]">
           <Input
             value={q}
@@ -462,6 +480,18 @@ function BarcodePanel() {
             Print
           </Button>
         ) : null}
+        {numbers.length > 0 ? (
+          <ExportExcelButton
+            filename="barcode-labels"
+            load={async () => [
+              {
+                name: "Labels",
+                columns: ["Inventory no."],
+                rows: numbers.map((number) => [number]),
+              },
+            ]}
+          />
+        ) : null}
       </form>
       {numbers.length > 0 ? <LabelSheet labels={numbers.map((number) => ({ number, caption: "" }))} /> : null}
     </div>
@@ -501,6 +531,19 @@ function CurrentStockPanel() {
             Back
           </Button>
           <p className="text-sm text-muted-foreground">{selected?.name ?? "Group"} · available stock</p>
+          <ExportExcelButton
+            filename="current-stock"
+            load={async () => {
+              const data = await apiFetch<{ items: InventoryItem[] }>(`/api/inventory?groupId=${groupId}&available=1&export=1`);
+              return [
+                {
+                  name: "Current stock",
+                  columns: ["Inventory no.", "Code", "Product", "Qty", "Price", "Amount"],
+                  rows: data.items.map((item) => [item.inventoryNo, item.productCode, item.productName, item.quantity, item.price, lineAmount(item.quantity, item.price)]),
+                },
+              ];
+            }}
+          />
         </div>
         {detail.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
         {rows.length === 0 && !detail.isLoading ? <p className="text-sm text-muted-foreground">No available stock in this group.</p> : null}
@@ -545,8 +588,18 @@ function CurrentStockPanel() {
       {groups.length > 0 ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            {formatQty(summary.data?.quantity ?? 0)} on the shelf across {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. A piece counts as 1 and fabric counts as metres, so this is not the number of rows on the stock list. Sold numbers stay on that list and are not in this total.
+            {formatQty(summary.data?.quantity ?? 0)} on the shelf across {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. A piece counts as 1 and fabric counts as metres, so this is not the number of rows on the stock list.             Sold numbers stay on that list and are not in this total.
           </p>
+          <ExportExcelButton
+            filename="current-stock"
+            load={async () => [
+              {
+                name: "Current stock",
+                columns: ["Group", "Quantity", "Amount"],
+                rows: groups.map((group) => [group.name, group.quantity, group.amount]),
+              },
+            ]}
+          />
         <div className="rounded-2xl border border-border bg-card">
           <Table>
             <TableHeader>
@@ -622,11 +675,27 @@ function PurchasesPanel() {
         <Button type="submit" className="rounded-full">
           Get
         </Button>
-        {rows.length > 0 ? (
-          <Button type="button" variant="outline" className="rounded-full" onClick={() => downloadPurchases(rows)}>
-            Spreadsheet
-          </Button>
-        ) : null}
+        <ExportExcelButton
+          filename="purchases"
+          load={async () => [
+            {
+              name: "Purchases",
+              columns: ["Date", "Product code", "Product group", "Product name", "Supplier", "Supplier bill", "Cost", "Quantity", "Unit", "Inventory nos."],
+              rows: rows.map((row) => [
+                row.date,
+                row.productCode,
+                row.groupName,
+                row.productName,
+                receiptBlank(row.supplierName),
+                receiptBlank(row.supplierBillNo),
+                row.cost,
+                row.quantity,
+                row.unit,
+                formatPurchaseNumbers(row.inventoryNos),
+              ]),
+            },
+          ]}
+        />
       </form>
       {purchases.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {purchases.error instanceof Error ? <p className="text-sm text-destructive">{purchases.error.message}</p> : null}
@@ -674,34 +743,6 @@ function PurchasesPanel() {
       ) : null}
     </div>
   );
-}
-
-function downloadPurchases(rows: PurchaseLine[]) {
-  const header = ["Date", "Product code", "Product group", "Product name", "Supplier", "Supplier bill", "Cost", "Quantity", "Unit", "Inventory nos."];
-  const body = rows.map((row) => [
-    row.date,
-    row.productCode,
-    row.groupName,
-    row.productName,
-    receiptBlank(row.supplierName),
-    receiptBlank(row.supplierBillNo),
-    row.cost == null ? "Migrated — not recorded" : String(row.cost),
-    String(row.quantity),
-    row.unit,
-    formatPurchaseNumbers(row.inventoryNos),
-  ]);
-  const csv = [header, ...body].map((line) => line.map(csvCell).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "purchases.csv";
-  link.click();
-  URL.revokeObjectURL(url);
-}
-
-function csvCell(value: string): string {
-  return `"${value.replace(/"/g, '""')}"`;
 }
 
 function receiptBlank(value: string): string {

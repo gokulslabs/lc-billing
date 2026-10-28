@@ -7,6 +7,7 @@ import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
 import { STITCHING_STATUSES, type StitchingMeasurement, type StitchingOrder, type StitchingProduct, type StitchingStatus } from "@/lib/stitching";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,9 +66,40 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                 : "Order, bag, customer, garment, and the two dates from the old list."}
           </p>
         </div>
-        <Button className="rounded-full" onClick={() => onOpen("new")}>
-          New order
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          {status === "board" ? null : (
+          <ExportExcelButton
+            filename="stitching-orders"
+            load={async () => {
+              const params = new URLSearchParams({ export: "1" });
+              if (deferred.trim()) params.set("q", deferred.trim());
+              if (status === "soon" || status === "today" || status === "week" || status === "overdue") params.set("due", status);
+              else if (status && status !== "board") params.set("status", status);
+              const data = await apiFetch<{ orders: StitchingOrder[] }>(`/api/stitching-orders?${params.toString()}`);
+              return [
+                {
+                  name: "Orders",
+                  columns: ["Order", "Bag", "Customer", "Phone", "Garment", "Ordered", "Delivery", "Status", "Amount"],
+                  rows: data.orders.map((order) => [
+                    order.orderNo,
+                    order.bagNo ?? "",
+                    order.customerName,
+                    order.customerPhone,
+                    order.productName,
+                    order.orderedOn,
+                    order.deliveryOn ?? "",
+                    order.status,
+                    order.amount,
+                  ]),
+                },
+              ];
+            }}
+          />
+          )}
+          <Button className="rounded-full" onClick={() => onOpen("new")}>
+            New order
+          </Button>
+        </div>
       </div>
       <div className="flex flex-wrap gap-3">
         <Input
@@ -361,7 +393,21 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
         <Button variant="outline" className="rounded-full" onClick={onBack}>
           Back
         </Button>
-        <h1 className="mt-4 text-4xl font-semibold">{order ? `Order ${order.orderNo}` : "New order"}</h1>
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-semibold">{order ? `Order ${order.orderNo}` : "New order"}</h1>
+          {order ? (
+            <ExportExcelButton
+              filename={`order-${order.orderNo}`}
+              load={async () => [
+                {
+                  name: "Measurements",
+                  columns: ["Field", "Value"],
+                  rows: order.measurements.map((measurement) => [measurement.label, measurement.value]),
+                },
+              ]}
+            />
+          ) : null}
+        </div>
         <p className="mt-2 text-sm text-muted-foreground">Measurements stay as written, including values such as 36+4.</p>
       </div>
       {existing.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}

@@ -3,7 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
 import { billTotals, moneyBalance, monthStart, pendingTotals, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
 import { billBook, paymentStatus, shopToday } from "@/lib/sales";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
 type Env = { Variables: { userId: string } };
@@ -173,8 +173,13 @@ reports.get("/pending", async (c) => {
     ];
   });
   const totals = pendingTotals(pending);
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
   const start = (page - 1) * PAGE_SIZE;
-  const slice = pending.slice(start, start + PAGE_SIZE);
+  const slice = exporting ? pending : pending.slice(start, start + PAGE_SIZE);
   const customers = await loadCustomers(slice.map((row) => row.customerId));
   if (!customers) return c.json({ error: "Could not load pending bills." }, 500);
   return c.json({

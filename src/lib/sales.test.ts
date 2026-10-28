@@ -80,6 +80,9 @@ describe("priceLine", () => {
   it("uses a typed rate and takes extra rupees off after the group discount", () => {
     expect(priceLine(1, 1000, 10)).toEqual({ rate: 1000, amount: 900 });
     expect(priceLine(1, 1000, 10, 800, 50)).toEqual({ rate: 800, amount: 670 });
+    expect(priceLine(1, 1000, 10, undefined, undefined, 25)).toEqual({ rate: 1000, amount: 750 });
+    expect(priceLine(1, 1000, 10, undefined, 50, 20)).toEqual({ rate: 1000, amount: 750 });
+    expect(priceLine(1, 1000, 10, undefined, undefined, 0)).toEqual({ rate: 1000, amount: 1000 });
   });
 });
 

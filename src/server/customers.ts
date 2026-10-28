@@ -10,7 +10,7 @@ import {
   type CustomerOrder,
 } from "@/lib/customers";
 import { pageRange, readPage } from "@/lib/paging";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
 type Env = { Variables: { userId: string } };
@@ -45,6 +45,18 @@ customers.get("/", async (c) => {
   const safe = q.replace(/[%_,]/g, "");
   const page = readPage(c.req.query("page"));
   const picker = c.req.query("picker") === "1" && Boolean(safe);
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+    const loaded = await readAll<CustomerRow>((from, to) => {
+      const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no").order("name").order("id");
+      const filtered = safe ? ranked.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%`) : ranked;
+      return filtered.range(from, to);
+    });
+    if (!loaded) return c.json({ error: "Could not load customers." }, 500);
+    return c.json({ customers: loaded.rows.map(toCustomer), total: loaded.rows.length, page: 1 });
+  }
   const { from, to } = picker ? { from: 0, to: 199 } : pageRange(page);
   const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no", { count: "exact" }).order("name").order("id");
   const filtered = safe ? ranked.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%`) : ranked;
@@ -60,6 +72,47 @@ customers.get("/:id/history", async (c) => {
   const { data, error } = await supabaseAdmin.from("customers").select("id, name, address, phone, book_no").eq("id", id).maybeSingle();
   if (error) return c.json({ error: "Could not load this customer." }, 500);
   if (!data) return c.json({ error: "Customer not found." }, 404);
+
+  if (c.req.query("export") === "1") {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+    const [billLoaded, orderLoaded, totals] = await Promise.all([
+      readAll<BillRow>((from, to) =>
+        supabaseAdmin
+          .from("invoices")
+          .select("id, bill_no, billed_on, status")
+          .eq("customer_id", id)
+          .order("billed_on", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to),
+      ),
+      readAll<OrderRow>((from, to) =>
+        supabaseAdmin
+          .from("stitching_orders")
+          .select("id, order_no, bag_no, stitching_product_id, ordered_on, delivery_on, status, amount")
+          .eq("customer_id", id)
+          .order("ordered_on", { ascending: false })
+          .order("id", { ascending: false })
+          .range(from, to),
+      ),
+      customerTotals(id),
+    ]);
+    if (!billLoaded || !orderLoaded || !totals) return c.json({ error: "Could not load this customer's history." }, 500);
+    const detailed = await billDetails(billLoaded.rows);
+    const garments = await garmentNames(orderLoaded.rows.map((row) => row.stitching_product_id));
+    if (!detailed || !garments) return c.json({ error: "Could not load this customer's history." }, 500);
+    return c.json({
+      customer: toCustomer(data as CustomerRow),
+      bills: billLoaded.rows.map((row) => detailed.get(row.id) ?? emptyBill(row)),
+      billTotal: billLoaded.rows.length,
+      billPage: 1,
+      billed: totals.billed,
+      collected: totals.collected,
+      orders: orderLoaded.rows.map((row) => toOrder(row, garments.get(row.stitching_product_id ?? "") ?? "")),
+      orderTotal: orderLoaded.rows.length,
+      orderPage: 1,
+    });
+  }
 
   const billsRange = pageRange(billPage);
   const ordersRange = pageRange(orderPage);

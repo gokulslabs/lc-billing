@@ -11,6 +11,7 @@ import {
   type ProductGroup,
   type Unit,
 } from "@/lib/products";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import {
@@ -154,9 +155,27 @@ function ProductPanel({
             </SelectContent>
           </Select>
         </div>
-        <Button className="rounded-full" onClick={() => setEditor("new")} disabled={groups.length === 0}>
-          Add product
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportExcelButton
+            filename="products"
+            load={async () => {
+              const params = new URLSearchParams({ picker: "1" });
+              if (q.trim()) params.set("q", q.trim());
+              if (groupId) params.set("groupId", groupId);
+              const data = await apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
+              return [
+                {
+                  name: "Products",
+                  columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
+                  rows: data.products.map((product) => [product.code, product.groupName, product.name, product.unit, product.price, product.discountPercent]),
+                },
+              ];
+            }}
+          />
+          <Button className="rounded-full" onClick={() => setEditor("new")} disabled={groups.length === 0}>
+            Add product
+          </Button>
+        </div>
       </div>
       {groups.length === 0 && !loading ? (
         <p className="text-sm text-muted-foreground">Add a product group first. Sarees, blouse, fabrics and the rest live there.</p>
@@ -237,7 +256,17 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
   const [editor, setEditor] = useState<ProductGroup | "new" | null>(null);
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <ExportExcelButton
+          filename="product-groups"
+          load={async () => [
+            {
+              name: "Groups",
+              columns: ["Group", "Code", "Discount %", "Products"],
+              rows: groups.map((group) => [group.name, group.code, group.discountPercent, group.productCount]),
+            },
+          ]}
+        />
         <Button className="rounded-full" onClick={() => setEditor("new")}>
           Add group
         </Button>

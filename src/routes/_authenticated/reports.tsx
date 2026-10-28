@@ -2,6 +2,7 @@ import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
 import { billStatusLabel, shopToday } from "@/lib/sales";
@@ -142,7 +143,12 @@ function ReportsPage() {
       {result.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {result.error instanceof Error ? <p className="text-sm text-destructive">{result.error.message}</p> : null}
       {result.data?.note ? <p className="text-sm text-muted-foreground">{result.data.note}</p> : null}
-      {result.data ? <ReportTable sheet={result.data} /> : null}
+      {result.data ? (
+        <ReportTable
+          sheet={result.data}
+          {...(report === "pending" ? { onExport: () => loadReport("pending", applied, 1, true) } : {})}
+        />
+      ) : null}
       {report === "pending" && result.data ? (
         <ListFooter page={page} total={result.data.total ?? 0} shown={result.data.rows.length} onPage={setPage} />
       ) : null}
@@ -150,15 +156,33 @@ function ReportsPage() {
   );
 }
 
-type Sheet = { columns: string[]; rows: string[][]; note?: string; totalRow?: string[]; total?: number };
+type SheetCell = string | number;
+type Sheet = { columns: string[]; rows: SheetCell[][]; note?: string; totalRow?: SheetCell[]; total?: number };
 
-function ReportTable({ sheet }: { sheet: Sheet }) {
+const MONEY = new Set(["Gross", "Disc.", "Net", "Rate", "Amount", "Inv amount", "Paid", "Balance"]);
+
+function showCell(column: string, value: SheetCell): string {
+  if (typeof value !== "number") return value;
+  return MONEY.has(column) ? formatRupees(value) : String(value);
+}
+
+function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promise<Sheet> }) {
   return (
     <div className="space-y-3">
       {sheet.rows.length > 0 || sheet.totalRow ? (
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => downloadSheet(sheet)}>
-          Spreadsheet
-        </Button>
+        <ExportExcelButton
+          filename="report"
+          load={async () => {
+            const chosen = onExport ? await onExport() : sheet;
+            return [
+              {
+                name: "Report",
+                columns: chosen.columns,
+                rows: [...chosen.rows, ...(chosen.totalRow ? [chosen.totalRow] : [])],
+              },
+            ];
+          }}
+        />
       ) : (
         <p className="text-sm text-muted-foreground">Nothing in this report.</p>
       )}
@@ -177,7 +201,7 @@ function ReportTable({ sheet }: { sheet: Sheet }) {
                 <TableRow key={index}>
                   {row.map((cell, cellIndex) => (
                     <TableCell key={cellIndex} className={cellIndex === 0 ? "font-medium" : undefined}>
-                      {cell}
+                      {showCell(sheet.columns[cellIndex] ?? "", cell)}
                     </TableCell>
                   ))}
                 </TableRow>
@@ -187,7 +211,7 @@ function ReportTable({ sheet }: { sheet: Sheet }) {
               <TableFooter>
                 <TableRow>
                   {sheet.totalRow.map((cell, cellIndex) => (
-                    <TableCell key={cellIndex}>{cell}</TableCell>
+                    <TableCell key={cellIndex}>{showCell(sheet.columns[cellIndex] ?? "", cell)}</TableCell>
                   ))}
                 </TableRow>
               </TableFooter>
@@ -205,7 +229,12 @@ function bookNote(books: "new" | "old"): string {
     : "Live book. Every bill from 26 Oct 2026 that still has a balance is here. The total is every bill in this book, not only this page. Old book — copied balances is the other choice. Do not add the two lists together.";
 }
 
-async function loadReport(report: ReportId, range: { from: string; to: string; date: string; books: "new" | "old" }, page: number): Promise<Sheet> {
+async function loadReport(
+  report: ReportId,
+  range: { from: string; to: string; date: string; books: "new" | "old" },
+  page: number,
+  full = false,
+): Promise<Sheet> {
   const dates = `from=${range.from}&to=${range.to}`;
   if (report === "invoices") {
     const data = await apiFetch<{ invoices: { billNo: string; billedOn: string; customerName: string; gross: number; discount: number; net: number }[] }>(
@@ -216,16 +245,8 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
     const net = sumRupees(data.invoices.map((row) => row.net));
     return {
       columns: ["Sl.no.", "Invoice no.", "Date", "Customer", "Gross", "Disc.", "Net"],
-      rows: data.invoices.map((row, index) => [
-        String(index + 1),
-        row.billNo,
-        row.billedOn,
-        row.customerName,
-        formatRupees(row.gross),
-        formatRupees(row.discount),
-        formatRupees(row.net),
-      ]),
-      totalRow: ["Total", "", "", "", formatRupees(gross), formatRupees(discount), formatRupees(net)],
+      rows: data.invoices.map((row, index) => [index + 1, row.billNo, row.billedOn, row.customerName, row.gross, row.discount, row.net]),
+      totalRow: ["Total", "", "", "", gross, discount, net],
     };
   }
   if (report === "items" || report === "extract") {
@@ -254,7 +275,7 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         "Amount",
       ],
       rows: rows.map((row, index) => [
-        String(index + 1),
+        index + 1,
         "—",
         row.billNo,
         row.billedOn,
@@ -263,11 +284,11 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         row.productCode,
         row.productName,
         "—",
-        String(row.quantity),
-        formatRupees(row.rate),
-        formatRupees(row.amount),
+        row.quantity,
+        row.rate,
+        row.amount,
       ]),
-      totalRow: ["Total", "", "", "", ...(withCustomer ? [""] : []), "", "", "", "", String(quantity), "", formatRupees(amount)],
+      totalRow: ["Total", "", "", "", ...(withCustomer ? [""] : []), "", "", "", "", quantity, "", amount],
     };
   }
   if (report === "collections") {
@@ -277,15 +298,15 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
     return {
       columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Payment mode", "Remarks", "Amount"],
       rows: data.collections.map((row, index) => [
-        String(index + 1),
+        index + 1,
         row.showroom || "—",
         row.billNo,
         row.paidOn,
         row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
         row.remarks || "—",
-        formatRupees(row.amount),
+        row.amount,
       ]),
-      totalRow: ["Total", "", "", "", "", "", formatRupees(sumRupees(data.collections.map((row) => row.amount)))],
+      totalRow: ["Total", "", "", "", "", "", sumRupees(data.collections.map((row) => row.amount))],
     };
   }
   if (report === "showrooms") {
@@ -300,9 +321,9 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         row.customerName || "—",
         row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
         row.showroom || "—",
-        formatRupees(row.amount),
+        row.amount,
       ]),
-      totalRow: ["Total", "", "", "", "", formatRupees(sumRupees(data.payments.map((row) => row.amount)))],
+      totalRow: ["Total", "", "", "", "", sumRupees(data.payments.map((row) => row.amount))],
     };
   }
   if (report === "pending") {
@@ -310,20 +331,20 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
       pending: { customerName: string; billNo: string; billedOn: string; showroom: string | null; invoiced: number; paid: number; balance: number; status: string }[];
       total: number;
       totals: { invoiced: number; paid: number; balance: number };
-    }>(`/api/reports/pending?books=${range.books}&page=${page}`);
-    const start = (page - 1) * 50;
+    }>(`/api/reports/pending?books=${range.books}&page=${full ? 1 : page}${full ? "&export=1" : ""}`);
+    const start = full ? 0 : (page - 1) * 50;
     return {
       note: bookNote(range.books),
       columns: ["Sl.no.", "Customer", "Showroom", "Bill no.", "Date", "Inv amount", "Paid", "Balance", "Status"],
       rows: data.pending.map((row, index) => [
-        String(start + index + 1),
+        start + index + 1,
         row.customerName || "—",
         row.showroom || "—",
         row.billNo,
         row.billedOn,
-        formatRupees(row.invoiced),
-        formatRupees(row.paid),
-        formatRupees(row.balance),
+        row.invoiced,
+        row.paid,
+        row.balance,
         billStatusLabel(row.status),
       ]),
       total: data.total,
@@ -333,9 +354,9 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         "",
         "",
         "",
-        formatRupees(data.totals.invoiced),
-        formatRupees(data.totals.paid),
-        formatRupees(data.totals.balance),
+        data.totals.invoiced,
+        data.totals.paid,
+        data.totals.balance,
         "",
       ],
     };
@@ -355,12 +376,12 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
         row.inventoryNo,
         row.productCode,
         row.productName,
-        String(row.received),
-        String(row.billed),
-        String(row.onHand),
-        String(row.difference),
+        row.received,
+        row.billed,
+        row.onHand,
+        row.difference,
       ]),
-      totalRow: ["Total", "", "", String(received), String(billed), String(onHand), String(difference)],
+      totalRow: ["Total", "", "", received, billed, onHand, difference],
     };
   }
   const data = await apiFetch<{ returns: { billNo: string; billedOn: string; customerName: string; net: number; remarks: string | null }[] }>(
@@ -369,14 +390,14 @@ async function loadReport(report: ReportId, range: { from: string; to: string; d
   return {
     columns: ["Sl.no.", "Bill no.", "Date", "Customer", "Net", "Remarks"],
     rows: data.returns.map((row, index) => [
-      String(index + 1),
+      index + 1,
       row.billNo,
       row.billedOn,
       row.customerName,
-      formatRupees(row.net),
+      row.net,
       row.remarks || "—",
     ]),
-    totalRow: ["Total", "", "", "", formatRupees(sumRupees(data.returns.map((row) => row.net))), ""],
+    totalRow: ["Total", "", "", "", sumRupees(data.returns.map((row) => row.net)), ""],
   };
 }
 
@@ -388,14 +409,3 @@ function sumRupees(values: number[]): number {
   return values.reduce((sum, value) => (Math.round(sum * 100) + Math.round(value * 100)) / 100, 0);
 }
 
-function downloadSheet(sheet: Sheet) {
-  const lines = sheet.totalRow ? [sheet.columns, ...sheet.rows, sheet.totalRow] : [sheet.columns, ...sheet.rows];
-  const csv = lines.map((line) => line.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(",")).join("\n");
-  const blob = new Blob([csv], { type: "text/csv" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = "report.csv";
-  link.click();
-  URL.revokeObjectURL(url);
-}

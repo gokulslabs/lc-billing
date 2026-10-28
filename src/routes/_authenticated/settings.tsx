@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { StitchingGarment, StitchingProcess } from "@/lib/settings";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -32,7 +33,29 @@ function SettingsPage() {
   return (
     <div className="mx-auto max-w-4xl space-y-8 p-6 md:p-10">
       <div>
-        <h1 className="text-4xl font-semibold">Settings</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-semibold">Settings</h1>
+          <ExportExcelButton
+            filename="settings"
+            load={async () => [
+              {
+                name: "Garments",
+                columns: ["Garment"],
+                rows: garments.map((garment) => [garment.name]),
+              },
+              {
+                name: "Measurements",
+                columns: ["Garment", "Field"],
+                rows: garments.flatMap((garment) => garment.measurements.map((field) => [garment.name, field.label])),
+              },
+              {
+                name: "Processes",
+                columns: ["Process"],
+                rows: processes.map((process) => [process.name]),
+              },
+            ]}
+          />
+        </div>
         <p className="mt-2 text-sm text-muted-foreground">
           Stitching garments, the measurement heads for each garment, and the process list. Names can be added or removed.
         </p>

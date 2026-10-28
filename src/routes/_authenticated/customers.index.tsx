@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import type { Customer } from "@/lib/customers";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import {
@@ -52,9 +53,27 @@ function CustomersPage() {
           <h1 className="text-4xl font-semibold">Customers</h1>
           <p className="mt-2 text-sm text-muted-foreground">Name, address, phone and book number. Open a name to see their bills and stitching.</p>
         </div>
-        <Button className="rounded-full" onClick={() => setEditor("new")}>
-          Add customer
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <ExportExcelButton
+            filename="customers"
+            load={async () => {
+              const params = new URLSearchParams();
+              if (deferred.trim()) params.set("q", deferred.trim());
+              params.set("export", "1");
+              const data = await apiFetch<{ customers: Customer[] }>(`/api/customers?${params.toString()}`);
+              return [
+                {
+                  name: "Customers",
+                  columns: ["Name", "Phone", "Book no.", "Address"],
+                  rows: data.customers.map((customer) => [customer.name, customer.phone ?? "", customer.bookNo ?? "", customer.address ?? ""]),
+                },
+              ];
+            }}
+          />
+          <Button className="rounded-full" onClick={() => setEditor("new")}>
+            Add customer
+          </Button>
+        </div>
       </div>
       <Input
         value={q}

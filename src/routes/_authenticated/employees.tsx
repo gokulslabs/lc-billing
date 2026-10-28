@@ -15,6 +15,7 @@ import {
   type Gender,
 } from "@/lib/employees";
 import { Badge } from "@/components/ui/badge";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -83,9 +84,29 @@ function EmployeesPage() {
           <p className="mt-2 text-sm text-muted-foreground">Add staff and choose who can manage the shop.</p>
         </div>
         {!denied && (
-          <Button className="rounded-full" onClick={() => setEditor("new")}>
-            Add employee
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <ExportExcelButton
+              filename="employees"
+              load={async () => [
+                {
+                  name: "Employees",
+                  columns: ["Name", "Email", "Mobile", "Department", "Gender", "Address", "Access"],
+                  rows: (employees.data?.employees ?? []).map((employee) => [
+                    employee.fullName,
+                    employee.email,
+                    employee.mobile ?? "",
+                    employee.department,
+                    employee.gender ?? "",
+                    employee.address ?? "",
+                    employee.role,
+                  ]),
+                },
+              ]}
+            />
+            <Button className="rounded-full" onClick={() => setEditor("new")}>
+              Add employee
+            </Button>
+          </div>
         )}
       </div>
 

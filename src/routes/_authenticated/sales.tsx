@@ -8,6 +8,7 @@ import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
 import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -185,6 +186,21 @@ function SalesHome({
           <TabsTrigger value="close">Day close</TabsTrigger>
         </TabsList>
         <TabsContent value="bills" className="space-y-4">
+          <ExportExcelButton
+            filename="bills"
+            load={async () => {
+              const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
+                `/api/invoices${query({ q: deferred, from, to, pay, sort, dir: direction, export: true })}`,
+              );
+              return [
+                {
+                  name: "Bills",
+                  columns: ["Bill no.", "Date", "Customer", "Gross", "Discount", "Net", "Collected", "Balance", "Status"],
+                  rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.customerName, bill.gross, bill.discount, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+                },
+              ];
+            }}
+          />
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
           {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
           {!bills.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No bills yet.</p> : null}
@@ -235,6 +251,19 @@ function SalesHome({
           <ListFooter page={page} total={bills.data?.total ?? 0} shown={rows.length} onPage={setPage} />
         </TabsContent>
         <TabsContent value="items" className="space-y-4">
+          <ExportExcelButton
+            filename="bill-items"
+            load={async () => {
+              const data = await apiFetch<{ items: InvoiceItem[] }>(`/api/invoices/items${query({ q: deferred, from, to, export: true })}`);
+              return [
+                {
+                  name: "Bill items",
+                  columns: ["Bill no.", "Date", "Customer", "Inventory no.", "Code", "Group", "Product", "Qty", "Rate", "Amount"],
+                  rows: data.items.map((item) => [item.billNo, item.billedOn, item.customerName, item.inventoryNo, item.productCode, item.groupName, item.productName, item.quantity, item.rate, item.amount]),
+                },
+              ];
+            }}
+          />
           {items.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
           {items.error instanceof Error ? <p className="text-sm text-destructive">{items.error.message}</p> : null}
           {(items.data?.items.length ?? 0) === 0 && !items.isLoading ? (
@@ -326,7 +355,26 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           >
             Back
           </Button>
-          <h1 className="mt-4 text-4xl font-semibold">{invoice ? `Bill ${invoice.billNo}` : "Bill"}</h1>
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <h1 className="text-4xl font-semibold">{invoice ? `Bill ${invoice.billNo}` : "Bill"}</h1>
+            {invoice ? (
+              <ExportExcelButton
+                filename={`bill-${invoice.billNo}`}
+                load={async () => [
+                  {
+                    name: "Lines",
+                    columns: ["Inventory no.", "Code", "Product", "Qty", "Rate", "Amount"],
+                    rows: invoice.lines.map((line) => [line.inventoryNo, line.productCode, line.productName, line.quantity, line.rate, line.amount]),
+                  },
+                  {
+                    name: "Payments",
+                    columns: ["Date", "Mode", "Showroom", "Amount"],
+                    rows: invoice.payments.map((payment) => [payment.paidOn, payment.mode ?? "", payment.showroom ?? "", payment.amount]),
+                  },
+                ]}
+              />
+            ) : null}
+          </div>
           {invoice ? (
             <p className="mt-2 text-sm text-muted-foreground">
               <Link to="/customers/$customerId" params={{ customerId: invoice.customerId }} className="hover:underline">
@@ -443,17 +491,23 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
   const [lookup, setLookup] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [rate, setRate] = useState("");
+  const [discountPercent, setDiscountPercent] = useState("");
   const [extraOff, setExtraOff] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const valueRef = useRef("");
   const quantityRef = useRef(quantity);
   const rateRef = useRef(rate);
+  const discountRef = useRef(discountPercent);
   const extraRef = useRef(extraOff);
   const addRef = useRef<(raw: string) => Promise<void>>(async () => {});
   quantityRef.current = quantity;
   rateRef.current = rate;
+  discountRef.current = discountPercent;
   extraRef.current = extraOff;
-  useUnsavedWork("bill-line", inventoryNo.trim().length > 0 || rate.trim().length > 0 || extraOff.trim().length > 0 || quantity !== "1");
+  useUnsavedWork(
+    "bill-line",
+    inventoryNo.trim().length > 0 || rate.trim().length > 0 || discountPercent.trim().length > 0 || extraOff.trim().length > 0 || quantity !== "1",
+  );
   useEffect(() => {
     const handle = window.setTimeout(() => setLookup(inventoryNo.trim()), 300);
     return () => window.clearTimeout(handle);
@@ -511,8 +565,10 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       try {
         if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
         const typedRate = rateRef.current.trim() === "" ? undefined : Number(rateRef.current);
+        const typedPercent = discountRef.current.trim() === "" ? undefined : Number(discountRef.current);
         const typedExtra = extraRef.current.trim() === "" ? undefined : Number(extraRef.current);
         if (typedRate !== undefined && !Number.isFinite(typedRate)) throw new Error("Enter a rate.");
+        if (typedPercent !== undefined && !Number.isFinite(typedPercent)) throw new Error("Enter a discount percent.");
         if (typedExtra !== undefined && !Number.isFinite(typedExtra)) throw new Error("Enter the extra off.");
         await apiFetch(`/api/invoices/${invoiceId}/lines`, {
           method: "POST",
@@ -520,6 +576,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
             inventoryNo: next,
             quantity: amount,
             ...(typedRate === undefined ? {} : { rate: typedRate }),
+            ...(typedPercent === undefined ? {} : { discountPercent: typedPercent }),
             ...(typedExtra === undefined ? {} : { extraOff: typedExtra }),
           }),
         });
@@ -533,8 +590,10 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
     setBusy(false);
     setQuantity("1");
     setRate("");
+    setDiscountPercent("");
     setExtraOff("");
     rateRef.current = "";
+    discountRef.current = "";
     extraRef.current = "";
     inputRef.current?.focus();
   };
@@ -575,6 +634,15 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           placeholder={preview.data ? String(preview.data.preview.rate) : "Catalogue"}
         />
       </Field>
+      <Field label="Discount %" id="line-discount">
+        <Input
+          id="line-discount"
+          value={discountPercent}
+          onChange={(event) => setDiscountPercent(event.target.value)}
+          className="w-28"
+          placeholder={preview.data ? String(preview.data.preview.discountPercent) : "Group"}
+        />
+      </Field>
       <Field label="Extra off" id="line-extra">
         <Input id="line-extra" value={extraOff} onChange={(event) => setExtraOff(event.target.value)} className="w-28" placeholder="₹" />
       </Field>
@@ -593,7 +661,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         <p className="pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
       <p className="w-full text-sm text-muted-foreground">
-        Scan the sticker. Leave rate blank for the catalogue price. The group discount still comes off, then extra off.
+        Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the group percent. Extra off comes off after that.
       </p>
     </form>
   );
@@ -946,29 +1014,147 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
 function Receipt({ invoice }: { invoice: InvoiceDetail }) {
   const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
   const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
+  const showDiscount = discount > 0.001;
   return (
-    <section className="receipt hidden print:block">
-      <style>{`@media print { body * { visibility: hidden !important; } .receipt, .receipt * { visibility: visible !important; } .receipt { position: absolute; left: 0; top: 0; width: 100%; background: white; color: black; padding: 24px; } }`}</style>
-      <p className="text-xs uppercase tracking-[0.2em]">Ladies Collections</p>
-      <p className="text-sm">Thank you.</p>
-      <h1 className="mt-2 text-3xl font-semibold">Bill {invoice.billNo}</h1>
-      <p className="mt-1 text-sm">{invoice.customerName} · {invoice.billedOn}</p>
-      <div className="mt-4 space-y-2 text-sm">
-        {invoice.lines.map((line) => (
-          <p key={line.id}>
-            {line.inventoryNo} · {line.productName} · {line.quantity} × {formatRupees(line.rate)}
-            {line.discount ? ` · off ${formatRupees(line.discount)}` : ""} · {formatRupees(line.amount)}
-          </p>
-        ))}
+    <section className="receipt">
+      <style>{`
+        .receipt { display: none; }
+        @media print {
+          @page { size: A4; margin: 14mm; }
+          body * { visibility: hidden !important; }
+          .receipt, .receipt * { visibility: visible !important; }
+          .receipt {
+            display: block !important;
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            color: #111;
+            background: white;
+            font-family: Georgia, "Times New Roman", serif;
+          }
+        }
+        .receipt-sheet { border: 1px solid #111; padding: 28px 32px 36px; }
+        .receipt-shop { margin: 0; text-align: center; font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; }
+        .receipt-rule { border: none; border-top: 1px solid #111; margin: 12px 0; }
+        .receipt-title { margin: 0; text-align: center; font-size: 28px; font-weight: 600; letter-spacing: 0.18em; }
+        .receipt-meta, .receipt-lines, .receipt-totals, .receipt-paid { width: 100%; border-collapse: collapse; }
+        .receipt-meta td { padding: 3px 0; font-size: 14px; vertical-align: top; }
+        .receipt-meta .label, .receipt-lines th { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
+        .receipt-lines { margin-top: 18px; }
+        .receipt-lines th { border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 8px 6px; text-align: left; font-weight: 600; }
+        .receipt-lines td { border-bottom: 1px solid #ccc; padding: 8px 6px; font-size: 13px; vertical-align: top; }
+        .receipt-lines .item { font-weight: 600; }
+        .receipt-lines .sub { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; letter-spacing: 0.02em; }
+        .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+        .receipt-totals { margin-top: 8px; margin-left: auto; width: 260px; }
+        .receipt-totals td { padding: 4px 6px; font-size: 14px; }
+        .receipt-totals .balance td { border-top: 2px solid #111; padding-top: 10px; font-size: 16px; font-weight: 700; }
+        .receipt-paid { margin-top: 18px; }
+        .receipt-paid th { text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px; border-bottom: 1px solid #111; }
+        .receipt-paid td { padding: 6px; font-size: 13px; border-bottom: 1px solid #ccc; }
+        .receipt-thanks { margin: 36px 0 0; text-align: center; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
+      `}</style>
+      <div className="receipt-sheet">
+        <p className="receipt-shop">Ladies Collections</p>
+        <hr className="receipt-rule" />
+        <h1 className="receipt-title">Bill</h1>
+        <hr className="receipt-rule" />
+        <table className="receipt-meta">
+          <tbody>
+            <tr>
+              <td className="label">Bill no.</td>
+              <td>{invoice.billNo}</td>
+              <td className="label num">Date</td>
+              <td className="num">{slashDate(invoice.billedOn)}</td>
+            </tr>
+            <tr>
+              <td className="label">Customer</td>
+              <td colSpan={3}>{invoice.customerName}</td>
+            </tr>
+          </tbody>
+        </table>
+        <table className="receipt-lines">
+          <thead>
+            <tr>
+              <th>Sl.</th>
+              <th>Particulars</th>
+              <th className="num">Qty</th>
+              <th className="num">Rate</th>
+              {showDiscount ? <th className="num">Discount</th> : null}
+              <th className="num">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            {invoice.lines.map((line, index) => (
+              <tr key={line.id}>
+                <td>{index + 1}</td>
+                <td>
+                  <span className="item">{line.productName}</span>
+                  <span className="sub">
+                    {line.productCode} · {line.inventoryNo}
+                  </span>
+                </td>
+                <td className="num">{line.quantity}</td>
+                <td className="num">{formatRupees(line.rate)}</td>
+                {showDiscount ? <td className="num">{line.discount > 0.001 ? formatRupees(line.discount) : ""}</td> : null}
+                <td className="num">{formatRupees(line.amount)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <table className="receipt-totals">
+          <tbody>
+            <tr>
+              <td>Gross</td>
+              <td className="num">{formatRupees(gross)}</td>
+            </tr>
+            {showDiscount ? (
+              <tr>
+                <td>Discount</td>
+                <td className="num">{formatRupees(discount)}</td>
+              </tr>
+            ) : null}
+            <tr>
+              <td>Net</td>
+              <td className="num">{formatRupees(invoice.total)}</td>
+            </tr>
+            {invoice.payments.length > 0 ? (
+              <tr>
+                <td>Paid</td>
+                <td className="num">{formatRupees(invoice.collected)}</td>
+              </tr>
+            ) : null}
+            <tr className="balance">
+              <td>Balance</td>
+              <td className="num">{formatRupees(invoice.balance)}</td>
+            </tr>
+          </tbody>
+        </table>
+        {invoice.payments.length > 0 ? (
+          <table className="receipt-paid">
+            <thead>
+              <tr>
+                <th>Payment</th>
+                <th>Date</th>
+                <th>Mode</th>
+                <th className="num">Amount</th>
+              </tr>
+            </thead>
+            <tbody>
+              {invoice.payments.map((payment, index) => (
+                <tr key={payment.id}>
+                  <td>{index + 1}</td>
+                  <td>{slashDate(payment.paidOn)}</td>
+                  <td>{paymentLabel(payment.mode)}</td>
+                  <td className="num">{formatRupees(payment.amount)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : null}
+        <p className="receipt-thanks">Thank you</p>
       </div>
-      <p className="mt-4 text-sm">Gross {formatRupees(gross)} · Discount {formatRupees(discount)} · Net {formatRupees(invoice.total)}</p>
-      <p className="mt-2 text-xs">Discount is entered as an amount and shared across lines in proportion to line value; paise rounding is adjusted on the last line.</p>
-      {invoice.payments.map((payment) => (
-        <p key={payment.id} className="text-sm">
-          Paid {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
-        </p>
-      ))}
-      <p className="mt-2 text-lg font-semibold">Balance {formatRupees(invoice.balance)}</p>
     </section>
   );
 }
@@ -1018,6 +1204,19 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
       <p className="text-sm text-muted-foreground">
         These bills are on NOT RECORDED. Attach the real customer, or a named walk-in. The bill then shows in that customer’s history and in Who owes.
       </p>
+      <ExportExcelButton
+        filename="not-recorded"
+        load={async () => {
+          const data = await apiFetch<{ invoices: InvoiceSummary[] }>("/api/invoices/unrecorded?export=1");
+          return [
+            {
+              name: "Not recorded",
+              columns: ["Bill no.", "Date", "Net", "Collected", "Balance", "Status"],
+              rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+            },
+          ];
+        }}
+      />
       {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
       {!bills.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No bills are waiting for a customer.</p> : null}
@@ -1111,6 +1310,19 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-3">
+        <ExportExcelButton
+          filename="unpaid-bills"
+          load={async () => {
+            const data = await apiFetch<{ invoices: InvoiceSummary[] }>(`/api/invoices/due?books=${books}&export=1`);
+            return [
+              {
+                name: "Unpaid",
+                columns: ["Bill no.", "Date", "Customer", "Net", "Collected", "Balance", "Status"],
+                rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.customerName, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+              },
+            ];
+          }}
+        />
         <Select
           value={books}
           onValueChange={(value) => {
@@ -1191,9 +1403,23 @@ function DayClose() {
   const day = close.data;
   return (
     <div className="space-y-4">
-      <Field label="Date" id="close-date">
-        <Input id="close-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-40" />
-      </Field>
+      <div className="flex flex-wrap items-end gap-3">
+        <Field label="Date" id="close-date">
+          <Input id="close-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-40" />
+        </Field>
+        {day ? (
+          <ExportExcelButton
+            filename={`day-close-${day.date}`}
+            load={async () => [
+              {
+                name: "Day close",
+                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", "Cash", "UPI", "Card"],
+                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, day.modes.find((mode) => mode.mode === "CASH")?.amount ?? 0, day.modes.find((mode) => mode.mode === "UPI")?.amount ?? 0, day.modes.find((mode) => mode.mode === "CARD")?.amount ?? 0]],
+              },
+            ]}
+          />
+        ) : null}
+      </div>
       {close.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {close.error instanceof Error ? <p className="text-sm text-destructive">{close.error.message}</p> : null}
       {day ? (
@@ -1220,7 +1446,7 @@ function CloseCard({ label, value, note }: { label: string; value: string; note:
   );
 }
 
-function query(input: { q: string; from: string; to: string; page?: number; pay?: BillPay; sort?: BillSort; dir?: "asc" | "desc" }): string {
+function query(input: { q: string; from: string; to: string; page?: number; pay?: BillPay; sort?: BillSort; dir?: "asc" | "desc"; export?: boolean }): string {
   const params = new URLSearchParams();
   if (input.q.trim()) params.set("q", input.q.trim());
   if (input.from) params.set("from", input.from);
@@ -1229,6 +1455,7 @@ function query(input: { q: string; from: string; to: string; page?: number; pay?
   if (input.sort) params.set("sort", input.sort);
   if (input.dir) params.set("dir", input.dir);
   if (input.page) params.set("page", String(input.page));
+  if (input.export) params.set("export", "1");
   const text = params.toString();
   return text ? `?${text}` : "";
 }

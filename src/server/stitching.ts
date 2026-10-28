@@ -15,7 +15,7 @@ import {
 } from "@/lib/stitching";
 import { pageRange, readPage } from "@/lib/paging";
 import { shopToday } from "@/lib/sales";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
 type Env = { Variables: { userId: string } };
@@ -54,33 +54,51 @@ stitching.get("/", async (c) => {
     : { data: [], error: null };
   if (namedCustomers.error) return c.json({ error: "Could not search customers." }, 500);
   const customerIds = ((namedCustomers.data ?? []) as { id: string }[]).map((row) => row.id);
-  const { from, to } = pageRange(page);
   const today = shopToday();
-  const ranked = supabaseAdmin
-    .from("stitching_orders")
-    .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount", { count: "exact" });
-  const filtered =
-    due === "today"
-      ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
-      : due === "overdue"
-        ? ranked.in("status", ["PENDING", "TRIAL"]).lt("delivery_on", today)
-        : due === "week"
-          ? ranked.in("status", ["PENDING", "TRIAL"]).gt("delivery_on", today).lte("delivery_on", plusDays(today, 7))
-          : soon
-            ? ranked.in("status", ["PENDING", "TRIAL"]).lte("delivery_on", plusDays(today, 7))
-            : status
-              ? ranked.eq("status", status)
-              : ranked;
-  const searched = !safe
-    ? filtered
-    : customerIds.length > 0
-      ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
-      : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
-  const ordered =
-    due === "today" || due === "week" || due === "overdue" || soon
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
+  const ordersQuery = () => {
+    const ranked = supabaseAdmin
+      .from("stitching_orders")
+      .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount", { count: "exact" });
+    const filtered =
+      due === "today"
+        ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
+        : due === "overdue"
+          ? ranked.in("status", ["PENDING", "TRIAL"]).lt("delivery_on", today)
+          : due === "week"
+            ? ranked.in("status", ["PENDING", "TRIAL"]).gt("delivery_on", today).lte("delivery_on", plusDays(today, 7))
+            : soon
+              ? ranked.in("status", ["PENDING", "TRIAL"]).lte("delivery_on", plusDays(today, 7))
+              : status
+                ? ranked.eq("status", status)
+                : ranked;
+    const searched = !safe
+      ? filtered
+      : customerIds.length > 0
+        ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
+        : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
+    return due === "today" || due === "week" || due === "overdue" || soon
       ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
       : searched.order("ordered_on", { ascending: true }).order("id", { ascending: true });
-  const { data, error, count } = await ordered.range(from, to);
+  };
+  if (exporting) {
+    const loaded = await readAll<OrderRow>((from, to) => ordersQuery().range(from, to));
+    if (!loaded) return c.json({ error: "Could not load orders." }, 500);
+    const named = await withNames(loaded.rows);
+    if (!named) return c.json({ error: "Could not load orders." }, 500);
+    const measurements = new Map<string, StitchingMeasurement[]>();
+    return c.json({
+      orders: loaded.rows.map((row) => toOrder(row, named.customers, named.products, measurements)),
+      total: loaded.rows.length,
+      page: 1,
+    });
+  }
+  const { from, to } = pageRange(page);
+  const { data, error, count } = await ordersQuery().range(from, to);
   if (error) return c.json({ error: "Could not load orders." }, 500);
   const rows = (data ?? []) as OrderRow[];
   const named = await withNames(rows);

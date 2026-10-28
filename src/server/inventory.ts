@@ -16,7 +16,7 @@ import {
 } from "@/lib/inventory";
 import { lineAmount, shopToday } from "@/lib/sales";
 import type { Unit } from "@/lib/products";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { pageRange, readPage } from "@/lib/paging";
 import { readAll } from "@/server/read-all";
 
@@ -151,21 +151,33 @@ inventory.get("/", async (c) => {
         .map((product) => product.id)
     : [];
 
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
+  const stockQuery = () => {
+    const selected = supabaseAdmin.from("inventory_items").select("id, inventory_no, product_id, quantity, status", { count: "exact" });
+    const statused = availableOnly ? selected.eq("status", "available") : selected;
+    const scoped = allowed ? statused.in("product_id", allowed) : statused;
+    const searched = !safe
+      ? scoped
+      : nameMatches.length > 0
+        ? scoped.or(`inventory_no.ilike.%${safe}%,product_id.in.(${nameMatches.join(",")})`)
+        : scoped.ilike("inventory_no", `%${safe}%`);
+    return searched.order("created_at", { ascending: false }).order("id", { ascending: false });
+  };
+  if (exporting) {
+    const loaded = await readAll<ItemRow>((from, to) => stockQuery().range(from, to));
+    if (!loaded) return c.json({ error: "Could not load stock." }, 500);
+    const rows = loaded.rows.flatMap((row) => {
+      const product = catalogue.get(row.product_id);
+      return product ? [toItem(row, product)] : [];
+    });
+    return c.json({ items: rows, total: rows.length, page: 1 });
+  }
   const { from, to } = pageRange(page);
-  const selected = supabaseAdmin
-    .from("inventory_items")
-    .select("id, inventory_no, product_id, quantity, status", { count: "exact" });
-  const statused = availableOnly ? selected.eq("status", "available") : selected;
-  const scoped = allowed ? statused.in("product_id", allowed) : statused;
-  const searched = !safe
-    ? scoped
-    : nameMatches.length > 0
-      ? scoped.or(`inventory_no.ilike.%${safe}%,product_id.in.(${nameMatches.join(",")})`)
-      : scoped.ilike("inventory_no", `%${safe}%`);
-  const { data, error, count } = await searched
-    .order("created_at", { ascending: false })
-    .order("id", { ascending: false })
-    .range(from, to);
+  const { data, error, count } = await stockQuery().range(from, to);
   if (error) return c.json({ error: "Could not load stock." }, 500);
   const rows = ((data ?? []) as ItemRow[]).flatMap((row) => {
     const product = catalogue.get(row.product_id);

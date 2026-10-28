@@ -7,7 +7,9 @@ import { useAuth } from "@/hooks/use-auth";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
 import { clearActivity, idleWarningText } from "@/lib/idle";
 import { MODULES } from "@/lib/modules";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Logo } from "@/components/app/Logo";
+import { loadMasterExport } from "@/lib/master-export";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -148,6 +150,7 @@ function AuthenticatedLayout() {
             </div>
             <div className="text-xs capitalize text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
           </div>
+          <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full" load={loadMasterExport} />
           <Button variant="outline" size="sm" className="w-full rounded-full" onClick={signOut}>
             <LogOut className="mr-2 h-4 w-4" /> Sign out
           </Button>

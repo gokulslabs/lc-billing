@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
 import type { DashboardStats } from "@/lib/dashboard";
 import { formatRupees } from "@/lib/products";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -69,7 +70,37 @@ function Dashboard() {
       </section>
 
       <section>
-        <h2 className="mb-4 text-2xl font-semibold">Needs a person</h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-2xl font-semibold">Needs a person</h2>
+          <ExportExcelButton
+            filename="dashboard"
+            load={async () => {
+              const figures = stats.data?.stats;
+              if (!figures) throw new Error("The dashboard is still loading.");
+              return [
+                {
+                  name: "Today",
+                  columns: ["Figure", "Value"],
+                  rows: [
+                    ["Billed", figures.salesAmount],
+                    ["Collected", figures.collections],
+                    ["Still due on today's bills", figures.dueOnToday],
+                    ["Cash", figures.cash],
+                    ["UPI", figures.upi],
+                    ["Card", figures.card],
+                    ["This counter, still due", figures.unpaidBills],
+                    ["This counter, amount due", figures.unpaidAmount],
+                    ["Old bills, payment not written", figures.oldUnpaidBills],
+                    ["Old bills, amount", figures.oldUnpaidAmount],
+                    ["Stitching past the date", figures.overdueStitching],
+                    ["Ready for pickup", figures.readyStitching],
+                    ["Stitching due today", figures.dueTodayStitching],
+                  ],
+                },
+              ];
+            }}
+          />
+        </div>
         {stats.error instanceof Error ? <p className="mb-4 text-sm text-destructive">{stats.error.message}</p> : null}
         <div className="grid gap-4 md:grid-cols-2">
           {NEEDS.map((item) => {

@@ -31,7 +31,7 @@ import {
   type InvoiceSummary,
 } from "@/lib/sales";
 import { PAGE_SIZE, pageRange, readPage } from "@/lib/paging";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
 type Env = { Variables: { userId: string } };
@@ -90,7 +90,12 @@ sales.get("/items", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
-  const invoices = await loadInvoices(range.from, range.to, q, readPage(c.req.query("page")));
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
+  const invoices = await loadInvoices(range.from, range.to, q, readPage(c.req.query("page")), exporting);
   if ("error" in invoices) return c.json({ error: invoices.error }, 500);
   if (invoices.rows.length === 0) return c.json({ items: [], total: 0 });
   const byId = new Map(invoices.rows.map((row) => [row.id, row]));
@@ -168,6 +173,12 @@ sales.get("/due", async (c) => {
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
   const due = summaries.invoices.filter((invoice) => invoice.balance > 0.001 && billBook(invoice.billedOn) === books);
+  if (c.req.query("export") === "1") {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+    const balance = due.reduce((sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100, 0);
+    return c.json({ invoices: due, total: due.length, page: 1, books, balance });
+  }
   const start = (page - 1) * 50;
   const balance = due.reduce((sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100, 0);
   return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books, balance });
@@ -225,6 +236,11 @@ sales.get("/", async (c) => {
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
   const chosen = selectBills(summaries.invoices, pay, sort, direction);
+  if (c.req.query("export") === "1") {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+    return c.json({ invoices: chosen, total: chosen.length, page: 1 });
+  }
   const start = (page - 1) * PAGE_SIZE;
   return c.json({ invoices: chosen.slice(start, start + PAGE_SIZE), total: chosen.length, page });
 });
@@ -276,6 +292,11 @@ sales.get("/unrecorded", async (c) => {
   if (!loaded) return c.json({ error: "Could not load these bills." }, 500);
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+  if (c.req.query("export") === "1") {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+    return c.json({ invoices: summaries.invoices, total: summaries.invoices.length, page: 1 });
+  }
   const start = (page - 1) * PAGE_SIZE;
   return c.json({ invoices: summaries.invoices.slice(start, start + PAGE_SIZE), total: summaries.invoices.length, page });
 });
@@ -342,6 +363,7 @@ sales.post("/:id/lines", async (c) => {
     product.discountPercent,
     parsed.data.rate,
     parsed.data.extraOff,
+    parsed.data.discountPercent,
   );
   const amount = priced.amount;
   const { data, error } = await supabaseAdmin

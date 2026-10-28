@@ -6,6 +6,7 @@ import type { CustomerHistory } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import { billStatusLabel } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
+import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -37,7 +38,36 @@ function CustomerHistoryPage() {
         <Button variant="outline" className="mb-4 rounded-full" asChild>
           <Link to="/customers">Customers</Link>
         </Button>
-        <h1 className="text-4xl font-semibold">{customer?.name ?? "Customer"}</h1>
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-4xl font-semibold">{customer?.name ?? "Customer"}</h1>
+          {customer ? (
+            <ExportExcelButton
+              filename="customer-history"
+              load={async () => {
+                const full = await apiFetch<CustomerHistory>(`/api/customers/${customer.id}/history?export=1`);
+                return [
+                  {
+                    name: "Bills",
+                    columns: ["Bill no.", "Date", "Net", "Collected", "Balance", "Status"],
+                    rows: full.bills.map((bill) => [bill.billNo, bill.billedOn, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+                  },
+                  {
+                    name: "Bill lines",
+                    columns: ["Bill no.", "Date", "Inventory no.", "Product", "Qty", "Amount"],
+                    rows: full.bills.flatMap((bill) =>
+                      bill.lines.map((line) => [bill.billNo, bill.billedOn, line.inventoryNo, line.productName, line.quantity, line.amount]),
+                    ),
+                  },
+                  {
+                    name: "Orders",
+                    columns: ["Order", "Bag", "Garment", "Ordered", "Delivery", "Status", "Amount"],
+                    rows: full.orders.map((order) => [order.orderNo, order.bagNo ?? "", order.garment, order.orderedOn, order.deliveryOn ?? "", order.status, order.amount]),
+                  },
+                ];
+              }}
+            />
+          ) : null}
+        </div>
         {customer ? (
           <p className="mt-2 text-sm text-muted-foreground">
             {[customer.phone, customer.bookNo ? `Book ${customer.bookNo}` : "", customer.address].filter(Boolean).join(" · ") ||
