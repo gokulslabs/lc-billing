@@ -22,6 +22,7 @@ import { Route as AuthenticatedReportsRouteImport } from './routes/_authenticate
 import { Route as AuthenticatedSalesRouteImport } from './routes/_authenticated/sales'
 import { Route as AuthenticatedSettingsRouteImport } from './routes/_authenticated/settings'
 import { Route as AuthenticatedStitchingRouteImport } from './routes/_authenticated/stitching'
+import { Route as AuthenticatedStockVerificationRouteImport } from './routes/_authenticated/stock-verification'
 import { Route as AuthenticatedCustomersIndexRouteImport } from './routes/_authenticated/customers.index'
 import { Route as AuthenticatedCustomersCustomerIdRouteImport } from './routes/_authenticated/customers.$customerId'
 
@@ -89,6 +90,12 @@ const AuthenticatedStitchingRoute = AuthenticatedStitchingRouteImport.update({
   path: '/stitching',
   getParentRoute: () => AuthenticatedRouteRoute,
 } as any)
+const AuthenticatedStockVerificationRoute =
+  AuthenticatedStockVerificationRouteImport.update({
+    id: '/stock-verification',
+    path: '/stock-verification',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedCustomersIndexRoute =
   AuthenticatedCustomersIndexRouteImport.update({
     id: '/',
@@ -115,6 +122,7 @@ export interface FileRoutesByFullPath {
   '/sales': typeof AuthenticatedSalesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/stitching': typeof AuthenticatedStitchingRoute
+  '/stock-verification': typeof AuthenticatedStockVerificationRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/customers/': typeof AuthenticatedCustomersIndexRoute
 }
@@ -130,6 +138,7 @@ export interface FileRoutesByTo {
   '/sales': typeof AuthenticatedSalesRoute
   '/settings': typeof AuthenticatedSettingsRoute
   '/stitching': typeof AuthenticatedStitchingRoute
+  '/stock-verification': typeof AuthenticatedStockVerificationRoute
   '/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/customers': typeof AuthenticatedCustomersIndexRoute
 }
@@ -148,6 +157,7 @@ export interface FileRoutesById {
   '/_authenticated/sales': typeof AuthenticatedSalesRoute
   '/_authenticated/settings': typeof AuthenticatedSettingsRoute
   '/_authenticated/stitching': typeof AuthenticatedStitchingRoute
+  '/_authenticated/stock-verification': typeof AuthenticatedStockVerificationRoute
   '/_authenticated/customers/$customerId': typeof AuthenticatedCustomersCustomerIdRoute
   '/_authenticated/customers/': typeof AuthenticatedCustomersIndexRoute
 }
@@ -166,6 +176,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/stitching'
+    | '/stock-verification'
     | '/customers/$customerId'
     | '/customers/'
   fileRoutesByTo: FileRoutesByTo
@@ -181,6 +192,7 @@ export interface FileRouteTypes {
     | '/sales'
     | '/settings'
     | '/stitching'
+    | '/stock-verification'
     | '/customers/$customerId'
     | '/customers'
   id:
@@ -198,6 +210,7 @@ export interface FileRouteTypes {
     | '/_authenticated/sales'
     | '/_authenticated/settings'
     | '/_authenticated/stitching'
+    | '/_authenticated/stock-verification'
     | '/_authenticated/customers/$customerId'
     | '/_authenticated/customers/'
   fileRoutesById: FileRoutesById
@@ -302,6 +315,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedStitchingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/_authenticated/stock-verification': {
+      id: '/_authenticated/stock-verification'
+      path: '/stock-verification'
+      fullPath: '/stock-verification'
+      preLoaderRoute: typeof AuthenticatedStockVerificationRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/customers/': {
       id: '/_authenticated/customers/'
       path: '/'
@@ -346,6 +366,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedSalesRoute: typeof AuthenticatedSalesRoute
   AuthenticatedSettingsRoute: typeof AuthenticatedSettingsRoute
   AuthenticatedStitchingRoute: typeof AuthenticatedStitchingRoute
+  AuthenticatedStockVerificationRoute: typeof AuthenticatedStockVerificationRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
@@ -358,6 +379,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedSalesRoute: AuthenticatedSalesRoute,
   AuthenticatedSettingsRoute: AuthenticatedSettingsRoute,
   AuthenticatedStitchingRoute: AuthenticatedStitchingRoute,
+  AuthenticatedStockVerificationRoute: AuthenticatedStockVerificationRoute,
 }
 
 const AuthenticatedRouteRouteWithChildren =
