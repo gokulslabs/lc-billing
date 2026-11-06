@@ -4,7 +4,7 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(["/offline.html", "/favicon.svg", "/icons/icon-192.png", "/icons/icon-512.png"]))
+      .then((cache) => cache.addAll(["/offline.html", "/favicon.ico", "/icons/icon-192.png", "/icons/icon-512.png"]))
       .then(() => self.skipWaiting()),
   );
 });
@@ -30,7 +30,7 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const cacheable = url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/") || url.pathname === "/favicon.svg";
+  const cacheable = url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/") || url.pathname === "/favicon.ico";
   if (!cacheable) return;
 
   event.respondWith(

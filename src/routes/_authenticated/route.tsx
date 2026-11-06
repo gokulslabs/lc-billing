@@ -9,6 +9,7 @@ import { clearActivity, idleWarningText } from "@/lib/idle";
 import { MODULES } from "@/lib/modules";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Logo } from "@/components/app/Logo";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { loadMasterExport } from "@/lib/master-export";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -155,6 +156,7 @@ function AuthenticatedLayout() {
             <div className="text-xs capitalize text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
           </div>
           <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full group-data-[collapsible=icon]:hidden" load={loadMasterExport} />
+          <ThemeToggle className="mb-2" />
           <Button variant="outline" size="sm" className="w-full rounded-full group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0" title="Sign out" onClick={signOut}>
             <LogOut className="h-4 w-4 group-data-[collapsible=icon]:mr-0 mr-2" />
             <span className="group-data-[collapsible=icon]:hidden">Sign out</span>
@@ -165,7 +167,8 @@ function AuthenticatedLayout() {
       <SidebarInset className="pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
         <header className="flex h-14 items-center gap-2 border-b border-border px-4 print:hidden md:hidden">
           <span className="font-display text-lg font-semibold">Ladies Collections</span>
-          <SidebarTrigger className="ml-auto" />
+          <ThemeToggle iconOnly className="ml-auto" />
+          <SidebarTrigger />
         </header>
         <Outlet />
         <PhoneBar />

@@ -6,6 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { signInEmail } from "@/lib/auth-id";
 import { Logo } from "@/components/app/Logo";
+import { ThemeToggle } from "@/components/app/ThemeToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -62,7 +63,8 @@ function AuthPage() {
   const title = mode === "signin" ? "Welcome back" : "Reset password";
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[image:var(--gradient-soft)] px-4 py-10">
+    <main className="relative flex min-h-screen items-center justify-center bg-[image:var(--gradient-soft)] px-4 py-10">
+      <ThemeToggle iconOnly className="absolute right-4 top-4" />
       <div className="w-full max-w-md">
         <div className="mb-8 flex justify-center">
           <Logo size="lg" />
