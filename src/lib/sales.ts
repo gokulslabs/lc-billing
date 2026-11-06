@@ -1,6 +1,8 @@
 import { z } from "zod";
 
 export const NEW_COUNTER_FROM = "2026-10-26";
+// Stitching board and the morning cards start here. Older orders stay on the orders list.
+export const STITCHING_BOARD_FROM = "2026-11-06";
 
 export function billBook(billedOn: string): "new" | "old" {
   return billedOn < NEW_COUNTER_FROM ? "old" : "new";

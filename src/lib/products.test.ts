@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextProductCode, productSchema } from "./products";
+import { nextProductCode, productSchema, productSort } from "./products";
 
 describe("nextProductCode", () => {
   it("starts at 001 for an empty group", () => {
@@ -8,6 +8,16 @@ describe("nextProductCode", () => {
 
   it("continues after the highest code in that group", () => {
     expect(nextProductCode("SS", ["SS001", "SS014", "SR003"])).toBe("SS015");
+  });
+});
+
+describe("productSort", () => {
+  it("puts the highest price first for most costly", () => {
+    expect(productSort("price-desc")).toEqual({ id: "price-desc", column: "price", ascending: false });
+  });
+
+  it("keeps name A to Z when the choice is missing", () => {
+    expect(productSort(undefined)).toEqual({ id: "name-asc", column: "name", ascending: true });
   });
 });
 

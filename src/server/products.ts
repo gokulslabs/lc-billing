@@ -4,6 +4,7 @@ import {
   nextProductCode,
   productGroupSchema,
   productSchema,
+  productSort,
   zodMessage,
   type Product,
   type ProductGroup,
@@ -31,6 +32,21 @@ type ProductRow = {
   unit: string;
   price: number | string;
 };
+
+function rankProducts<T extends { order: (column: string, options?: { ascending?: boolean; referencedTable?: string }) => T }>(
+  query: T,
+  raw: string | undefined,
+): T {
+  const chosen = productSort(raw);
+  const ordered =
+    chosen.column === "group" || chosen.column === "discount"
+      ? query.order(chosen.column === "group" ? "name" : "discount_percent", {
+          referencedTable: "product_groups",
+          ascending: chosen.ascending,
+        })
+      : query.order(chosen.column, { ascending: chosen.ascending });
+  return ordered.order("id", { ascending: true });
+}
 
 const groups = new Hono<Env>();
 const products = new Hono<Env>();
@@ -108,9 +124,13 @@ products.get("/", async (c) => {
 
   const safe = q.replace(/[%_,]/g, "");
   const picker = c.req.query("picker") === "1";
+  const sort = c.req.query("sort");
   if (picker) {
     const loaded = await readAll<ProductRow>((from, to) => {
-      const ranked = supabaseAdmin.from("products").select("id, group_id, code, name, unit, price").order("name").order("id");
+      const ranked = rankProducts(
+        supabaseAdmin.from("products").select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)"),
+        sort,
+      );
       const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;
       const filtered = safe ? grouped.or(`name.ilike.%${safe}%,code.ilike.%${safe}%`) : grouped;
       return filtered.range(from, to);
@@ -125,7 +145,10 @@ products.get("/", async (c) => {
 
   const page = readPage(c.req.query("page"));
   const { from, to } = pageRange(page);
-  const ranked = supabaseAdmin.from("products").select("id, group_id, code, name, unit, price", { count: "exact" }).order("name").order("id");
+  const ranked = rankProducts(
+    supabaseAdmin.from("products").select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)", { count: "exact" }),
+    sort,
+  );
   const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;
   const filtered = safe ? grouped.or(`name.ilike.%${safe}%,code.ilike.%${safe}%`) : grouped;
   const { data, error, count } = await filtered.range(from, to);

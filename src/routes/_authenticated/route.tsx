@@ -1,7 +1,7 @@
-import { useRef } from "react";
+import { useRef, type CSSProperties } from "react";
 import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { LogOut } from "lucide-react";
+import { Boxes, LogOut, Tag, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
 import { useIdleLogout } from "@/hooks/use-idle-logout";
@@ -24,6 +24,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarProvider,
+  SidebarRail,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 
@@ -109,30 +110,33 @@ function AuthenticatedLayout() {
   const isAdmin = roles.includes("admin");
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen style={{ "--sidebar-width-icon": "4.25rem" } as CSSProperties}>
       {idleWarning}
-      <Sidebar className="print:hidden">
-        <SidebarHeader className="px-4 py-5">
-          <Logo />
+      <Sidebar collapsible="icon" className="print:hidden">
+        <SidebarHeader className="flex-row items-center gap-2 px-4 py-5 group-data-[collapsible=icon]:flex-col group-data-[collapsible=icon]:px-2 group-data-[collapsible=icon]:py-3">
+          <div className="min-w-0 group-data-[collapsible=icon]:[&_.leading-none]:hidden group-data-[collapsible=icon]:[&_.rounded-full]:h-8 group-data-[collapsible=icon]:[&_.rounded-full]:w-8">
+            <Logo />
+          </div>
+          <SidebarTrigger className="ml-auto shrink-0 group-data-[collapsible=icon]:ml-0" />
         </SidebarHeader>
         <SidebarContent>
           <SidebarGroup className="flex flex-1 flex-col">
             <SidebarGroupContent className="flex flex-1 flex-col">
               <SidebarMenu className="flex-1 justify-between py-2">
                 {MODULES.filter((m) => m.key !== "employees" || isAdmin).map((m) => (
-                  <SidebarMenuItem key={m.key} className="flex flex-1 items-center">
+                  <SidebarMenuItem key={m.key} className="flex flex-1 items-center group-data-[collapsible=icon]:justify-center">
                     {m.to ? (
-                      <SidebarMenuButton asChild size="lg" className="h-full min-h-11 rounded-xl px-3 text-base [&>svg]:size-5">
+                      <SidebarMenuButton asChild size="lg" tooltip={m.label} className="h-full min-h-11 rounded-xl px-3 text-base [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden">
                         <Link to={m.to} activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground font-medium" }}>
                           <m.icon />
                           <span>{m.label}</span>
                         </Link>
                       </SidebarMenuButton>
                     ) : (
-                      <SidebarMenuButton disabled size="lg" className="h-full min-h-11 rounded-xl px-3 text-base opacity-60 [&>svg]:size-5">
+                      <SidebarMenuButton disabled size="lg" tooltip={m.label} className="h-full min-h-11 rounded-xl px-3 text-base opacity-60 [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden">
                         <m.icon />
                         <span>{m.label}</span>
-                        <Badge variant="secondary" className="ml-auto text-[10px]">
+                        <Badge variant="secondary" className="ml-auto text-[10px] group-data-[collapsible=icon]:hidden">
                           Soon
                         </Badge>
                       </SidebarMenuButton>
@@ -143,27 +147,56 @@ function AuthenticatedLayout() {
             </SidebarGroupContent>
           </SidebarGroup>
         </SidebarContent>
-        <SidebarFooter className="border-t border-sidebar-border p-4">
-          <div className="mb-2 min-w-0">
+        <SidebarFooter className="border-t border-sidebar-border p-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
+          <div className="mb-2 min-w-0 group-data-[collapsible=icon]:hidden">
             <div className="truncate text-sm font-medium" title={user.email ?? undefined}>
               {profile?.full_name?.trim() || "Staff"}
             </div>
             <div className="text-xs capitalize text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
           </div>
-          <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full" load={loadMasterExport} />
-          <Button variant="outline" size="sm" className="w-full rounded-full" onClick={signOut}>
-            <LogOut className="mr-2 h-4 w-4" /> Sign out
+          <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full group-data-[collapsible=icon]:hidden" load={loadMasterExport} />
+          <Button variant="outline" size="sm" className="w-full rounded-full group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0" title="Sign out" onClick={signOut}>
+            <LogOut className="h-4 w-4 group-data-[collapsible=icon]:mr-0 mr-2" />
+            <span className="group-data-[collapsible=icon]:hidden">Sign out</span>
           </Button>
         </SidebarFooter>
+        <SidebarRail />
       </Sidebar>
-      <SidebarInset>
+      <SidebarInset className="pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
         <header className="flex h-14 items-center gap-2 border-b border-border px-4 print:hidden md:hidden">
-          <SidebarTrigger />
           <span className="font-display text-lg font-semibold">Ladies Collections</span>
+          <SidebarTrigger className="ml-auto" />
         </header>
         <Outlet />
+        <PhoneBar />
       </SidebarInset>
     </SidebarProvider>
+  );
+}
+
+const PHONE_LINKS = [
+  { to: "/products" as const, label: "Products", icon: Tag },
+  { to: "/customers" as const, label: "Customers", icon: Users },
+  { to: "/inventory" as const, label: "Inventory", icon: Boxes },
+];
+
+function PhoneBar() {
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-40 border-t border-border bg-background/95 pb-[env(safe-area-inset-bottom)] print:hidden md:hidden">
+      <div className="grid grid-cols-3">
+        {PHONE_LINKS.map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="flex flex-col items-center gap-1 px-2 py-2 text-xs text-muted-foreground"
+            activeProps={{ className: "flex flex-col items-center gap-1 px-2 py-2 text-xs font-medium text-primary" }}
+          >
+            <item.icon className="h-5 w-5" />
+            {item.label}
+          </Link>
+        ))}
+      </div>
+    </nav>
   );
 }
 

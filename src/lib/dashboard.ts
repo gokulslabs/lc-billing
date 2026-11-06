@@ -1,5 +1,6 @@
 export type DashboardStats = {
   salesAmount: number;
+  billsToday: number;
   collections: number;
   dueOnToday: number;
   unpaidBills: number;

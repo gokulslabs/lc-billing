@@ -1,8 +1,9 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { appIsInstalled, installHelp, installShopApp, subscribeInstall } from "@/lib/pwa";
 import type { StitchingGarment, StitchingProcess } from "@/lib/settings";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
@@ -60,6 +61,7 @@ function SettingsPage() {
           Stitching garments, the measurement heads for each garment, and the process list. Names can be added or removed.
         </p>
       </div>
+      <InstallApp />
       {settings.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {settings.error instanceof Error ? <p className="text-sm text-destructive">{settings.error.message}</p> : null}
       {settings.data ? (
@@ -81,6 +83,40 @@ function SettingsPage() {
         </Tabs>
       ) : null}
     </div>
+  );
+}
+
+function InstallApp() {
+  const [installed, setInstalled] = useState(false);
+  const [help, setHelp] = useState("");
+
+  useEffect(() => {
+    const sync = () => setInstalled(appIsInstalled());
+    sync();
+    return subscribeInstall(sync);
+  }, []);
+
+  async function install() {
+    setHelp("");
+    const outcome = await installShopApp();
+    if (outcome === "accepted") {
+      toast.success("Ladies Collections is on the home screen.");
+      return;
+    }
+    if (outcome === "unavailable") setHelp(installHelp());
+  }
+
+  return (
+    <section className="rounded-2xl border border-border bg-card p-4">
+      <h2 className="text-lg font-semibold">Phone app</h2>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Puts Products, Customers and Inventory on the phone home screen.
+      </p>
+      <Button type="button" className="mt-3 rounded-full" disabled={installed} onClick={() => void install()}>
+        {installed ? "App installed" : "Install app"}
+      </Button>
+      {help ? <p className="mt-3 text-sm text-muted-foreground">{help}</p> : null}
+    </section>
   );
 }
 

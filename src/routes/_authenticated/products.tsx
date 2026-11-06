@@ -6,13 +6,16 @@ import { apiFetch } from "@/lib/api";
 import {
   UNITS,
   formatRupees,
+  PRODUCT_SORTS,
   unitLabel,
   type Product,
+  type ProductSort,
   type ProductGroup,
   type Unit,
 } from "@/lib/products";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
+import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -42,31 +45,33 @@ function ProductsPage() {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
   const [groupId, setGroupId] = useState("");
+  const [sort, setSort] = useState<ProductSort>("name-asc");
   const [page, setPage] = useState(1);
   const groups = useQuery({
     queryKey: ["product-groups"],
     queryFn: () => apiFetch<{ groups: ProductGroup[] }>("/api/product-groups"),
   });
   const products = useQuery({
-    queryKey: ["products", deferred, groupId, page],
+    queryKey: ["products", deferred, groupId, sort, page],
     queryFn: () => {
       const params = new URLSearchParams();
       if (deferred.trim()) params.set("q", deferred.trim());
       if (groupId) params.set("groupId", groupId);
+      if (sort !== "name-asc") params.set("sort", sort);
       params.set("page", String(page));
       return apiFetch<{ products: Product[]; total: number }>(`/api/products?${params.toString()}`);
     },
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
-        <h1 className="text-4xl font-semibold">Products</h1>
+        <h1 className="text-3xl font-semibold md:text-4xl">Products</h1>
         <p className="mt-2 text-sm text-muted-foreground">Groups, prices, and the discount for each group.</p>
       </div>
 
       <Tabs defaultValue="products">
-        <TabsList>
+        <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="groups">Groups</TabsTrigger>
         </TabsList>
@@ -80,12 +85,17 @@ function ProductsPage() {
             error={products.error instanceof Error ? products.error.message : null}
             q={q}
             groupId={groupId}
+            sort={sort}
             onQ={(value) => {
               setQ(value);
               setPage(1);
             }}
             onGroup={(value) => {
               setGroupId(value);
+              setPage(1);
+            }}
+            onSort={(value) => {
+              setSort(value);
               setPage(1);
             }}
             onPage={setPage}
@@ -112,8 +122,10 @@ function ProductPanel({
   error,
   q,
   groupId,
+  sort,
   onQ,
   onGroup,
+  onSort,
   onPage,
 }: {
   groups: ProductGroup[];
@@ -124,8 +136,10 @@ function ProductPanel({
   error: string | null;
   q: string;
   groupId: string;
+  sort: ProductSort;
   onQ: (value: string) => void;
   onGroup: (value: string) => void;
+  onSort: (value: ProductSort) => void;
   onPage: (page: number) => void;
 }) {
   const queryClient = useQueryClient();
@@ -134,15 +148,15 @@ function ProductPanel({
   return (
     <>
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div className="flex flex-wrap gap-3">
+        <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:flex-wrap">
           <Input
             value={q}
             onChange={(event) => onQ(event.target.value)}
             placeholder="Search name or code"
-            className="w-56"
+            className="w-full sm:w-56"
           />
           <Select value={groupId || "all"} onValueChange={(value) => onGroup(value === "all" ? "" : value)}>
-            <SelectTrigger className="w-48">
+            <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="All groups" />
             </SelectTrigger>
             <SelectContent>
@@ -150,6 +164,18 @@ function ProductPanel({
               {groups.map((group) => (
                 <SelectItem key={group.id} value={group.id}>
                   {group.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Select value={sort} onValueChange={(value) => onSort(value as ProductSort)}>
+            <SelectTrigger className="w-full sm:w-48" aria-label="Sort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PRODUCT_SORTS.map((option) => (
+                <SelectItem key={option.id} value={option.id}>
+                  {option.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -162,6 +188,7 @@ function ProductPanel({
               const params = new URLSearchParams({ picker: "1" });
               if (q.trim()) params.set("q", q.trim());
               if (groupId) params.set("groupId", groupId);
+              if (sort !== "name-asc") params.set("sort", sort);
               const data = await apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
               return [
                 {
@@ -186,7 +213,35 @@ function ProductPanel({
         <p className="text-sm text-muted-foreground">No products yet.</p>
       ) : null}
       {products.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card">
+        <>
+        <PhoneCards>
+          {products.map((product) => (
+            <PhoneCard
+              key={product.id}
+              title={product.name || product.code}
+              detail={`${product.code} · ${product.groupName} · ${unitLabel(product.unit)} · ${formatRupees(product.price)} · ${product.discountPercent}%`}
+            >
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(product)}>
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  if (!window.confirm(`Remove ${product.name || "this product"}? This cannot be undone.`)) return;
+                  void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
+                    .catch((reason: Error) => toast.error(reason.message));
+                }}
+              >
+                Remove
+              </Button>
+            </PhoneCard>
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -231,7 +286,8 @@ function ProductPanel({
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
+        </>
       ) : null}
       <ListFooter page={page} total={total} shown={products.length} onPage={onPage} />
       <ProductDialog
@@ -275,7 +331,34 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
       {!loading && groups.length === 0 ? <p className="text-sm text-muted-foreground">No groups yet.</p> : null}
       {groups.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card">
+        <>
+        <PhoneCards>
+          {groups.map((group) => (
+            <PhoneCard
+              key={group.id}
+              title={group.name}
+              detail={`${group.code} · ${group.discountPercent}% · ${group.productCount} products`}
+            >
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(group)}>
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  if (!window.confirm(`Remove ${group.name}? This cannot be undone.`)) return;
+                  void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
+                    .catch((reason: Error) => toast.error(reason.message));
+                }}
+              >
+                Remove
+              </Button>
+            </PhoneCard>
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -315,7 +398,8 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
+        </>
       ) : null}
       <GroupDialog
         open={editor !== null}

@@ -6,6 +6,7 @@ import { apiFetch } from "@/lib/api";
 import type { Customer } from "@/lib/customers";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
+import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -47,10 +48,10 @@ function CustomersPage() {
   const rows = customers.data?.customers ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-semibold">Customers</h1>
+          <h1 className="text-3xl font-semibold md:text-4xl">Customers</h1>
           <p className="mt-2 text-sm text-muted-foreground">Name, address, phone and book number. Open a name to see their bills and stitching.</p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -82,13 +83,44 @@ function CustomersPage() {
           setPage(1);
         }}
         placeholder="Search name, phone or book number"
-        className="max-w-sm"
+        className="w-full max-w-sm"
       />
       {customers.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {customers.error instanceof Error ? <p className="text-sm text-destructive">{customers.error.message}</p> : null}
       {!customers.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No customers yet.</p> : null}
       {rows.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card">
+        <>
+        <PhoneCards>
+          {rows.map((customer) => (
+            <PhoneCard
+              key={customer.id}
+              title={
+                <Link to="/customers/$customerId" params={{ customerId: customer.id }} className="hover:underline">
+                  {customer.name}
+                </Link>
+              }
+              detail={[customer.phone, customer.bookNo, customer.address].filter(Boolean).join(" · ") || "No phone or address"}
+            >
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(customer)}>
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  if (!window.confirm(`Remove ${customer.name}? This cannot be undone.`)) return;
+                  void apiFetch(`/api/customers/${customer.id}`, { method: "DELETE" })
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["customers"] }))
+                    .catch((reason: Error) => toast.error(reason.message));
+                }}
+              >
+                Remove
+              </Button>
+            </PhoneCard>
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -132,7 +164,8 @@ function CustomersPage() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
+        </>
       ) : null}
       <ListFooter page={page} total={customers.data?.total ?? 0} shown={rows.length} onPage={setPage} />
       <CustomerDialog

@@ -62,7 +62,7 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             {status === "board"
               ? "Past the delivery date, due today, this week, and ready for pickup."
               : status === "overdue"
-                ? "Delivery date has passed. These stay pending until someone changes one order."
+                ? "Orders taken from 6 Nov 2026 whose delivery date has passed."
                 : "Order, bag, customer, garment, and the two dates from the old list."}
           </p>
         </div>
@@ -219,7 +219,7 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
           </h2>
           {query.data && query.data.total > Math.min(8, query.data.orders.length) ? (
             <p className="mt-1 text-sm text-muted-foreground">
-              Showing 8 of {query.data.total}. The orders list has the rest. Statuses were not changed.
+              Showing 8 of {query.data.total}. The orders list has the rest. Older orders stay on that list.
             </p>
           ) : null}
           {query.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}

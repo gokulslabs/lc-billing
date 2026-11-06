@@ -1,12 +1,14 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import type { CustomerHistory } from "@/lib/customers";
+import { isUnrecordedName, type CustomerHistory } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import { billStatusLabel } from "@/lib/sales";
 import { ListFooter } from "@/components/app/ListFooter";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -31,15 +33,31 @@ function CustomerHistoryPage() {
   });
   const data = history.data;
   const customer = data?.customer;
+  const startBill = useMutation({
+    mutationFn: () =>
+      apiFetch<{ invoice: { id: string } }>("/api/invoices", {
+        method: "POST",
+        body: JSON.stringify({ customerId }),
+      }),
+    onSuccess: (result) => {
+      window.location.assign(`/sales?bill=${result.invoice.id}`);
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
         <Button variant="outline" className="mb-4 rounded-full" asChild>
           <Link to="/customers">Customers</Link>
         </Button>
         <div className="flex flex-wrap items-center gap-3">
-          <h1 className="text-4xl font-semibold">{customer?.name ?? "Customer"}</h1>
+          <h1 className="text-3xl font-semibold md:text-4xl">{customer?.name ?? "Customer"}</h1>
+          {customer && !isUnrecordedName(customer.name) ? (
+            <Button className="rounded-full" disabled={startBill.isPending} onClick={() => startBill.mutate()}>
+              {startBill.isPending ? "Opening…" : "New bill"}
+            </Button>
+          ) : null}
           {customer ? (
             <ExportExcelButton
               filename="customer-history"
@@ -92,7 +110,10 @@ function CustomerHistoryPage() {
               <article key={bill.id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <p className="font-medium">
-                    {bill.billNo} · {bill.billedOn}
+                    <a href={`/sales?bill=${bill.id}`} className="hover:underline">
+                      {bill.billNo}
+                    </a>{" "}
+                    · {bill.billedOn}
                   </p>
                   <p className="text-sm text-muted-foreground">
                     {formatRupees(bill.total)} · collected {formatRupees(bill.collected)} · balance {formatRupees(bill.balance)} ·{" "}
@@ -100,6 +121,17 @@ function CustomerHistoryPage() {
                   </p>
                 </div>
                 {bill.lines.length > 0 ? (
+                  <>
+                  <PhoneCards>
+                    {bill.lines.map((line, index) => (
+                      <PhoneCard
+                        key={`${line.inventoryNo}-${index}`}
+                        title={line.productName || line.inventoryNo}
+                        detail={`${line.inventoryNo} · qty ${formatQty(line.quantity)} · ${formatRupees(line.amount)}`}
+                      />
+                    ))}
+                  </PhoneCards>
+                  <DeskTable>
                   <Table>
                     <TableHeader>
                       <TableRow>
@@ -120,6 +152,8 @@ function CustomerHistoryPage() {
                       ))}
                     </TableBody>
                   </Table>
+                  </DeskTable>
+                  </>
                 ) : (
                   <p className="mt-3 text-sm text-muted-foreground">No lines on this bill.</p>
                 )}
@@ -136,7 +170,17 @@ function CustomerHistoryPage() {
             <h2 className="text-2xl font-semibold">Stitching</h2>
             {data.orders.length === 0 ? <p className="text-sm text-muted-foreground">No stitching orders yet.</p> : null}
             {data.orders.length > 0 ? (
-              <div className="rounded-2xl border border-border bg-card">
+              <>
+              <PhoneCards>
+                {data.orders.map((order) => (
+                  <PhoneCard
+                    key={order.id}
+                    title={`${order.orderNo} · ${order.garment || "Order"}`}
+                    detail={`Bag ${order.bagNo || "—"} · ordered ${order.orderedOn} · delivery ${order.deliveryOn || "—"} · ${order.status} · ${formatRupees(order.amount)}`}
+                  />
+                ))}
+              </PhoneCards>
+              <DeskTable>
                 <Table>
                   <TableHeader>
                     <TableRow>
@@ -163,7 +207,8 @@ function CustomerHistoryPage() {
                     ))}
                   </TableBody>
                 </Table>
-              </div>
+              </DeskTable>
+              </>
             ) : null}
             <ListFooter page={orderPage} total={data.orderTotal} shown={data.orders.length} onPage={setOrderPage} />
           </section>

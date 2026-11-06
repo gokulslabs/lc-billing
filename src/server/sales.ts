@@ -342,7 +342,10 @@ sales.post("/:id/lines", async (c) => {
   if (product.unit === "NO") {
     const already = await pieceAlreadyBilled(stock.id);
     if (already === "error") return c.json({ error: "Could not check this piece." }, 500);
-    if (already) return c.json({ error: "This piece is already on a bill." }, 400);
+    if (already.length > 0) {
+      const label = already.length === 1 ? `bill ${already[0]}` : `bills ${already.join(", ")}`;
+      return c.json({ error: `This piece is already on ${label}.` }, 400);
+    }
   }
   const available = Number(stock.quantity);
   if (parsed.data.quantity > available + 0.0001) return c.json({ error: "Not enough stock on this inventory number." }, 400);
@@ -540,7 +543,12 @@ async function loadInvoices(
   const safe = q.replace(/[%_,.()]/g, "").toLowerCase();
   if (q && !safe) return { rows: [], total: 0, page };
   const named = safe
-    ? await supabaseAdmin.from("customers").select("id").ilike("name", `%${safe}%`).limit(30)
+    ? await supabaseAdmin
+        .from("customers")
+        .select("id")
+        .or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%`)
+        .order("name")
+        .limit(40)
     : { data: [], error: null };
   if (named.error) return { error: "Could not search customers." };
   const customerIds = ((named.data ?? []) as { id: string }[]).map((row) => row.id);
@@ -642,14 +650,14 @@ async function syncInvoiceStatus(id: string): Promise<void> {
   await supabaseAdmin.from("invoices").update({ status: next }).eq("id", id).neq("status", "cancelled");
 }
 
-async function pieceAlreadyBilled(itemId: string): Promise<boolean | "error"> {
+async function pieceAlreadyBilled(itemId: string): Promise<string[] | "error"> {
   const { data, error } = await supabaseAdmin.from("invoice_lines").select("invoice_id").eq("inventory_item_id", itemId);
   if (error || !data) return "error";
-  if (data.length === 0) return false;
+  if (data.length === 0) return [];
   const ids = [...new Set(data.map((row) => row.invoice_id))];
-  const { data: invoices, error: invoiceError } = await supabaseAdmin.from("invoices").select("id, status").in("id", ids);
+  const { data: invoices, error: invoiceError } = await supabaseAdmin.from("invoices").select("bill_no, status").in("id", ids);
   if (invoiceError || !invoices) return "error";
-  return invoices.some((row) => row.status !== "cancelled");
+  return invoices.filter((row) => row.status !== "cancelled").map((row) => row.bill_no);
 }
 
 async function customerRecord(id: string): Promise<{ id: string; name: string } | null | "error"> {

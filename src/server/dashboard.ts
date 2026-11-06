@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { sumMoney, sumSales, type DashboardStats } from "@/lib/dashboard";
-import { NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
+import { NEW_COUNTER_FROM, STITCHING_BOARD_FROM, shopToday } from "@/lib/sales";
 import { requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -34,12 +34,14 @@ dashboard.get("/", async (c) => {
       .from("stitching_orders")
       .select("id", { count: "exact", head: true })
       .in("status", ["PENDING", "TRIAL"])
-      .eq("delivery_on", today),
+      .eq("delivery_on", today)
+      .gte("ordered_on", STITCHING_BOARD_FROM),
     supabaseAdmin
       .from("stitching_orders")
       .select("id", { count: "exact", head: true })
       .in("status", ["PENDING", "TRIAL"])
-      .lt("delivery_on", today),
+      .lt("delivery_on", today)
+      .gte("ordered_on", STITCHING_BOARD_FROM),
   ]);
   if (!invoices || !payments || !openInvoices || ready.error || dueToday.error || overdue.error) {
     return c.json({ error: "Could not load the dashboard." }, 500);
@@ -88,6 +90,7 @@ dashboard.get("/", async (c) => {
     sumMoney(payments.rows.filter((row) => row.mode === mode).map((row) => Number(row.amount)));
   const stats: DashboardStats = {
     salesAmount: sales.amount,
+    billsToday: invoices.rows.length,
     collections: sumMoney(payments.rows.map((row) => Number(row.amount))),
     dueOnToday: Math.max(0, Math.round((sales.amount - collectedOnToday) * 100) / 100),
     unpaidBills,

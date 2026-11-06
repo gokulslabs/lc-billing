@@ -14,7 +14,7 @@ import {
   type StitchingStatus,
 } from "@/lib/stitching";
 import { pageRange, readPage } from "@/lib/paging";
-import { shopToday } from "@/lib/sales";
+import { shopToday, STITCHING_BOARD_FROM } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -64,7 +64,7 @@ stitching.get("/", async (c) => {
     const ranked = supabaseAdmin
       .from("stitching_orders")
       .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount", { count: "exact" });
-    const filtered =
+    const matched =
       due === "today"
         ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
         : due === "overdue"
@@ -76,6 +76,8 @@ stitching.get("/", async (c) => {
               : status
                 ? ranked.eq("status", status)
                 : ranked;
+    const onBoard = due === "today" || due === "overdue" || due === "week" || soon;
+    const filtered = onBoard ? matched.gte("ordered_on", STITCHING_BOARD_FROM) : matched;
     const searched = !safe
       ? filtered
       : customerIds.length > 0

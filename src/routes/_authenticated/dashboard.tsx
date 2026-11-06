@@ -19,13 +19,11 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
   component: Dashboard,
 });
 
-const NEEDS: { key: keyof DashboardStats; label: string; detail: string; money?: boolean; href: string }[] = [
-  { key: "unpaidBills", label: "This counter, still due", detail: "Bills written here that are not paid", href: "/sales?view=due" },
-  { key: "unpaidAmount", label: "This counter, amount due", detail: "From 26 Oct 2026 onward", money: true, href: "/sales?view=due" },
-  { key: "oldUnpaidBills", label: "Old bills, payment not written", detail: "Copied balances. They stay unpaid until someone records a payment.", href: "/sales?view=due&books=old" },
-  { key: "overdueStitching", label: "Stitching past the date", detail: "Still pending. Statuses were not changed.", href: "/stitching?board=overdue" },
+const NEEDS: { key: keyof DashboardStats; label: string; detail: string; href: string }[] = [
+  { key: "billsToday", label: "Bills today", detail: "Open Sales to write the next one", href: "/sales" },
   { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/stitching?board=ready" },
-  { key: "dueTodayStitching", label: "Stitching due today", detail: "Trials and pending for today", href: "/stitching?board=today" },
+  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders taken from 6 Nov 2026", href: "/stitching?board=today" },
+  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders taken from 6 Nov 2026 that are still pending", href: "/stitching?board=overdue" },
 ];
 
 function CloseFigure({ label, value }: { label: string; value: number | undefined }) {
@@ -82,19 +80,16 @@ function Dashboard() {
                   name: "Today",
                   columns: ["Figure", "Value"],
                   rows: [
+                    ["Bills today", figures.billsToday],
                     ["Billed", figures.salesAmount],
                     ["Collected", figures.collections],
                     ["Still due on today's bills", figures.dueOnToday],
                     ["Cash", figures.cash],
                     ["UPI", figures.upi],
                     ["Card", figures.card],
-                    ["This counter, still due", figures.unpaidBills],
-                    ["This counter, amount due", figures.unpaidAmount],
-                    ["Old bills, payment not written", figures.oldUnpaidBills],
-                    ["Old bills, amount", figures.oldUnpaidAmount],
-                    ["Stitching past the date", figures.overdueStitching],
                     ["Ready for pickup", figures.readyStitching],
                     ["Stitching due today", figures.dueTodayStitching],
+                    ["Stitching past the date", figures.overdueStitching],
                   ],
                 },
               ];
@@ -105,7 +100,7 @@ function Dashboard() {
         <div className="grid gap-4 md:grid-cols-2">
           {NEEDS.map((item) => {
             const value = stats.data?.stats[item.key];
-            const shown = value == null ? "…" : item.money ? formatRupees(value) : String(value);
+            const shown = value == null ? "…" : String(value);
             return (
               <a key={item.key} href={item.href} className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary">
                 <p className="text-sm text-muted-foreground">{item.label}</p>

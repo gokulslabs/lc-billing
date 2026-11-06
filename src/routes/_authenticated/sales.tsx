@@ -31,7 +31,7 @@ function SalesPage() {
   const search = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
   const opening = search?.get("view") ?? null;
   const books = search?.get("books") === "old" ? "old" : "new";
-  const [billId, setBillId] = useState<string | null>(null);
+  const [billId, setBillId] = useState<string | null>(search?.get("bill") ?? null);
   const [list, setList] = useState(true);
   if (billId) {
     return (
@@ -40,6 +40,7 @@ function SalesPage() {
         onBack={() => {
           setBillId(null);
           setList(true);
+          if (window.location.search.includes("bill=")) window.history.replaceState(null, "", "/sales");
         }}
       />
     );
@@ -50,7 +51,7 @@ function SalesPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-4xl font-semibold">New bill</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Find them, or type a new name. The inventory box is next.</p>
+            <p className="mt-2 text-sm text-muted-foreground">Search for someone who has already been in. A new name is only for a first visit.</p>
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
             Bill list
@@ -84,24 +85,46 @@ function SalesHome({
   const today = shopToday();
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
-  const [from, setFrom] = useState("2000-01-01");
+  const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
+  const showingToday = from === today && to === today;
+  const looking = deferred.trim().length > 0;
+  const listFrom = looking ? "2000-01-01" : from;
+  const listTo = looking ? today : to;
   const [pay, setPay] = useState<BillPay>("all");
   const [sort, setSort] = useState<BillSort>("date");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const bills = useQuery({
-    queryKey: ["invoices", deferred, from, to, pay, sort, direction, page],
+    queryKey: ["invoices", deferred, listFrom, listTo, pay, sort, direction, page],
     queryFn: () =>
       apiFetch<{ invoices: InvoiceSummary[]; total: number }>(
-        `/api/invoices${query({ q: deferred, from, to, page, pay, sort, dir: direction })}`,
+        `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, page, pay, sort, dir: direction })}`,
       ),
   });
+  const people = useQuery({
+    queryKey: ["customers", "sales-search", deferred],
+    enabled: looking,
+    queryFn: () =>
+      apiFetch<{ customers: Customer[]; total: number }>(
+        `/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`,
+      ),
+  });
+  const openFor = useMutation({
+    mutationFn: (customerId: string) =>
+      apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
+        method: "POST",
+        body: JSON.stringify({ customerId }),
+      }),
+    onSuccess: (result) => onOpen(result.invoice.id),
+    onError: (error: Error) => toast.error(error.message),
+  });
   const items = useQuery({
-    queryKey: ["invoice-items", deferred, from, to, page],
-    queryFn: () => apiFetch<{ items: InvoiceItem[]; total: number }>(`/api/invoices/items${query({ q: deferred, from, to, page })}`),
+    queryKey: ["invoice-items", deferred, listFrom, listTo, page],
+    queryFn: () => apiFetch<{ items: InvoiceItem[]; total: number }>(`/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, page })}`),
   });
   const rows = bills.data?.invoices ?? [];
+  const matches = (people.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
   function chooseSort(column: BillSort) {
     setPage(1);
     if (sort === column) {
@@ -116,25 +139,74 @@ function SalesHome({
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-semibold">Sales & billing</h1>
+          <div className="flex flex-wrap items-center gap-3">
+            <Button className="rounded-full" onClick={onNew}>
+              New bill
+            </Button>
+            <Button
+              variant="outline"
+              className="rounded-full"
+              onClick={() => {
+                setFrom(showingToday ? "2000-01-01" : today);
+                setTo(today);
+                setPage(1);
+              }}
+            >
+              {showingToday ? "All bills" : "Today"}
+            </Button>
+          </div>
+          <h1 className="mt-4 text-4xl font-semibold">Sales & billing</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Every bill in the dates, with gross, discount, and net. Not paid keeps only a balance.
+            {looking
+              ? "Search checks every date. Tap New bill for someone who has already been in."
+              : showingToday
+                ? "Today's bills. Search a name, phone, book, or bill number."
+                : "Bills in these dates. Today returns to this morning."}
           </p>
         </div>
-        <Button className="rounded-full" onClick={onNew}>
-          New bill
-        </Button>
       </div>
-      <div className="flex flex-wrap gap-3">
+      <form
+        className="max-w-xl"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (matches.length === 1) openFor.mutate(matches[0].id);
+        }}
+      >
+        <Label htmlFor="sales-search" className="sr-only">
+          Search
+        </Label>
         <Input
+          id="sales-search"
           value={q}
           onChange={(event) => {
             setQ(event.target.value);
             setPage(1);
           }}
-          placeholder="Bill no. or customer"
-          className="w-56"
+          placeholder="Name, phone, book no., or bill no."
+          className="h-12 text-base"
+          autoFocus
         />
+      </form>
+      {looking ? (
+        <div className="max-w-xl space-y-2">
+          {people.isLoading ? <p className="text-sm text-muted-foreground">Searching customers…</p> : null}
+          {matches.map((customer) => (
+            <div key={customer.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+              <p className="text-sm">{customerMatchLabel(customer)}</p>
+              <Button className="rounded-full" disabled={openFor.isPending} onClick={() => openFor.mutate(customer.id)}>
+                New bill
+              </Button>
+            </div>
+          ))}
+          {people.data && matches.length === 0 ? (
+            <p className="text-sm text-muted-foreground">No customer with that name, phone, or book. New bill is for a first visit.</p>
+          ) : null}
+          {people.data && people.data.total > people.data.customers.length ? (
+            <p className="text-sm text-muted-foreground">Type more of the name, phone, or book number.</p>
+          ) : null}
+        </div>
+      ) : null}
+      <div className="flex flex-wrap gap-3">
         <Input
           type="date"
           value={from}
@@ -190,7 +262,7 @@ function SalesHome({
             filename="bills"
             load={async () => {
               const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
-                `/api/invoices${query({ q: deferred, from, to, pay, sort, dir: direction, export: true })}`,
+                `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
               );
               return [
                 {
@@ -203,7 +275,11 @@ function SalesHome({
           />
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
           {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
-          {!bills.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No bills yet.</p> : null}
+          {!bills.isLoading && rows.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              {looking ? "No bills for this search." : showingToday ? "No bills today." : "No bills in these dates."}
+            </p>
+          ) : null}
           {rows.length > 0 ? (
             <div className="rounded-2xl border border-border bg-card">
               <Table>
@@ -254,7 +330,7 @@ function SalesHome({
           <ExportExcelButton
             filename="bill-items"
             load={async () => {
-              const data = await apiFetch<{ items: InvoiceItem[] }>(`/api/invoices/items${query({ q: deferred, from, to, export: true })}`);
+              const data = await apiFetch<{ items: InvoiceItem[] }>(`/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, export: true })}`);
               return [
                 {
                   name: "Bill items",
@@ -452,11 +528,6 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             </TableBody>
           </Table>
         </div>
-      ) : null}
-      {invoice && invoice.lines.length > 0 ? (
-        <p className="text-sm text-muted-foreground">
-          Discount is entered as an amount and shared across lines in proportion to line value; paise rounding is adjusted on the last line. Rate is the price before that share. Amount is the line after it.
-        </p>
       ) : null}
       {invoice ? (
         <div className="grid gap-6 md:grid-cols-2">
@@ -665,6 +736,12 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       </p>
     </form>
   );
+}
+
+function customerMatchLabel(customer: Customer): string {
+  const book = customer.bookNo?.trim();
+  const bookNote = book && book !== "0" ? book : "";
+  return [customer.name, customer.phone, bookNote].filter(Boolean).join(" · ");
 }
 
 function paymentLabel(mode: string | null): string {
@@ -900,19 +977,17 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   useUnsavedWork("new-bill", q.trim().length > 0 || customerId.length > 0 || walkIn.trim().length > 0 || phone.trim().length > 0);
   const customers = useQuery({
     queryKey: ["customers", "bill", q],
+    enabled: q.trim().length > 0,
     queryFn: () => {
-      const params = new URLSearchParams();
-      if (q.trim()) {
-        params.set("q", q.trim());
-        params.set("picker", "1");
-      }
-      const suffix = params.size ? `?${params.toString()}` : "";
-      return apiFetch<{ customers: Customer[]; total: number }>(`/api/customers${suffix}`);
+      const params = new URLSearchParams({ q: q.trim(), picker: "1" });
+      return apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?${params.toString()}`);
     },
   });
+  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
   const create = useMutation({
     mutationFn: async () => {
-      let id = customerId;
+      let id = customerId || (matches.length === 1 ? matches[0].id : "");
+      if (!id && matches.length > 1) throw new Error("Tap the customer in the list.");
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
         if (phone.trim()) {
@@ -954,10 +1029,20 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
           }}
         >
           <Field label="Find customer" id="bill-customer-search">
-            <Input id="bill-customer-search" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Name, phone or book no." />
+            <Input
+              id="bill-customer-search"
+              value={q}
+              onChange={(event) => {
+                setQ(event.target.value);
+                setCustomerId("");
+              }}
+              placeholder="Name, phone or book no."
+              autoFocus
+            />
           </Field>
+          {!q.trim() ? <p className="text-sm text-muted-foreground">Type a name, phone, or book number.</p> : null}
           <div className="max-h-48 space-y-1 overflow-auto">
-            {(customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name)).map((customer) => (
+            {matches.map((customer) => (
               <button
                 key={customer.id}
                 type="button"
@@ -968,11 +1053,10 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
                   setPhone("");
                 }}
               >
-                {customer.name}
-                {customer.phone ? ` · ${customer.phone}` : ""}
+                {customerMatchLabel(customer)}
               </button>
             ))}
-            {customers.data && customers.data.customers.length === 0 ? (
+            {q.trim() && customers.data && matches.length === 0 ? (
               <p className="text-sm text-muted-foreground">No match. Add them below.</p>
             ) : null}
             {customers.data && customers.data.total > customers.data.customers.length ? (
@@ -981,7 +1065,8 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
               </p>
             ) : null}
           </div>
-          <Field label="Or add a walk-in" id="bill-walk-in">
+          <p className="text-sm text-muted-foreground">Name and phone, only when the search has no match.</p>
+          <Field label="First visit" id="bill-walk-in">
             <Input
               id="bill-walk-in"
               value={walkIn}
@@ -991,7 +1076,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
               }}
               placeholder="Name"
               maxLength={120}
-              disabled={Boolean(customerId)}
+              disabled={Boolean(customerId) || matches.length > 0}
             />
           </Field>
           <Field label="Phone" id="bill-walk-in-phone">
@@ -1001,7 +1086,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
               onChange={(event) => setPhone(event.target.value)}
               placeholder="Optional"
               maxLength={20}
-              disabled={Boolean(customerId)}
+              disabled={Boolean(customerId) || matches.length > 0}
             />
           </Field>
           <Button type="submit" className="rounded-full" disabled={create.isPending}>
@@ -1020,46 +1105,54 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
       <style>{`
         .receipt { display: none; }
         @media print {
-          @page { size: A4; margin: 14mm; }
+          @page { size: A5; margin: 8mm; }
           body * { visibility: hidden !important; }
-          .receipt, .receipt * { visibility: visible !important; }
+          .receipt, .receipt * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
           .receipt {
             display: block !important;
             position: absolute;
             left: 0;
             top: 0;
             width: 100%;
-            color: #111;
+            color: #243028;
             background: white;
-            font-family: Georgia, "Times New Roman", serif;
+            font-family: "Jost", "Segoe UI", sans-serif;
           }
         }
-        .receipt-sheet { border: 1px solid #111; padding: 28px 32px 36px; }
-        .receipt-shop { margin: 0; text-align: center; font-size: 13px; letter-spacing: 0.32em; text-transform: uppercase; }
-        .receipt-rule { border: none; border-top: 1px solid #111; margin: 12px 0; }
-        .receipt-title { margin: 0; text-align: center; font-size: 28px; font-weight: 600; letter-spacing: 0.18em; }
+        .receipt-sheet { color: #243028; }
+        .receipt-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+        .receipt-logo { width: 38mm; height: auto; }
+        .receipt-qr { width: 22mm; height: 22mm; }
+        .receipt-wares, .receipt-address { margin: 2px 0; font-size: 11px; }
+        .receipt-chip { display: inline-block; margin: 8px 0; padding: 2px 8px; background: #97da87; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
         .receipt-meta, .receipt-lines, .receipt-totals, .receipt-paid { width: 100%; border-collapse: collapse; }
-        .receipt-meta td { padding: 3px 0; font-size: 14px; vertical-align: top; }
-        .receipt-meta .label, .receipt-lines th { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-        .receipt-lines { margin-top: 18px; }
-        .receipt-lines th { border-top: 1px solid #111; border-bottom: 1px solid #111; padding: 8px 6px; text-align: left; font-weight: 600; }
-        .receipt-lines td { border-bottom: 1px solid #ccc; padding: 8px 6px; font-size: 13px; vertical-align: top; }
+        .receipt-meta td { padding: 3px 0; font-size: 12px; vertical-align: top; }
+        .receipt-meta .label, .receipt-lines th { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+        .receipt-lines { margin-top: 10px; }
+        .receipt-lines th { background: #97da87; padding: 6px; text-align: left; font-weight: 600; }
+        .receipt-lines td { border-bottom: 1px solid #e3f5df; padding: 6px; font-size: 12px; vertical-align: top; }
         .receipt-lines .item { font-weight: 600; }
-        .receipt-lines .sub { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; letter-spacing: 0.02em; }
+        .receipt-lines .sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; }
         .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .receipt-totals { margin-top: 8px; margin-left: auto; width: 260px; }
-        .receipt-totals td { padding: 4px 6px; font-size: 14px; }
-        .receipt-totals .balance td { border-top: 2px solid #111; padding-top: 10px; font-size: 16px; font-weight: 700; }
-        .receipt-paid { margin-top: 18px; }
-        .receipt-paid th { text-align: left; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; padding: 6px; border-bottom: 1px solid #111; }
-        .receipt-paid td { padding: 6px; font-size: 13px; border-bottom: 1px solid #ccc; }
-        .receipt-thanks { margin: 36px 0 0; text-align: center; font-size: 12px; letter-spacing: 0.16em; text-transform: uppercase; }
+        .receipt-totals { margin-top: 8px; margin-left: auto; width: 220px; }
+        .receipt-totals td { padding: 3px 6px; font-size: 12px; }
+        .receipt-totals .balance td { border-top: 2px solid #97da87; padding-top: 8px; font-size: 14px; font-weight: 700; }
+        .receipt-paid { margin-top: 12px; }
+        .receipt-paid th { text-align: left; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px; background: #97da87; }
+        .receipt-paid td { padding: 4px; font-size: 12px; border-bottom: 1px solid #e3f5df; }
+        .receipt-terms { margin: 12px 0 0; font-size: 10px; }
+        .receipt-signs { display: flex; justify-content: space-between; margin-top: 28px; font-size: 11px; }
       `}</style>
       <div className="receipt-sheet">
-        <p className="receipt-shop">Ladies Collections</p>
-        <hr className="receipt-rule" />
-        <h1 className="receipt-title">Bill</h1>
-        <hr className="receipt-rule" />
+        <div className="receipt-top">
+          <img className="receipt-logo" src="/lc-logo.png" alt="Ladies Collection" />
+          <img className="receipt-qr" src="/upi-qr.png" alt="UPI" />
+        </div>
+        <p className="receipt-wares">Sarees, Churidars, Kurtis, Nighties, Western wear</p>
+        <p className="receipt-wares">Blouse stitching and aari work</p>
+        <p className="receipt-address"># 101/A, ARC 3T Road, opposite the Old Employment Office, Kagitha Patarai, Vellore 632 012</p>
+        <p className="receipt-address">93626 98863 · 98941 60179 · GSTIN 33BTNPS2196C2Z9</p>
+        <p className="receipt-chip">Cash bill</p>
         <table className="receipt-meta">
           <tbody>
             <tr>
@@ -1153,7 +1246,11 @@ function Receipt({ invoice }: { invoice: InvoiceDetail }) {
             </tbody>
           </table>
         ) : null}
-        <p className="receipt-thanks">Thank you</p>
+        <p className="receipt-terms">Complaint within 3 days. Not responsible for damage or colour fade. Goods once sold cannot be taken back.</p>
+        <div className="receipt-signs">
+          <p>Customer's signature</p>
+          <p>For Ladies Collection</p>
+        </div>
       </div>
     </section>
   );
@@ -1284,8 +1381,7 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
                 className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
                 onClick={() => setCustomerId(customer.id)}
               >
-                {customer.name}
-                {customer.phone ? ` · ${customer.phone}` : ""}
+                {customerMatchLabel(customer)}
               </button>
             ))}
           </div>

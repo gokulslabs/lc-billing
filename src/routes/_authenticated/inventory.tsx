@@ -10,6 +10,7 @@ import { lineAmount, shopToday } from "@/lib/sales";
 import { LabelSheet } from "@/components/app/BarcodeLabel";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
+import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,15 +45,15 @@ export const Route = createFileRoute("/_authenticated/inventory")({
 
 function InventoryPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
-        <h1 className="text-4xl font-semibold">Inventory</h1>
+        <h1 className="text-3xl font-semibold md:text-4xl">Inventory</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Stock by number, current quantity by group, purchase receipts, and barcode labels.
         </p>
       </div>
       <Tabs defaultValue="stock">
-        <TabsList>
+        <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="stock">Stock</TabsTrigger>
           <TabsTrigger value="current">Current stock</TabsTrigger>
           <TabsTrigger value="purchases">Purchases</TabsTrigger>
@@ -202,7 +203,34 @@ function StockPanel() {
       {stock.error instanceof Error ? <p className="text-sm text-destructive">{stock.error.message}</p> : null}
       {!stock.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No stock yet.</p> : null}
       {rows.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card">
+        <>
+        <PhoneCards>
+          {rows.map((item) => (
+            <PhoneCard
+              key={item.id}
+              title={item.inventoryNo}
+              detail={`${item.productCode} · ${item.groupName} · ${item.productName} · ${unitLabel(item.unit)} · ${formatRupees(item.price)} · qty ${formatQty(item.quantity)} · ${item.status}`}
+            >
+              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(item)}>
+                Edit
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  if (!window.confirm(`Remove inventory ${item.inventoryNo}? This cannot be undone.`)) return;
+                  void apiFetch(`/api/inventory/${item.id}`, { method: "DELETE" })
+                    .then(() => queryClient.invalidateQueries({ queryKey: ["inventory"] }))
+                    .catch((reason: Error) => toast.error(reason.message));
+                }}
+              >
+                Remove
+              </Button>
+            </PhoneCard>
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -258,7 +286,8 @@ function StockPanel() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
+        </>
       ) : null}
       <ListFooter page={page} total={stock.data?.total ?? 0} shown={rows.length} onPage={setPage} />
       <StockDialog
@@ -548,7 +577,17 @@ function CurrentStockPanel() {
         {detail.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
         {rows.length === 0 && !detail.isLoading ? <p className="text-sm text-muted-foreground">No available stock in this group.</p> : null}
         {rows.length > 0 ? (
-          <div className="rounded-2xl border border-border bg-card">
+          <>
+          <PhoneCards>
+            {rows.map((item) => (
+              <PhoneCard
+                key={item.id}
+                title={item.inventoryNo}
+                detail={`${item.productCode} · ${item.productName} · qty ${formatQty(item.quantity)} · ${formatRupees(item.price)} · ${formatRupees(lineAmount(item.quantity, item.price))}`}
+              />
+            ))}
+          </PhoneCards>
+          <DeskTable>
             <Table>
               <TableHeader>
                 <TableRow>
@@ -569,11 +608,12 @@ function CurrentStockPanel() {
                     <TableCell>{formatQty(item.quantity)}</TableCell>
                     <TableCell>{formatRupees(item.price)}</TableCell>
                     <TableCell>{formatRupees(lineAmount(item.quantity, item.price))}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+          </DeskTable>
+          </>
         ) : null}
         <ListFooter page={page} total={detail.data?.total ?? 0} shown={rows.length} onPage={setPage} />
       </div>
@@ -600,7 +640,28 @@ function CurrentStockPanel() {
               },
             ]}
           />
-        <div className="rounded-2xl border border-border bg-card">
+        <PhoneCards>
+          {groups.map((group) => (
+            <PhoneCard
+              key={group.id}
+              title={group.name}
+              detail={`${formatQty(group.quantity)} · ${formatRupees(group.amount)}`}
+            >
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full"
+                onClick={() => {
+                  setPage(1);
+                  setGroupId(group.id);
+                }}
+              >
+                Open
+              </Button>
+            </PhoneCard>
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -635,7 +696,7 @@ function CurrentStockPanel() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
         </div>
       ) : null}
     </div>
@@ -704,7 +765,17 @@ function PurchasesPanel() {
       ) : null}
       {!purchases.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No purchases in this range.</p> : null}
       {rows.length > 0 ? (
-        <div className="rounded-2xl border border-border bg-card">
+        <>
+        <PhoneCards>
+          {rows.map((row, index) => (
+            <PhoneCard
+              key={`${row.date}-${row.productId}-${index}`}
+              title={row.productName}
+              detail={`${row.date} · ${row.productCode} · ${row.groupName} · ${formatQty(row.quantity)} ${row.unit} · ${receiptBlank(row.supplierName)} · ${formatPurchaseNumbers(row.inventoryNos)}`}
+            />
+          ))}
+        </PhoneCards>
+        <DeskTable>
           <Table>
             <TableHeader>
               <TableRow>
@@ -739,7 +810,8 @@ function PurchasesPanel() {
               ))}
             </TableBody>
           </Table>
-        </div>
+        </DeskTable>
+        </>
       ) : null}
     </div>
   );
