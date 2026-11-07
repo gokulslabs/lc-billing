@@ -56,6 +56,15 @@ function ReportsPage() {
   const [books, setBooks] = useState<"new" | "old">("new");
   const [page, setPage] = useState(1);
   const [applied, setApplied] = useState({ from: monthStart(today), to: today, date: today, books: "new" as "new" | "old" });
+  function applyRange(start: string, end = today) {
+    setFrom(start);
+    setTo(end);
+    setApplied((current) => ({ ...current, from: start, to: end }));
+    setPage(1);
+  }
+  const lastWeek = dateOffset(today, -7);
+  const yesterday = dateOffset(today, -1);
+  const lastMonth = previousMonth(today);
   const needsRange = report !== "collections" && report !== "pending" && report !== "mismatch";
   const needsDate = report === "collections";
 
@@ -104,6 +113,17 @@ function ReportsPage() {
             </div>
           ) : (
             <>
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" variant={applied.from === yesterday && applied.to === yesterday ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(yesterday, yesterday)}>
+                  Yesterday
+                </Button>
+                <Button type="button" variant={applied.from === lastWeek && applied.to === today ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(lastWeek)}>
+                  Last 7 days
+                </Button>
+                <Button type="button" variant={applied.from === lastMonth.from && applied.to === lastMonth.to ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(lastMonth.from, lastMonth.to)}>
+                  Last month
+                </Button>
+              </div>
               <div className="space-y-2">
                 <Label htmlFor="report-from">From date</Label>
                 <Input id="report-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
@@ -221,6 +241,19 @@ function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promi
       ) : null}
     </div>
   );
+}
+
+function dateOffset(today: string, days: number): string {
+  const date = new Date(`${today}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function previousMonth(today: string): { from: string; to: string } {
+  const [year = 0, month = 1] = today.split("-").map(Number);
+  const start = new Date(Date.UTC(year, month - 2, 1, 12));
+  const end = new Date(Date.UTC(year, month - 1, 0, 12));
+  return { from: start.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
 function bookNote(books: "new" | "old"): string {

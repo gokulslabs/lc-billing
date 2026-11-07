@@ -5,6 +5,7 @@ import { useAuth } from "@/hooks/use-auth";
 import { apiFetch } from "@/lib/api";
 import type { DashboardStats } from "@/lib/dashboard";
 import { formatRupees } from "@/lib/products";
+import { shopDateLabel, shopGreeting } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
@@ -21,9 +22,10 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 
 const NEEDS: { key: keyof DashboardStats; label: string; detail: string; href: string }[] = [
   { key: "billsToday", label: "Bills today", detail: "Open Sales to write the next one", href: "/sales" },
+  { key: "unpaidBills", label: "Unpaid bills", detail: "Open the bills list to follow up", href: "/sales?view=due" },
   { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/stitching?board=ready" },
-  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders taken from 6 Nov 2026", href: "/stitching?board=today" },
-  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders taken from 6 Nov 2026 that are still pending", href: "/stitching?board=overdue" },
+  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders awaiting completion", href: "/stitching?board=today" },
+  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders awaiting completion", href: "/stitching?board=overdue" },
 ];
 
 function CloseFigure({ label, value }: { label: string; value: number | undefined }) {
@@ -33,11 +35,6 @@ function CloseFigure({ label, value }: { label: string; value: number | undefine
       <p className="mt-1 text-2xl font-semibold tabular-nums">{value == null ? "…" : formatRupees(value)}</p>
     </div>
   );
-}
-
-function greeting() {
-  const h = new Date().getHours();
-  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
 function Dashboard() {
@@ -55,14 +52,14 @@ function Dashboard() {
     queryFn: () => apiFetch<{ stats: DashboardStats }>("/api/dashboard"),
   });
   const name = profile?.full_name?.split(" ")[0] ?? "there";
-  const today = new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+  const today = shopDateLabel();
 
   return (
     <div className="mx-auto max-w-6xl space-y-10 p-6 md:p-10">
       <section className="rounded-3xl bg-[image:var(--gradient-primary)] p-8 text-primary-foreground shadow-[var(--shadow-soft)] md:p-10">
         <p className="text-xs uppercase tracking-[0.3em] opacity-90">{today}</p>
         <h1 className="mt-3 text-4xl font-semibold md:text-5xl">
-          {greeting()}, {name}
+          {shopGreeting()}, {name}
         </h1>
         <p className="mt-2 max-w-lg text-sm opacity-95">What needs a person today, then the money that came in.</p>
       </section>

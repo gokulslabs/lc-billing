@@ -62,7 +62,7 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             {status === "board"
               ? "Past the delivery date, due today, this week, and ready for pickup."
               : status === "overdue"
-                ? "Orders taken from 6 Nov 2026 whose delivery date has passed."
+                ? "Pending and trial orders whose delivery date has passed."
                 : "Order, bag, customer, garment, and the two dates from the old list."}
           </p>
         </div>
