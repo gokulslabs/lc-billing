@@ -6,14 +6,33 @@ import { apiFetch } from "@/lib/api";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
-import { STITCHING_STATUSES, type StitchingMeasurement, type StitchingOrder, type StitchingProduct, type StitchingStatus } from "@/lib/stitching";
+import {
+  STITCHING_STATUSES,
+  type StitchingMeasurement,
+  type StitchingOrder,
+  type StitchingProduct,
+  type StitchingStatus,
+} from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/stitching")({
   head: () => ({
@@ -27,16 +46,30 @@ export const Route = createFileRoute("/_authenticated/stitching")({
 
 function StitchingPage() {
   const [orderId, setOrderId] = useState<string | "new" | null>(null);
-  if (orderId) return <OrderScreen id={orderId === "new" ? null : orderId} onBack={() => setOrderId(null)} onCreated={setOrderId} />;
+  if (orderId)
+    return (
+      <OrderScreen
+        id={orderId === "new" ? null : orderId}
+        onBack={() => setOrderId(null)}
+        onCreated={setOrderId}
+      />
+    );
   return <OrderList onOpen={setOrderId} />;
 }
 
 function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
-  const opening = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("board") : null;
+  const opening =
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("board") : null;
   const [status, setStatus] = useState(
-    opening === "ready" ? "READY" : opening === "today" ? "today" : opening === "overdue" ? "overdue" : "",
+    opening === "ready"
+      ? "READY"
+      : opening === "today"
+        ? "today"
+        : opening === "overdue"
+          ? "overdue"
+          : "",
   );
   const [page, setPage] = useState(1);
   const orders = useQuery({
@@ -45,10 +78,13 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
     queryFn: () => {
       const params = new URLSearchParams();
       if (deferred.trim()) params.set("q", deferred.trim());
-      if (status === "soon" || status === "today" || status === "week" || status === "overdue") params.set("due", status);
+      if (status === "soon" || status === "today" || status === "week" || status === "overdue")
+        params.set("due", status);
       else if (status && status !== "board") params.set("status", status);
       params.set("page", String(page));
-      return apiFetch<{ orders: StitchingOrder[]; total: number }>(`/api/stitching-orders?${params.toString()}`);
+      return apiFetch<{ orders: StitchingOrder[]; total: number }>(
+        `/api/stitching-orders?${params.toString()}`,
+      );
     },
   });
   const rows = orders.data?.orders ?? [];
@@ -68,33 +104,51 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
         </div>
         <div className="flex flex-wrap gap-2">
           {status === "board" ? null : (
-          <ExportExcelButton
-            filename="stitching-orders"
-            load={async () => {
-              const params = new URLSearchParams({ export: "1" });
-              if (deferred.trim()) params.set("q", deferred.trim());
-              if (status === "soon" || status === "today" || status === "week" || status === "overdue") params.set("due", status);
-              else if (status && status !== "board") params.set("status", status);
-              const data = await apiFetch<{ orders: StitchingOrder[] }>(`/api/stitching-orders?${params.toString()}`);
-              return [
-                {
-                  name: "Orders",
-                  columns: ["Order", "Bag", "Customer", "Phone", "Garment", "Ordered", "Delivery", "Status", "Amount"],
-                  rows: data.orders.map((order) => [
-                    order.orderNo,
-                    order.bagNo ?? "",
-                    order.customerName,
-                    order.customerPhone,
-                    order.productName,
-                    order.orderedOn,
-                    order.deliveryOn ?? "",
-                    order.status,
-                    order.amount,
-                  ]),
-                },
-              ];
-            }}
-          />
+            <ExportExcelButton
+              filename="stitching-orders"
+              load={async () => {
+                const params = new URLSearchParams({ export: "1" });
+                if (deferred.trim()) params.set("q", deferred.trim());
+                if (
+                  status === "soon" ||
+                  status === "today" ||
+                  status === "week" ||
+                  status === "overdue"
+                )
+                  params.set("due", status);
+                else if (status && status !== "board") params.set("status", status);
+                const data = await apiFetch<{ orders: StitchingOrder[] }>(
+                  `/api/stitching-orders?${params.toString()}`,
+                );
+                return [
+                  {
+                    name: "Orders",
+                    columns: [
+                      "Order",
+                      "Bag",
+                      "Customer",
+                      "Phone",
+                      "Garment",
+                      "Ordered",
+                      "Delivery",
+                      "Status",
+                      "Amount",
+                    ],
+                    rows: data.orders.map((order) => [
+                      order.orderNo,
+                      order.bagNo ?? "",
+                      order.customerName,
+                      order.customerPhone,
+                      order.productName,
+                      order.orderedOn,
+                      order.deliveryOn ?? "",
+                      order.status,
+                      order.amount,
+                    ]),
+                  },
+                ];
+              }}
+            />
           )}
           <Button className="rounded-full" onClick={() => onOpen("new")}>
             New order
@@ -130,17 +184,36 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             <SelectItem value="all">All statuses</SelectItem>
             {STITCHING_STATUSES.map((item) => (
               <SelectItem key={item} value={item}>
-                {item === "PENDING" ? "All pending" : item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : item === "DELIVERED" ? "Delivered" : item}
+                {item === "PENDING"
+                  ? "All pending"
+                  : item === "TRIAL"
+                    ? "Trial"
+                    : item === "READY"
+                      ? "Ready"
+                      : item === "DELIVERED"
+                        ? "Delivered"
+                        : item}
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
       </div>
       {orders.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {orders.error instanceof Error ? <p className="text-sm text-destructive">{orders.error.message}</p> : null}
+      {orders.error instanceof Error ? (
+        <p className="text-sm text-destructive">{orders.error.message}</p>
+      ) : null}
       {status === "board" ? <StitchingBoard onOpen={onOpen} /> : null}
-      {status !== "board" && !orders.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No orders yet.</p> : null}
-      {status === "board" ? null : <ListFooter page={page} total={orders.data?.total ?? 0} shown={rows.length} onPage={setPage} />}
+      {status !== "board" && !orders.isLoading && rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No orders yet.</p>
+      ) : null}
+      {status === "board" ? null : (
+        <ListFooter
+          page={page}
+          total={orders.data?.total ?? 0}
+          shown={rows.length}
+          onPage={setPage}
+        />
+      )}
       {status !== "board" && rows.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -162,16 +235,25 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                   <TableCell>{order.bagNo || "—"}</TableCell>
                   <TableCell>
                     <div>{order.customerName || "—"}</div>
-                    {order.customerPhone ? <div className="text-xs text-muted-foreground">{order.customerPhone}</div> : null}
+                    {order.customerPhone ? (
+                      <div className="text-xs text-muted-foreground">{order.customerPhone}</div>
+                    ) : null}
                   </TableCell>
                   <TableCell>{order.productName.replace(/ stitching$/i, "")}</TableCell>
                   <TableCell className="whitespace-nowrap">
                     <div>{slashDate(order.orderedOn)}</div>
-                    <div className="text-xs text-muted-foreground">{order.deliveryOn ? slashDate(order.deliveryOn) : "—"}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {order.deliveryOn ? slashDate(order.deliveryOn) : "—"}
+                    </div>
                   </TableCell>
                   <TableCell>{order.status}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(order.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => onOpen(order.id)}
+                    >
                       Open
                     </Button>
                   </TableCell>
@@ -189,19 +271,31 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
   const queryClient = useQueryClient();
   const overdue = useQuery({
     queryKey: ["stitching-board", "overdue"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=overdue&page=1"),
+    queryFn: () =>
+      apiFetch<{ orders: StitchingOrder[]; total: number }>(
+        "/api/stitching-orders?due=overdue&page=1",
+      ),
   });
   const today = useQuery({
     queryKey: ["stitching-board", "today"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=today&page=1"),
+    queryFn: () =>
+      apiFetch<{ orders: StitchingOrder[]; total: number }>(
+        "/api/stitching-orders?due=today&page=1",
+      ),
   });
   const week = useQuery({
     queryKey: ["stitching-board", "week"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?due=week&page=1"),
+    queryFn: () =>
+      apiFetch<{ orders: StitchingOrder[]; total: number }>(
+        "/api/stitching-orders?due=week&page=1",
+      ),
   });
   const ready = useQuery({
     queryKey: ["stitching-board", "ready"],
-    queryFn: () => apiFetch<{ orders: StitchingOrder[]; total: number }>("/api/stitching-orders?status=READY&page=1"),
+    queryFn: () =>
+      apiFetch<{ orders: StitchingOrder[]; total: number }>(
+        "/api/stitching-orders?status=READY&page=1",
+      ),
   });
   const columns = [
     ["Past the delivery date", overdue],
@@ -219,29 +313,40 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
           </h2>
           {query.data && query.data.total > Math.min(8, query.data.orders.length) ? (
             <p className="mt-1 text-sm text-muted-foreground">
-              Showing 8 of {query.data.total}. The orders list has the rest. Older orders stay on that list.
+              Showing 8 of {query.data.total}. The orders list has the rest. Older orders stay on
+              that list.
             </p>
           ) : null}
           {query.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}
-          {query.error instanceof Error ? <p className="mt-3 text-sm text-destructive">{query.error.message}</p> : null}
+          {query.error instanceof Error ? (
+            <p className="mt-3 text-sm text-destructive">{query.error.message}</p>
+          ) : null}
           <div className="mt-3 space-y-3">
             {(query.data?.orders ?? []).slice(0, 8).map((order) => (
               <article key={order.id} className="rounded-xl border border-border px-3 py-3">
-                <button type="button" className="block w-full text-left" onClick={() => onOpen(order.id)}>
+                <button
+                  type="button"
+                  className="block w-full text-left"
+                  onClick={() => onOpen(order.id)}
+                >
                   <p className="font-medium">{order.customerName || "No name"}</p>
                   <p className="text-sm text-muted-foreground">
-                    {order.productName} · bag {order.bagNo || "—"} · {order.deliveryOn || "no date"} · {order.status}
+                    {order.productName} · bag {order.bagNo || "—"} · {order.deliveryOn || "no date"}{" "}
+                    · {order.status}
                   </p>
                 </button>
                 <div className="mt-2 flex flex-wrap gap-1">
-                  {STITCHING_STATUSES.filter((item) => item !== "PENDING" && item !== order.status).map((item) => (
+                  {STITCHING_STATUSES.filter(
+                    (item) => item !== "PENDING" && item !== order.status,
+                  ).map((item) => (
                     <Button
                       key={item}
                       variant="outline"
                       size="sm"
                       className="rounded-full"
                       onClick={() => {
-                        const label = item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered";
+                        const label =
+                          item === "TRIAL" ? "Trial" : item === "READY" ? "Ready" : "Delivered";
                         if (!window.confirm(`Mark order ${order.orderNo} ${label}?`)) return;
                         if (!confirmOldOrder(order.deliveryOn)) return;
                         void apiFetch(`/api/stitching-orders/${order.id}/status`, {
@@ -249,7 +354,9 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
                           body: JSON.stringify({ status: item }),
                         })
                           .then(() => {
-                            toast.success(`${order.customerName || "Order"} is ${item.toLowerCase()}.`);
+                            toast.success(
+                              `${order.customerName || "Order"} is ${item.toLowerCase()}.`,
+                            );
                             void queryClient.invalidateQueries({ queryKey: ["stitching-board"] });
                             void queryClient.invalidateQueries({ queryKey: ["stitching-orders"] });
                           })
@@ -262,7 +369,9 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
                 </div>
               </article>
             ))}
-            {!query.isLoading && (query.data?.orders.length ?? 0) === 0 ? <p className="text-sm text-muted-foreground">None.</p> : null}
+            {!query.isLoading && (query.data?.orders.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">None.</p>
+            ) : null}
           </div>
         </section>
       ))}
@@ -275,7 +384,15 @@ function confirmOldOrder(deliveryOn: string | null): boolean {
   return window.confirm("This delivery date is before 26 Oct 2026. Change this one order?");
 }
 
-function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () => void; onCreated: (id: string) => void }) {
+function OrderScreen({
+  id,
+  onBack,
+  onCreated,
+}: {
+  id: string | null;
+  onBack: () => void;
+  onCreated: (id: string) => void;
+}) {
   const queryClient = useQueryClient();
   const products = useQuery({
     queryKey: ["stitching-products"],
@@ -296,9 +413,13 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
   const [deliveryOn, setDeliveryOn] = useState("");
   const [status, setStatus] = useState<StitchingStatus>("PENDING");
   const [amount, setAmount] = useState("0");
-  const [measurements, setMeasurements] = useState<StitchingMeasurement[]>([{ label: "", value: "" }]);
+  const [measurements, setMeasurements] = useState<StitchingMeasurement[]>([
+    { label: "", value: "" },
+  ]);
   const [seen, setSeen] = useState<string | null>(null);
-  const savedMeasurements = order?.measurements.length ? order.measurements : [{ label: "", value: "" }];
+  const savedMeasurements = order?.measurements.length
+    ? order.measurements
+    : [{ label: "", value: "" }];
   const orderDirty = order
     ? customerId !== order.customerId ||
       productId !== order.productId ||
@@ -355,7 +476,11 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
         amount: value,
         measurements,
       });
-      if (id) return apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`, { method: "PATCH", body });
+      if (id)
+        return apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`, {
+          method: "PATCH",
+          body,
+        });
       return apiFetch<{ order: StitchingOrder }>("/api/stitching-orders", { method: "POST", body });
     },
     onSuccess: (result) => {
@@ -394,28 +519,50 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
           Back
         </Button>
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          <h1 className="text-4xl font-semibold">{order ? `Order ${order.orderNo}` : "New order"}</h1>
+          <h1 className="text-4xl font-semibold">
+            {order ? `Order ${order.orderNo}` : "New order"}
+          </h1>
           {order ? (
-            <ExportExcelButton
-              filename={`order-${order.orderNo}`}
-              load={async () => [
-                {
-                  name: "Measurements",
-                  columns: ["Field", "Value"],
-                  rows: order.measurements.map((measurement) => [measurement.label, measurement.value]),
-                },
-              ]}
-            />
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => window.print()}
+              >
+                Print
+              </Button>
+              <ExportExcelButton
+                filename={`order-${order.orderNo}`}
+                load={async () => [
+                  {
+                    name: "Measurements",
+                    columns: ["Field", "Value"],
+                    rows: order.measurements.map((measurement) => [
+                      measurement.label,
+                      measurement.value,
+                    ]),
+                  },
+                ]}
+              />
+            </>
           ) : null}
         </div>
-        <p className="mt-2 text-sm text-muted-foreground">Measurements stay as written, including values such as 36+4.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Measurements stay as written, including values such as 36+4.
+        </p>
       </div>
       {existing.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       <form
         className="space-y-4"
         onSubmit={(event) => {
           event.preventDefault();
-          if (order && status !== order.status && !window.confirm(`Mark order ${order.orderNo} ${status}?`)) return;
+          if (
+            order &&
+            status !== order.status &&
+            !window.confirm(`Mark order ${order.orderNo} ${status}?`)
+          )
+            return;
           if (order && status !== order.status && !confirmOldOrder(order.deliveryOn)) return;
           save.mutate();
         }}
@@ -466,16 +613,37 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
         </Field>
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Bag no." id="stitch-bag">
-            <Input id="stitch-bag" value={bagNo} onChange={(event) => setBagNo(event.target.value)} maxLength={40} />
+            <Input
+              id="stitch-bag"
+              value={bagNo}
+              onChange={(event) => setBagNo(event.target.value)}
+              maxLength={40}
+            />
           </Field>
           <Field label="Amount" id="stitch-amount">
-            <Input id="stitch-amount" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+            <Input
+              id="stitch-amount"
+              value={amount}
+              onChange={(event) => setAmount(event.target.value)}
+              required
+            />
           </Field>
           <Field label="Date" id="stitch-date">
-            <Input id="stitch-date" type="date" value={orderedOn} onChange={(event) => setOrderedOn(event.target.value)} required />
+            <Input
+              id="stitch-date"
+              type="date"
+              value={orderedOn}
+              onChange={(event) => setOrderedOn(event.target.value)}
+              required
+            />
           </Field>
           <Field label="Delivery" id="stitch-delivery">
-            <Input id="stitch-delivery" type="date" value={deliveryOn} onChange={(event) => setDeliveryOn(event.target.value)} />
+            <Input
+              id="stitch-delivery"
+              type="date"
+              value={deliveryOn}
+              onChange={(event) => setDeliveryOn(event.target.value)}
+            />
           </Field>
         </div>
         <Field label="Status" id="stitch-status">
@@ -511,14 +679,18 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
                 value={row.label}
                 placeholder="FRONT NECK"
                 maxLength={40}
-                onChange={(event) => updateRow(setMeasurements, index, { label: event.target.value })}
+                onChange={(event) =>
+                  updateRow(setMeasurements, index, { label: event.target.value })
+                }
               />
               <Input
                 aria-label={`Measurement ${index + 1} value`}
                 value={row.value}
                 placeholder="36+4"
                 maxLength={40}
-                onChange={(event) => updateRow(setMeasurements, index, { value: event.target.value })}
+                onChange={(event) =>
+                  updateRow(setMeasurements, index, { value: event.target.value })
+                }
               />
             </div>
           ))}
@@ -534,7 +706,8 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
               className="rounded-full"
               disabled={remove.isPending}
               onClick={() => {
-                if (!window.confirm(`Remove order ${order?.orderNo ?? ""}? This cannot be undone.`)) return;
+                if (!window.confirm(`Remove order ${order?.orderNo ?? ""}? This cannot be undone.`))
+                  return;
                 remove.mutate();
               }}
             >
@@ -543,7 +716,105 @@ function OrderScreen({ id, onBack, onCreated }: { id: string | null; onBack: () 
           ) : null}
         </div>
       </form>
+      {order ? <MeasurementSheet order={order} /> : null}
     </div>
+  );
+}
+
+function MeasurementSheet({ order }: { order: StitchingOrder }) {
+  return (
+    <section className="measurement-sheet" aria-label="Printable measurement sheet">
+      <style>{`
+        .measurement-sheet { display: none; }
+        @media print {
+          @page { size: A5; margin: 8mm; }
+          body * { visibility: hidden !important; }
+          .measurement-sheet, .measurement-sheet * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+          .measurement-sheet {
+            display: block !important;
+            position: absolute;
+            inset: 0 auto auto 0;
+            width: 100%;
+            color: #202020;
+            background: white;
+            font-family: "Jost", "Segoe UI", sans-serif;
+          }
+        }
+        .measurement-sheet__header { border-bottom: 2px solid #202020; padding-bottom: 8px; }
+        .measurement-sheet__title { margin: 0; font-family: Georgia, serif; font-size: 24px; }
+        .measurement-sheet__sub { margin: 3px 0 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
+        .measurement-sheet__meta { width: 100%; margin-top: 12px; border-collapse: collapse; }
+        .measurement-sheet__meta td { padding: 3px 0; font-size: 12px; vertical-align: top; }
+        .measurement-sheet__label { width: 30%; color: #555; font-size: 10px !important; letter-spacing: .05em; text-transform: uppercase; }
+        .measurement-sheet__table { width: 100%; margin-top: 16px; border-collapse: collapse; }
+        .measurement-sheet__table th { padding: 6px 8px; background: #ececec; border: 1px solid #aaa; text-align: left; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
+        .measurement-sheet__table td { padding: 7px 8px; border: 1px solid #aaa; font-size: 13px; }
+        .measurement-sheet__table td:last-child { font-weight: 600; }
+        .measurement-sheet__empty { padding: 18px 8px !important; color: #555; font-weight: 400 !important; text-align: center; }
+        .measurement-sheet__footer { margin-top: 18px; border-top: 1px solid #aaa; padding-top: 7px; color: #555; font-size: 10px; }
+      `}</style>
+      <div className="measurement-sheet__header">
+        <h2 className="measurement-sheet__title">Ladies Collections</h2>
+        <p className="measurement-sheet__sub">Stitching measurement sheet</p>
+      </div>
+      <table className="measurement-sheet__meta">
+        <tbody>
+          <tr>
+            <td className="measurement-sheet__label">Customer</td>
+            <td>{order.customerName || "—"}</td>
+          </tr>
+          {order.customerPhone ? (
+            <tr>
+              <td className="measurement-sheet__label">Phone</td>
+              <td>{order.customerPhone}</td>
+            </tr>
+          ) : null}
+          <tr>
+            <td className="measurement-sheet__label">Garment</td>
+            <td>{order.productName.replace(/ stitching$/i, "") || "—"}</td>
+          </tr>
+          <tr>
+            <td className="measurement-sheet__label">Order / bag</td>
+            <td>
+              {order.orderNo}
+              {order.bagNo ? ` / ${order.bagNo}` : ""}
+            </td>
+          </tr>
+          <tr>
+            <td className="measurement-sheet__label">Date / delivery</td>
+            <td>
+              {slashDate(order.orderedOn)}
+              {order.deliveryOn ? ` / ${slashDate(order.deliveryOn)}` : ""}
+            </td>
+          </tr>
+        </tbody>
+      </table>
+      <table className="measurement-sheet__table">
+        <thead>
+          <tr>
+            <th>Measurement</th>
+            <th>Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {order.measurements.length ? (
+            order.measurements.map((measurement, index) => (
+              <tr key={`${measurement.label}-${index}`}>
+                <td>{measurement.label}</td>
+                <td>{measurement.value}</td>
+              </tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan={2} className="measurement-sheet__empty">
+                No measurements saved for this order.
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+      <p className="measurement-sheet__footer">Order status: {order.status}</p>
+    </section>
   );
 }
 
@@ -552,7 +823,9 @@ function updateRow(
   index: number,
   patch: Partial<StitchingMeasurement>,
 ) {
-  setRows((current) => current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)));
+  setRows((current) =>
+    current.map((row, rowIndex) => (rowIndex === index ? { ...row, ...patch } : row)),
+  );
 }
 
 function slashDate(value: string): string {
