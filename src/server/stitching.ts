@@ -14,7 +14,7 @@ import {
   type StitchingStatus,
 } from "@/lib/stitching";
 import { pageRange, readPage } from "@/lib/paging";
-import { shopToday, STITCHING_BOARD_FROM } from "@/lib/sales";
+import { shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -76,8 +76,7 @@ stitching.get("/", async (c) => {
               : status
                 ? ranked.eq("status", status)
                 : ranked;
-    const onBoard = due === "today" || due === "overdue" || due === "week" || soon;
-    const filtered = onBoard ? matched.gte("ordered_on", STITCHING_BOARD_FROM) : matched;
+    const filtered = matched;
     const searched = !safe
       ? filtered
       : customerIds.length > 0

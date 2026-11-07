@@ -87,6 +87,14 @@ function SalesHome({
   const deferred = useDeferredValue(q);
   const [from, setFrom] = useState(today);
   const [to, setTo] = useState(today);
+  function setDateRange(start: string, end = today) {
+    setFrom(start);
+    setTo(end);
+    setPage(1);
+  }
+  const lastWeek = shopDateOffset(today, -7);
+  const yesterday = shopDateOffset(today, -1);
+  const lastMonth = previousMonthRange(today);
   const showingToday = from === today && to === today;
   const looking = deferred.trim().length > 0;
   const listFrom = looking ? "2000-01-01" : from;
@@ -206,7 +214,16 @@ function SalesHome({
           ) : null}
         </div>
       ) : null}
-      <div className="flex flex-wrap gap-3">
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="button" variant={from === yesterday && to === yesterday ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(yesterday, yesterday)}>
+          Yesterday
+        </Button>
+        <Button type="button" variant={from === lastWeek && to === today ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(lastWeek)}>
+          Last 7 days
+        </Button>
+        <Button type="button" variant={from === lastMonth.from && to === lastMonth.to ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(lastMonth.from, lastMonth.to)}>
+          Last month
+        </Button>
         <Input
           type="date"
           value={from}
@@ -1540,6 +1557,19 @@ function CloseCard({ label, value, note }: { label: string; value: string; note:
       <p className="mt-1 text-xs text-muted-foreground">{note}</p>
     </div>
   );
+}
+
+function shopDateOffset(today: string, days: number): string {
+  const date = new Date(`${today}T12:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function previousMonthRange(today: string): { from: string; to: string } {
+  const [year = 0, month = 1] = today.split("-").map(Number);
+  const previous = new Date(Date.UTC(year!, month! - 2, 1, 12));
+  const end = new Date(Date.UTC(year!, month! - 1, 0, 12));
+  return { from: previous.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
 function query(input: { q: string; from: string; to: string; page?: number; pay?: BillPay; sort?: BillSort; dir?: "asc" | "desc"; export?: boolean }): string {

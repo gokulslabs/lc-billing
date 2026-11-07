@@ -2,7 +2,6 @@ import { z } from "zod";
 
 export const NEW_COUNTER_FROM = "2026-10-26";
 // Stitching board and the morning cards start here. Older orders stay on the orders list.
-export const STITCHING_BOARD_FROM = "2026-11-06";
 
 export function billBook(billedOn: string): "new" | "old" {
   return billedOn < NEW_COUNTER_FROM ? "old" : "new";
@@ -210,6 +209,21 @@ export function collectionProblem(balance: number, amount: number): string | nul
 
 export function shopToday(): string {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" }).format(new Date());
+}
+
+export function shopDateLabel(date = new Date()): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    timeZone: "Asia/Kolkata",
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  }).format(date);
+}
+
+export function shopGreeting(date = new Date()): string {
+  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }).format(date));
+  return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 
 export function zodMessage(error: z.ZodError): string {
