@@ -14,6 +14,7 @@ import {
   type Unit,
 } from "@/lib/products";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { PrintTableButton } from "@/components/app/PrintTableButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
@@ -27,15 +28,31 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authenticated/products")({
   head: () => ({
     meta: [
       { title: "Products — Ladies Collections" },
-      { name: "description", content: "Product groups, prices and discounts for Ladies Collections." },
+      {
+        name: "description",
+        content: "Product groups, prices and discounts for Ladies Collections.",
+      },
     ],
   }),
   component: ProductsPage,
@@ -67,7 +84,9 @@ function ProductsPage() {
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
         <h1 className="text-3xl font-semibold md:text-4xl">Products</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Groups, prices, and the discount for each group.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Groups, prices, and the discount for each group.
+        </p>
       </div>
 
       <Tabs defaultValue="products">
@@ -155,7 +174,10 @@ function ProductPanel({
             placeholder="Search name or code"
             className="w-full sm:w-56"
           />
-          <Select value={groupId || "all"} onValueChange={(value) => onGroup(value === "all" ? "" : value)}>
+          <Select
+            value={groupId || "all"}
+            onValueChange={(value) => onGroup(value === "all" ? "" : value)}
+          >
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="All groups" />
             </SelectTrigger>
@@ -189,23 +211,61 @@ function ProductPanel({
               if (q.trim()) params.set("q", q.trim());
               if (groupId) params.set("groupId", groupId);
               if (sort !== "name-asc") params.set("sort", sort);
-              const data = await apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
+              const data = await apiFetch<{ products: Product[] }>(
+                `/api/products?${params.toString()}`,
+              );
               return [
                 {
                   name: "Products",
                   columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
-                  rows: data.products.map((product) => [product.code, product.groupName, product.name, product.unit, product.price, product.discountPercent]),
+                  rows: data.products.map((product) => [
+                    product.code,
+                    product.groupName,
+                    product.name,
+                    product.unit,
+                    product.price,
+                    product.discountPercent,
+                  ]),
                 },
               ];
             }}
           />
-          <Button className="rounded-full" onClick={() => setEditor("new")} disabled={groups.length === 0}>
+          <PrintTableButton
+            title="Ladies Collections — Products"
+            load={async () => {
+              const params = new URLSearchParams({ picker: "1" });
+              if (q.trim()) params.set("q", q.trim());
+              if (groupId) params.set("groupId", groupId);
+              if (sort !== "name-asc") params.set("sort", sort);
+              const data = await apiFetch<{ products: Product[] }>(
+                `/api/products?${params.toString()}`,
+              );
+              return {
+                columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
+                rows: data.products.map((product) => [
+                  product.code,
+                  product.groupName,
+                  product.name,
+                  product.unit,
+                  product.price,
+                  product.discountPercent,
+                ]),
+              };
+            }}
+          />
+          <Button
+            className="rounded-full"
+            onClick={() => setEditor("new")}
+            disabled={groups.length === 0}
+          >
             Add product
           </Button>
         </div>
       </div>
       {groups.length === 0 && !loading ? (
-        <p className="text-sm text-muted-foreground">Add a product group first. Sarees, blouse, fabrics and the rest live there.</p>
+        <p className="text-sm text-muted-foreground">
+          Add a product group first. Sarees, blouse, fabrics and the rest live there.
+        </p>
       ) : null}
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
@@ -214,79 +274,103 @@ function ProductPanel({
       ) : null}
       {products.length > 0 ? (
         <>
-        <PhoneCards>
-          {products.map((product) => (
-            <PhoneCard
-              key={product.id}
-              title={product.name || product.code}
-              detail={`${product.code} · ${product.groupName} · ${unitLabel(product.unit)} · ${formatRupees(product.price)} · ${product.discountPercent}%`}
-            >
-              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(product)}>
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                onClick={() => {
-                  if (!window.confirm(`Remove ${product.name || "this product"}? This cannot be undone.`)) return;
-                  void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
-                    .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
-                    .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
-                    .catch((reason: Error) => toast.error(reason.message));
-                }}
+          <PhoneCards>
+            {products.map((product) => (
+              <PhoneCard
+                key={product.id}
+                title={product.name || product.code}
+                detail={`${product.code} · ${product.groupName} · ${unitLabel(product.unit)} · ${formatRupees(product.price)} · ${product.discountPercent}%`}
               >
-                Remove
-              </Button>
-            </PhoneCard>
-          ))}
-        </PhoneCards>
-        <DeskTable>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Code</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Group</TableHead>
-                <TableHead>Unit</TableHead>
-                <TableHead>Price</TableHead>
-                <TableHead>Discount</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {products.map((product) => (
-                <TableRow key={product.id}>
-                  <TableCell className="whitespace-nowrap font-mono text-sm">{product.code}</TableCell>
-                  <TableCell>{product.name}</TableCell>
-                  <TableCell>{product.groupName}</TableCell>
-                  <TableCell>{unitLabel(product.unit)}</TableCell>
-                  <TableCell>{formatRupees(product.price)}</TableCell>
-                  <TableCell>{product.discountPercent}%</TableCell>
-                  <TableCell className="space-x-2 text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(product)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => {
-                        if (!window.confirm(`Remove ${product.name || "this product"}? This cannot be undone.`)) return;
-                        void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
-                          .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
-                          .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
-                          .catch((reason: Error) => toast.error(reason.message));
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setEditor(product)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    if (
+                      !window.confirm(
+                        `Remove ${product.name || "this product"}? This cannot be undone.`,
+                      )
+                    )
+                      return;
+                    void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
+                      .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
+                      .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
+                      .catch((reason: Error) => toast.error(reason.message));
+                  }}
+                >
+                  Remove
+                </Button>
+              </PhoneCard>
+            ))}
+          </PhoneCards>
+          <DeskTable>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Name</TableHead>
+                  <TableHead>Group</TableHead>
+                  <TableHead>Unit</TableHead>
+                  <TableHead>Price</TableHead>
+                  <TableHead>Discount</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </DeskTable>
+              </TableHeader>
+              <TableBody>
+                {products.map((product) => (
+                  <TableRow key={product.id}>
+                    <TableCell className="whitespace-nowrap font-mono text-sm">
+                      {product.code}
+                    </TableCell>
+                    <TableCell>{product.name}</TableCell>
+                    <TableCell>{product.groupName}</TableCell>
+                    <TableCell>{unitLabel(product.unit)}</TableCell>
+                    <TableCell>{formatRupees(product.price)}</TableCell>
+                    <TableCell>{product.discountPercent}%</TableCell>
+                    <TableCell className="space-x-2 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setEditor(product)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => {
+                          if (
+                            !window.confirm(
+                              `Remove ${product.name || "this product"}? This cannot be undone.`,
+                            )
+                          )
+                            return;
+                          void apiFetch(`/api/products/${product.id}`, { method: "DELETE" })
+                            .then(() => queryClient.invalidateQueries({ queryKey: ["products"] }))
+                            .then(() =>
+                              queryClient.invalidateQueries({ queryKey: ["product-groups"] }),
+                            )
+                            .catch((reason: Error) => toast.error(reason.message));
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DeskTable>
         </>
       ) : null}
       <ListFooter page={page} total={total} shown={products.length} onPage={onPage} />
@@ -307,7 +391,15 @@ function ProductPanel({
   );
 }
 
-function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loading: boolean; error: string | null }) {
+function GroupPanel({
+  groups,
+  loading,
+  error,
+}: {
+  groups: ProductGroup[];
+  loading: boolean;
+  error: string | null;
+}) {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<ProductGroup | "new" | null>(null);
   return (
@@ -319,7 +411,12 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
             {
               name: "Groups",
               columns: ["Group", "Code", "Discount %", "Products"],
-              rows: groups.map((group) => [group.name, group.code, group.discountPercent, group.productCount]),
+              rows: groups.map((group) => [
+                group.name,
+                group.code,
+                group.discountPercent,
+                group.productCount,
+              ]),
             },
           ]}
         />
@@ -329,76 +426,91 @@ function GroupPanel({ groups, loading, error }: { groups: ProductGroup[]; loadin
       </div>
       {loading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      {!loading && groups.length === 0 ? <p className="text-sm text-muted-foreground">No groups yet.</p> : null}
+      {!loading && groups.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No groups yet.</p>
+      ) : null}
       {groups.length > 0 ? (
         <>
-        <PhoneCards>
-          {groups.map((group) => (
-            <PhoneCard
-              key={group.id}
-              title={group.name}
-              detail={`${group.code} · ${group.discountPercent}% · ${group.productCount} products`}
-            >
-              <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(group)}>
-                Edit
-              </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                className="rounded-full"
-                onClick={() => {
-                  if (!window.confirm(`Remove ${group.name}? This cannot be undone.`)) return;
-                  void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
-                    .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
-                    .catch((reason: Error) => toast.error(reason.message));
-                }}
+          <PhoneCards>
+            {groups.map((group) => (
+              <PhoneCard
+                key={group.id}
+                title={group.name}
+                detail={`${group.code} · ${group.discountPercent}% · ${group.productCount} products`}
               >
-                Remove
-              </Button>
-            </PhoneCard>
-          ))}
-        </PhoneCards>
-        <DeskTable>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Group</TableHead>
-                <TableHead>Code</TableHead>
-                <TableHead>Discount</TableHead>
-                <TableHead>Products</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {groups.map((group) => (
-                <TableRow key={group.id}>
-                  <TableCell className="font-medium">{group.name}</TableCell>
-                  <TableCell>{group.code}</TableCell>
-                  <TableCell>{group.discountPercent}%</TableCell>
-                  <TableCell>{group.productCount}</TableCell>
-                  <TableCell className="space-x-2 text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(group)}>
-                      Edit
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      onClick={() => {
-                        if (!window.confirm(`Remove ${group.name}? This cannot be undone.`)) return;
-                        void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
-                          .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
-                          .catch((reason: Error) => toast.error(reason.message));
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </TableCell>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setEditor(group)}
+                >
+                  Edit
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => {
+                    if (!window.confirm(`Remove ${group.name}? This cannot be undone.`)) return;
+                    void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
+                      .then(() => queryClient.invalidateQueries({ queryKey: ["product-groups"] }))
+                      .catch((reason: Error) => toast.error(reason.message));
+                  }}
+                >
+                  Remove
+                </Button>
+              </PhoneCard>
+            ))}
+          </PhoneCards>
+          <DeskTable>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Group</TableHead>
+                  <TableHead>Code</TableHead>
+                  <TableHead>Discount</TableHead>
+                  <TableHead>Products</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </DeskTable>
+              </TableHeader>
+              <TableBody>
+                {groups.map((group) => (
+                  <TableRow key={group.id}>
+                    <TableCell className="font-medium">{group.name}</TableCell>
+                    <TableCell>{group.code}</TableCell>
+                    <TableCell>{group.discountPercent}%</TableCell>
+                    <TableCell>{group.productCount}</TableCell>
+                    <TableCell className="space-x-2 text-right">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => setEditor(group)}
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="rounded-full"
+                        onClick={() => {
+                          if (!window.confirm(`Remove ${group.name}? This cannot be undone.`))
+                            return;
+                          void apiFetch(`/api/product-groups/${group.id}`, { method: "DELETE" })
+                            .then(() =>
+                              queryClient.invalidateQueries({ queryKey: ["product-groups"] }),
+                            )
+                            .catch((reason: Error) => toast.error(reason.message));
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </DeskTable>
         </>
       ) : null}
       <GroupDialog
@@ -452,7 +564,10 @@ function ProductDialog({
       if (!Number.isFinite(amount)) throw new Error("Enter a price.");
       const body = { groupId, name, code, unit, price: amount };
       if (product) {
-        await apiFetch(`/api/products/${product.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        await apiFetch(`/api/products/${product.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
         return;
       }
       await apiFetch("/api/products", { method: "POST", body: JSON.stringify(body) });
@@ -470,7 +585,9 @@ function ProductDialog({
         <DialogHeader>
           <DialogTitle>{product ? "Edit product" : "Add product"}</DialogTitle>
           <DialogDescription>
-            {product ? "Update the price, unit or group." : "Leave the code blank and the next code for that group is used."}
+            {product
+              ? "Update the price, unit or group."
+              : "Leave the code blank and the next code for that group is used."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -495,10 +612,21 @@ function ProductDialog({
             </Select>
           </Field>
           <Field label="Name" id="product-name">
-            <Input id="product-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={120} />
+            <Input
+              id="product-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+              maxLength={120}
+            />
           </Field>
           <Field label="Code" id="product-code">
-            <Input id="product-code" value={code} onChange={(event) => setCode(event.target.value)} maxLength={40} />
+            <Input
+              id="product-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              maxLength={40}
+            />
           </Field>
           <Field label="Unit" id="product-unit">
             <Select value={unit} onValueChange={(value) => setUnit(value as Unit)}>
@@ -563,7 +691,10 @@ function GroupDialog({
       if (!Number.isFinite(discountPercent)) throw new Error("Enter a discount.");
       const body = { name, code, discountPercent };
       if (group) {
-        await apiFetch(`/api/product-groups/${group.id}`, { method: "PATCH", body: JSON.stringify(body) });
+        await apiFetch(`/api/product-groups/${group.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(body),
+        });
         return;
       }
       await apiFetch("/api/product-groups", { method: "POST", body: JSON.stringify(body) });
@@ -580,7 +711,9 @@ function GroupDialog({
       <DialogContent>
         <DialogHeader>
           <DialogTitle>{group ? "Edit group" : "Add group"}</DialogTitle>
-          <DialogDescription>The code prefixes new product codes. Discount applies to the whole group.</DialogDescription>
+          <DialogDescription>
+            The code prefixes new product codes. Discount applies to the whole group.
+          </DialogDescription>
         </DialogHeader>
         <form
           className="space-y-4"
@@ -590,10 +723,22 @@ function GroupDialog({
           }}
         >
           <Field label="Name" id="group-name">
-            <Input id="group-name" value={name} onChange={(event) => setName(event.target.value)} required maxLength={80} />
+            <Input
+              id="group-name"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              required
+              maxLength={80}
+            />
           </Field>
           <Field label="Code" id="group-code">
-            <Input id="group-code" value={code} onChange={(event) => setCode(event.target.value)} required maxLength={12} />
+            <Input
+              id="group-code"
+              value={code}
+              onChange={(event) => setCode(event.target.value)}
+              required
+              maxLength={12}
+            />
           </Field>
           <Field label="Discount %" id="group-discount">
             <Input

@@ -5,6 +5,8 @@ import {
   barcodeSchema,
   groupPurchases,
   inventoryUpdateSchema,
+  stockQuantitySchema,
+  stockStatusSchema,
   stockReceiptSchema,
   kolkataBounds,
   nextInventoryNo,
@@ -28,6 +30,8 @@ type ItemRow = {
   product_id: string;
   quantity: number | string;
   status: string;
+  stock_verified_at?: string | null;
+  stock_verified_quantity?: number | string | null;
 };
 
 type CatalogueProduct = {
@@ -43,15 +47,38 @@ type CatalogueProduct = {
 const inventory = new Hono<Env>();
 inventory.use("*", requireShop);
 
-inventory.get("/barcodes", (c) => {
+inventory.get("/barcodes", async (c) => {
   const parsed = barcodeSchema.safeParse({
     starting: c.req.query("starting") ?? "",
     quantity: Number(c.req.query("quantity")),
   });
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const numbers = barcodeNumbers(parsed.data.starting, parsed.data.quantity);
-  if (numbers.length !== parsed.data.quantity) return c.json({ error: "Enter an inventory number such as IN0021288." }, 400);
-  return c.json({ numbers });
+  if (numbers.length !== parsed.data.quantity)
+    return c.json({ error: "Enter an inventory number such as IN0021288." }, 400);
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .select("inventory_no, product_id")
+    .in("inventory_no", numbers);
+  if (error) return c.json({ error: "Could not load inventory for these labels." }, 500);
+
+  const items = new Map((data ?? []).map((item) => [item.inventory_no, item.product_id]));
+  const missing = numbers.filter((number) => !items.has(number));
+  if (missing.length > 0) {
+    const sample = missing.slice(0, 5).join(", ");
+    const more = missing.length > 5 ? ` and ${missing.length - 5} more` : "";
+    return c.json({ error: `Inventory numbers not found: ${sample}${more}.` }, 400);
+  }
+
+  const catalogue = await loadCatalogue();
+  const labels = numbers.flatMap((number) => {
+    const product = catalogue?.get(items.get(number) ?? "");
+    return product ? [{ number, price: product.price }] : [];
+  });
+  if (labels.length !== numbers.length) {
+    return c.json({ error: "Could not load selling prices for these labels." }, 500);
+  }
+  return c.json({ numbers, labels });
 });
 
 inventory.get("/purchases", async (c) => {
@@ -70,31 +97,30 @@ inventory.get("/purchases", async (c) => {
     supplier_name: string | null;
     supplier_bill_no: string | null;
     cost: number | string | null;
-  }>(
-    (from, to) =>
-      supabaseAdmin
-        .from("inventory_items")
-        .select("inventory_no, product_id, received_quantity, created_at, supplier_name, supplier_bill_no, cost")
-        .gte("created_at", bounds.start)
-        .lt("created_at", bounds.end)
-        .order("created_at")
-        .order("id")
-        .range(from, to),
+  }>((from, to) =>
+    supabaseAdmin
+      .from("inventory_items")
+      .select(
+        "inventory_no, product_id, received_quantity, created_at, supplier_name, supplier_bill_no, cost",
+      )
+      .gte("created_at", bounds.start)
+      .lt("created_at", bounds.end)
+      .order("created_at")
+      .order("id")
+      .range(from, to),
   );
   if (!loaded) return c.json({ error: "Could not load purchases." }, 500);
   const rows = loaded.rows;
   const purchases = groupPurchases(
-    rows.map(
-      (row): PurchaseRow => ({
-        createdAt: row.created_at,
-        inventoryNo: row.inventory_no,
-        productId: row.product_id,
-        quantity: Number(row.received_quantity),
-        supplierName: row.supplier_name ?? "",
-        supplierBillNo: row.supplier_bill_no ?? "",
-        cost: row.cost == null ? null : Number(row.cost),
-      }),
-    ),
+    rows.map((row): PurchaseRow => ({
+      createdAt: row.created_at,
+      inventoryNo: row.inventory_no,
+      productId: row.product_id,
+      quantity: Number(row.received_quantity),
+      supplierName: row.supplier_name ?? "",
+      supplierBillNo: row.supplier_bill_no ?? "",
+      cost: row.cost == null ? null : Number(row.cost),
+    })),
     catalogue,
   );
   return c.json({ purchases, truncated: loaded.truncated });
@@ -122,13 +148,45 @@ inventory.get("/summary", async (c) => {
     const rowQuantity = Number(row.quantity);
     slips += 1;
     quantity = Math.round((quantity + rowQuantity) * 1000) / 1000;
-    const current = groups.get(product.groupId) ?? { id: product.groupId, name: product.groupName, quantity: 0, amount: 0 };
+    const current = groups.get(product.groupId) ?? {
+      id: product.groupId,
+      name: product.groupName,
+      quantity: 0,
+      amount: 0,
+    };
     current.quantity = Math.round((current.quantity + rowQuantity) * 1000) / 1000;
-    current.amount = Math.round((current.amount + lineAmount(rowQuantity, product.price)) * 100) / 100;
+    current.amount =
+      Math.round((current.amount + lineAmount(rowQuantity, product.price)) * 100) / 100;
     groups.set(product.groupId, current);
   }
   const summary = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
   return c.json({ groups: summary, slips, quantity });
+});
+
+inventory.get("/verification", async (c) => {
+  const view = c.req.query("view") === "verified" ? "verified" : "shortage";
+  const catalogue = await loadCatalogue();
+  if (!catalogue) return c.json({ error: "Could not load products." }, 500);
+  const loaded = await readAll<ItemRow>((from, to) => {
+    const query = supabaseAdmin
+      .from("inventory_items")
+      .select(
+        "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+      )
+      .order("inventory_no")
+      .range(from, to);
+    return view === "verified"
+      ? query.not("stock_verified_at", "is", null)
+      : query.eq("status", "available").is("stock_verified_at", null);
+  });
+  if (!loaded) return c.json({ error: "Could not load stock verification." }, 500);
+  return c.json({
+    items: loaded.rows.flatMap((row) => {
+      const product = catalogue.get(row.product_id);
+      return product ? [toItem(row, product)] : [];
+    }),
+    truncated: loaded.truncated,
+  });
 });
 
 inventory.get("/", async (c) => {
@@ -157,7 +215,12 @@ inventory.get("/", async (c) => {
     if (denied) return denied;
   }
   const stockQuery = () => {
-    const selected = supabaseAdmin.from("inventory_items").select("id, inventory_no, product_id, quantity, status", { count: "exact" });
+    const selected = supabaseAdmin
+      .from("inventory_items")
+      .select(
+        "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+        { count: "exact" },
+      );
     const statused = availableOnly ? selected.eq("status", "available") : selected;
     const scoped = allowed ? statused.in("product_id", allowed) : statused;
     const searched = !safe
@@ -213,6 +276,84 @@ inventory.post("/", async (c) => {
   return c.json({ item: first, items }, 201);
 });
 
+inventory.post("/:id/verify", async (c) => {
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .update({ stock_verified_at: new Date().toISOString(), stock_verified_quantity: null })
+    .eq("id", c.req.param("id"))
+    .select(
+      "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+    )
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not record the stock scan." }, 500);
+  if (!data) return c.json({ error: "Stock row not found." }, 404);
+  const catalogue = await loadCatalogue();
+  const product = catalogue?.get(data.product_id);
+  if (!product) return c.json({ error: "Could not load the product." }, 500);
+  return c.json({ item: toItem(data as ItemRow, product) });
+});
+
+inventory.patch("/:id/stock-status", async (c) => {
+  const body = (await readJson(c)) as { status?: unknown } | null;
+  const parsed = stockStatusSchema.safeParse(body?.status);
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .update({ status: parsed.data })
+    .eq("id", c.req.param("id"))
+    .select(
+      "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+    )
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not update stock status." }, 500);
+  if (!data) return c.json({ error: "Stock row not found." }, 404);
+  const catalogue = await loadCatalogue();
+  const product = catalogue?.get(data.product_id);
+  if (!product) return c.json({ error: "Could not load the product." }, 500);
+  return c.json({ item: toItem(data as ItemRow, product) });
+});
+
+inventory.patch("/:id/stock-quantity", async (c) => {
+  const parsed = stockQuantitySchema.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const id = c.req.param("id");
+  const existing = await supabaseAdmin
+    .from("inventory_items")
+    .select("product_id")
+    .eq("id", id)
+    .maybeSingle();
+  if (existing.error) return c.json({ error: "Could not check stock." }, 500);
+  if (!existing.data) return c.json({ error: "Stock row not found." }, 404);
+  const catalogue = await loadCatalogue();
+  const product = catalogue?.get(existing.data.product_id);
+  if (!product) return c.json({ error: "Could not load the product." }, 500);
+  const quantityError = quantityForUnit(product.unit, parsed.data.quantity);
+  if (quantityError) return c.json({ error: quantityError }, 400);
+  const used = await lineCount(id);
+  if (used === null) return c.json({ error: "Could not check this stock row." }, 500);
+  if (used > 0)
+    return c.json(
+      { error: "This number is already on a bill. Change the quantity from the bill." },
+      400,
+    );
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .update({
+      quantity: parsed.data.quantity,
+      status: parsed.data.quantity > 0 ? "available" : "sold",
+      stock_verified_quantity: parsed.data.quantity,
+      stock_verified_at: new Date().toISOString(),
+    })
+    .eq("id", id)
+    .select(
+      "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+    )
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not update stock quantity." }, 500);
+  if (!data) return c.json({ error: "Stock row not found." }, 404);
+  return c.json({ item: toItem(data as ItemRow, product) });
+});
+
 inventory.patch("/:id", async (c) => {
   const parsed = inventoryUpdateSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
@@ -235,8 +376,15 @@ inventory.patch("/:id", async (c) => {
     if (current.error) return c.json({ error: "Could not check this stock row." }, 500);
     if (!current.data) return c.json({ error: "Stock row not found." }, 404);
     const sameQuantity = Math.abs(Number(current.data.quantity) - parsed.data.quantity) <= 0.0001;
-    if (current.data.inventory_no !== parsed.data.inventoryNo || current.data.product_id !== product.id || !sameQuantity) {
-      return c.json({ error: "This number is already on a bill. Change the quantity from the bill." }, 400);
+    if (
+      current.data.inventory_no !== parsed.data.inventoryNo ||
+      current.data.product_id !== product.id ||
+      !sameQuantity
+    ) {
+      return c.json(
+        { error: "This number is already on a bill. Change the quantity from the bill." },
+        400,
+      );
     }
   }
 
@@ -253,7 +401,9 @@ inventory.patch("/:id", async (c) => {
       ...(parsed.data.cost !== undefined ? { cost: parsed.data.cost } : {}),
     })
     .eq("id", id)
-    .select("id, inventory_no, product_id, quantity, status")
+    .select(
+      "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+    )
     .maybeSingle();
   if (isDuplicate(error)) return c.json({ error: "That inventory number is already used." }, 400);
   if (error) return c.json({ error: "Could not update stock." }, 500);
@@ -277,8 +427,19 @@ async function loadCatalogue(): Promise<Map<string, CatalogueProduct> | null> {
   );
   if (!groups) return null;
   const names = new Map(groups.rows.map((group) => [group.id, group.name]));
-  const products = await readAll<{ id: string; group_id: string; code: string; name: string; unit: string; price: number | string }>(
-    (from, to) => supabaseAdmin.from("products").select("id, group_id, code, name, unit, price").order("id").range(from, to),
+  const products = await readAll<{
+    id: string;
+    group_id: string;
+    code: string;
+    name: string;
+    unit: string;
+    price: number | string;
+  }>((from, to) =>
+    supabaseAdmin
+      .from("products")
+      .select("id, group_id, code, name, unit, price")
+      .order("id")
+      .range(from, to),
   );
   if (!products) return null;
   const catalogue = new Map<string, CatalogueProduct>();
@@ -296,10 +457,16 @@ async function loadCatalogue(): Promise<Map<string, CatalogueProduct> | null> {
   return catalogue;
 }
 
-function productFilter(catalogue: Map<string, CatalogueProduct>, groupId: string, productId: string): string[] | null {
+function productFilter(
+  catalogue: Map<string, CatalogueProduct>,
+  groupId: string,
+  productId: string,
+): string[] | null {
   if (productId) return [productId];
   if (!groupId) return null;
-  return [...catalogue.values()].filter((product) => product.groupId === groupId).map((product) => product.id);
+  return [...catalogue.values()]
+    .filter((product) => product.groupId === groupId)
+    .map((product) => product.id);
 }
 
 function matches(product: CatalogueProduct, q: string): boolean {
@@ -329,7 +496,9 @@ async function insertSlip(
         supplier_bill_no: receipt.supplierBillNo,
         cost: receipt.cost,
       })
-      .select("id, inventory_no, product_id, quantity, status")
+      .select(
+        "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
+      )
       .single();
     if (isDuplicate(error)) {
       if (generated && attempt === 0) continue;
@@ -386,6 +555,9 @@ function toItem(row: ItemRow, product: CatalogueProduct): InventoryItem {
     price: product.price,
     quantity: Number(row.quantity),
     status: row.status,
+    verifiedAt: row.stock_verified_at ?? null,
+    verifiedQuantity:
+      row.stock_verified_quantity == null ? null : Number(row.stock_verified_quantity),
   };
 }
 

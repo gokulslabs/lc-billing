@@ -12,7 +12,20 @@ export type InventoryItem = {
   price: number;
   quantity: number;
   status: string;
+  verifiedAt?: string | null;
+  verifiedQuantity?: number | null;
 };
+
+export const stockStatusSchema = z.enum(["available", "sold"], {
+  errorMap: () => ({ message: "Choose available or sold." }),
+});
+
+export const stockQuantitySchema = z.object({
+  quantity: z
+    .number()
+    .min(0, "Quantity cannot be negative.")
+    .max(999_999, "Quantity is too large."),
+});
 
 const quantity = z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large.");
 
@@ -33,7 +46,10 @@ export const stockReceiptSchema = inventorySchema.extend({
 });
 
 export const inventoryUpdateSchema = inventorySchema.extend({
-  quantity: z.number().min(0, "Quantity cannot be negative.").max(999_999, "Quantity is too large."),
+  quantity: z
+    .number()
+    .min(0, "Quantity cannot be negative.")
+    .max(999_999, "Quantity is too large."),
   supplierName,
   supplierBillNo,
   cost: cost.optional(),
@@ -46,7 +62,11 @@ export const barcodeSchema = z.object({
     .min(1, "Enter a starting number.")
     .max(40, "Starting number is too long.")
     .regex(/^(\D*)(\d+)$/, "Enter an inventory number such as IN0021288."),
-  quantity: z.number().int("Label count must be a whole number.").min(1, "Print at least one label.").max(200, "Print at most 200 labels."),
+  quantity: z
+    .number()
+    .int("Label count must be a whole number.")
+    .min(1, "Print at least one label.")
+    .max(200, "Print at most 200 labels."),
 });
 
 export type InventoryInput = z.infer<typeof inventorySchema>;
@@ -72,7 +92,11 @@ export function quantityAfterReturn(onHand: number, returned: number): number {
 
 export const PIECE_LABEL_LIMIT = 200;
 
-export function slipPlan(unit: Unit, quantity: number, inventoryNo: string): { count: number; each: number } | string {
+export function slipPlan(
+  unit: Unit,
+  quantity: number,
+  inventoryNo: string,
+): { count: number; each: number } | string {
   const typed = inventoryNo.trim().length > 0;
   if (unit === "NO" && !typed && Number.isInteger(quantity) && quantity > 1) {
     if (quantity > PIECE_LABEL_LIMIT) return "Print at most 200 labels.";
@@ -171,7 +195,9 @@ export function groupPurchases(
       });
     }
   }
-  return [...grouped.values()].sort((a, b) => b.date.localeCompare(a.date) || a.productCode.localeCompare(b.productCode));
+  return [...grouped.values()].sort(
+    (a, b) => b.date.localeCompare(a.date) || a.productCode.localeCompare(b.productCode),
+  );
 }
 
 export function formatPurchaseNumbers(numbers: readonly string[]): string {
@@ -190,7 +216,8 @@ export function formatPurchaseNumbers(numbers: readonly string[]): string {
   const prefix = sorted[0]?.prefix;
   const first = sorted[0];
   const last = sorted[sorted.length - 1];
-  if (!first || !last || sorted.some((item) => item.prefix !== prefix)) return `${numbers.length} numbers`;
+  if (!first || !last || sorted.some((item) => item.prefix !== prefix))
+    return `${numbers.length} numbers`;
   const unique = new Set(sorted.map((item) => item.n));
   if (unique.size === numbers.length && last.n - first.n + 1 === numbers.length) {
     return first.n === last.n ? first.raw : `${first.raw} – ${last.raw}`;

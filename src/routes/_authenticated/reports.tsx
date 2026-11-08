@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { apiFetch } from "@/lib/api";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { PrintTableButton } from "@/components/app/PrintTableButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
 import { billStatusLabel, shopToday } from "@/lib/sales";
@@ -10,14 +11,32 @@ import { formatRupees } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableFooter,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 
 export const Route = createFileRoute("/_authenticated/reports")({
   head: () => ({
     meta: [
       { title: "Reports — Ladies Collections" },
-      { name: "description", content: "Invoice, collection, pending, mismatch, and return reports for Ladies Collections." },
+      {
+        name: "description",
+        content:
+          "Invoice, collection, pending, mismatch, and return reports for Ladies Collections.",
+      },
     ],
   }),
   component: ReportsPage,
@@ -37,13 +56,17 @@ const REPORTS = [
 type ReportId = (typeof REPORTS)[number]["id"];
 
 const REPORT_NOTES: Record<ReportId, string> = {
-  invoices: "One row per bill in the dates, excluding drafts and cancelled bills. Gross, discount and net are on the bill.",
+  invoices:
+    "One row per bill in the dates, excluding drafts and cancelled bills. Gross, discount and net are on the bill.",
   items: "One row per line on those bills. This is the same list as Extract, without the customer.",
   extract: "The same lines as Items, with the customer name added.",
   collections: "Payments taken on the chosen date, one row per payment.",
-  showrooms: "Each payment in the dates, with its date, bill, customer and method. Showroom is the note on that payment.",
-  pending: "Bills in the chosen book that still have a balance. The total is the whole book, not only this page.",
-  mismatch: "Inventory numbers whose shelf quantity does not equal what was received minus what was billed. Matching numbers stay on the stock list.",
+  showrooms:
+    "Each payment in the dates, with its date, bill, customer and method. Showroom is the note on that payment.",
+  pending:
+    "Bills in the chosen book that still have a balance. The total is the whole book, not only this page.",
+  mismatch:
+    "Inventory numbers whose shelf quantity does not equal what was received minus what was billed. Matching numbers stay on the stock list.",
   returns: "Cancelled bills in the dates, one row per bill.",
 };
 
@@ -55,7 +78,12 @@ function ReportsPage() {
   const [date, setDate] = useState(today);
   const [books, setBooks] = useState<"new" | "old">("new");
   const [page, setPage] = useState(1);
-  const [applied, setApplied] = useState({ from: monthStart(today), to: today, date: today, books: "new" as "new" | "old" });
+  const [applied, setApplied] = useState({
+    from: monthStart(today),
+    to: today,
+    date: today,
+    books: "new" as "new" | "old",
+  });
   function applyRange(start: string, end = today) {
     setFrom(start);
     setTo(end);
@@ -77,7 +105,9 @@ function ReportsPage() {
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
       <div>
         <h1 className="text-4xl font-semibold">Reports</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Bills, collections, pending payments, and stock.</p>
+        <p className="mt-2 text-sm text-muted-foreground">
+          Bills, collections, pending payments, and stock.
+        </p>
       </div>
       <Select
         value={report}
@@ -109,28 +139,69 @@ function ReportsPage() {
           {needsDate ? (
             <div className="space-y-2">
               <Label htmlFor="report-date">Date</Label>
-              <Input id="report-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
+              <Input
+                id="report-date"
+                type="date"
+                value={date}
+                onChange={(event) => setDate(event.target.value)}
+                required
+              />
             </div>
           ) : (
             <>
               <div className="flex flex-wrap gap-2">
-                <Button type="button" variant={applied.from === yesterday && applied.to === yesterday ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(yesterday, yesterday)}>
+                <Button
+                  type="button"
+                  variant={
+                    applied.from === yesterday && applied.to === yesterday ? "default" : "outline"
+                  }
+                  className="rounded-full"
+                  onClick={() => applyRange(yesterday, yesterday)}
+                >
                   Yesterday
                 </Button>
-                <Button type="button" variant={applied.from === lastWeek && applied.to === today ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(lastWeek)}>
+                <Button
+                  type="button"
+                  variant={
+                    applied.from === lastWeek && applied.to === today ? "default" : "outline"
+                  }
+                  className="rounded-full"
+                  onClick={() => applyRange(lastWeek)}
+                >
                   Last 7 days
                 </Button>
-                <Button type="button" variant={applied.from === lastMonth.from && applied.to === lastMonth.to ? "default" : "outline"} className="rounded-full" onClick={() => applyRange(lastMonth.from, lastMonth.to)}>
+                <Button
+                  type="button"
+                  variant={
+                    applied.from === lastMonth.from && applied.to === lastMonth.to
+                      ? "default"
+                      : "outline"
+                  }
+                  className="rounded-full"
+                  onClick={() => applyRange(lastMonth.from, lastMonth.to)}
+                >
                   Last month
                 </Button>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="report-from">From date</Label>
-                <Input id="report-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} required />
+                <Input
+                  id="report-from"
+                  type="date"
+                  value={from}
+                  onChange={(event) => setFrom(event.target.value)}
+                  required
+                />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="report-to">To date</Label>
-                <Input id="report-to" type="date" value={to} onChange={(event) => setTo(event.target.value)} required />
+                <Input
+                  id="report-to"
+                  type="date"
+                  value={to}
+                  onChange={(event) => setTo(event.target.value)}
+                  required
+                />
               </div>
             </>
           )}
@@ -154,30 +225,47 @@ function ReportsPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-            <SelectItem value="new">Live book</SelectItem>
-            <SelectItem value="old">Old book — copied balances</SelectItem>
-          </SelectContent>
-        </Select>
-      </div>
+              <SelectItem value="new">Live book</SelectItem>
+              <SelectItem value="old">Old book — copied balances</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       ) : null}
       {result.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {result.error instanceof Error ? <p className="text-sm text-destructive">{result.error.message}</p> : null}
-      {result.data?.note ? <p className="text-sm text-muted-foreground">{result.data.note}</p> : null}
+      {result.error instanceof Error ? (
+        <p className="text-sm text-destructive">{result.error.message}</p>
+      ) : null}
+      {result.data?.note ? (
+        <p className="text-sm text-muted-foreground">{result.data.note}</p>
+      ) : null}
       {result.data ? (
         <ReportTable
           sheet={result.data}
-          {...(report === "pending" ? { onExport: () => loadReport("pending", applied, 1, true) } : {})}
+          {...(report === "pending"
+            ? { onExport: () => loadReport("pending", applied, 1, true) }
+            : {})}
         />
       ) : null}
       {report === "pending" && result.data ? (
-        <ListFooter page={page} total={result.data.total ?? 0} shown={result.data.rows.length} onPage={setPage} />
+        <ListFooter
+          page={page}
+          total={result.data.total ?? 0}
+          shown={result.data.rows.length}
+          onPage={setPage}
+        />
       ) : null}
     </div>
   );
 }
 
 type SheetCell = string | number;
-type Sheet = { columns: string[]; rows: SheetCell[][]; note?: string; totalRow?: SheetCell[]; total?: number };
+type Sheet = {
+  columns: string[];
+  rows: SheetCell[][];
+  note?: string;
+  totalRow?: SheetCell[];
+  total?: number;
+};
 
 const MONEY = new Set(["Gross", "Disc.", "Net", "Rate", "Amount", "Inv amount", "Paid", "Balance"]);
 
@@ -190,19 +278,31 @@ function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promi
   return (
     <div className="space-y-3">
       {sheet.rows.length > 0 || sheet.totalRow ? (
-        <ExportExcelButton
-          filename="report"
-          load={async () => {
-            const chosen = onExport ? await onExport() : sheet;
-            return [
-              {
-                name: "Report",
+        <div className="flex flex-wrap gap-2">
+          <ExportExcelButton
+            filename="report"
+            load={async () => {
+              const chosen = onExport ? await onExport() : sheet;
+              return [
+                {
+                  name: "Report",
+                  columns: chosen.columns,
+                  rows: [...chosen.rows, ...(chosen.totalRow ? [chosen.totalRow] : [])],
+                },
+              ];
+            }}
+          />
+          <PrintTableButton
+            title="Ladies Collections — Report"
+            load={async () => {
+              const chosen = onExport ? await onExport() : sheet;
+              return {
                 columns: chosen.columns,
                 rows: [...chosen.rows, ...(chosen.totalRow ? [chosen.totalRow] : [])],
-              },
-            ];
-          }}
-        />
+              };
+            }}
+          />
+        </div>
       ) : (
         <p className="text-sm text-muted-foreground">Nothing in this report.</p>
       )}
@@ -220,7 +320,10 @@ function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promi
               {sheet.rows.map((row, index) => (
                 <TableRow key={index}>
                   {row.map((cell, cellIndex) => (
-                    <TableCell key={cellIndex} className={cellIndex === 0 ? "font-medium" : undefined}>
+                    <TableCell
+                      key={cellIndex}
+                      className={cellIndex === 0 ? "font-medium" : undefined}
+                    >
                       {showCell(sheet.columns[cellIndex] ?? "", cell)}
                     </TableCell>
                   ))}
@@ -231,7 +334,9 @@ function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promi
               <TableFooter>
                 <TableRow>
                   {sheet.totalRow.map((cell, cellIndex) => (
-                    <TableCell key={cellIndex}>{showCell(sheet.columns[cellIndex] ?? "", cell)}</TableCell>
+                    <TableCell key={cellIndex}>
+                      {showCell(sheet.columns[cellIndex] ?? "", cell)}
+                    </TableCell>
                   ))}
                 </TableRow>
               </TableFooter>
@@ -270,24 +375,52 @@ async function loadReport(
 ): Promise<Sheet> {
   const dates = `from=${range.from}&to=${range.to}`;
   if (report === "invoices") {
-    const data = await apiFetch<{ invoices: { billNo: string; billedOn: string; customerName: string; gross: number; discount: number; net: number }[] }>(
-      `/api/reports/invoices?${dates}`,
-    );
+    const data = await apiFetch<{
+      invoices: {
+        billNo: string;
+        billedOn: string;
+        customerName: string;
+        gross: number;
+        discount: number;
+        net: number;
+      }[];
+    }>(`/api/reports/invoices?${dates}`);
     const gross = sumRupees(data.invoices.map((row) => row.gross));
     const discount = sumRupees(data.invoices.map((row) => row.discount));
     const net = sumRupees(data.invoices.map((row) => row.net));
     return {
       columns: ["Sl.no.", "Invoice no.", "Date", "Customer", "Gross", "Disc.", "Net"],
-      rows: data.invoices.map((row, index) => [index + 1, row.billNo, row.billedOn, row.customerName, row.gross, row.discount, row.net]),
+      rows: data.invoices.map((row, index) => [
+        index + 1,
+        row.billNo,
+        row.billedOn,
+        row.customerName,
+        row.gross,
+        row.discount,
+        row.net,
+      ]),
       totalRow: ["Total", "", "", "", gross, discount, net],
     };
   }
   if (report === "items" || report === "extract") {
     const path = report === "items" ? "items" : "extract";
     const key = report === "items" ? "items" : "rows";
-    const data = await apiFetch<Record<string, { billNo: string; billedOn: string; customerName: string | null; inventoryNo: string; productCode: string; productName: string; quantity: number; rate: number; amount: number }[]>>(
-      `/api/reports/${path}?${dates}`,
-    );
+    const data = await apiFetch<
+      Record<
+        string,
+        {
+          billNo: string;
+          billedOn: string;
+          customerName: string | null;
+          inventoryNo: string;
+          productCode: string;
+          productName: string;
+          quantity: number;
+          rate: number;
+          amount: number;
+        }[]
+      >
+    >(`/api/reports/${path}?${dates}`);
     const rows = data[key] ?? [];
     const withCustomer = report === "extract";
     const quantity = sumQty(rows.map((row) => row.quantity));
@@ -321,12 +454,32 @@ async function loadReport(
         row.rate,
         row.amount,
       ]),
-      totalRow: ["Total", "", "", "", ...(withCustomer ? [""] : []), "", "", "", "", quantity, "", amount],
+      totalRow: [
+        "Total",
+        "",
+        "",
+        "",
+        ...(withCustomer ? [""] : []),
+        "",
+        "",
+        "",
+        "",
+        quantity,
+        "",
+        amount,
+      ],
     };
   }
   if (report === "collections") {
     const data = await apiFetch<{
-      collections: { showroom: string | null; billNo: string; paidOn: string; remarks: string | null; mode: string | null; amount: number }[];
+      collections: {
+        showroom: string | null;
+        billNo: string;
+        paidOn: string;
+        remarks: string | null;
+        mode: string | null;
+        amount: number;
+      }[];
     }>(`/api/reports/collections?date=${range.date}`);
     return {
       columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Payment mode", "Remarks", "Amount"],
@@ -335,7 +488,13 @@ async function loadReport(
         row.showroom || "—",
         row.billNo,
         row.paidOn,
-        row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
+        row.mode === "CASH"
+          ? "Cash"
+          : row.mode === "UPI"
+            ? "UPI"
+            : row.mode === "CARD"
+              ? "Card"
+              : "Not recorded",
         row.remarks || "—",
         row.amount,
       ]),
@@ -344,7 +503,14 @@ async function loadReport(
   }
   if (report === "showrooms") {
     const data = await apiFetch<{
-      payments: { paidOn: string; billNo: string; customerName: string; mode: string | null; showroom: string | null; amount: number }[];
+      payments: {
+        paidOn: string;
+        billNo: string;
+        customerName: string;
+        mode: string | null;
+        showroom: string | null;
+        amount: number;
+      }[];
     }>(`/api/reports/showrooms?${dates}`);
     return {
       columns: ["Date", "Bill no.", "Customer", "Method", "Showroom", "Amount"],
@@ -352,7 +518,13 @@ async function loadReport(
         row.paidOn,
         row.billNo || "—",
         row.customerName || "—",
-        row.mode === "CASH" ? "Cash" : row.mode === "UPI" ? "UPI" : row.mode === "CARD" ? "Card" : "Not recorded",
+        row.mode === "CASH"
+          ? "Cash"
+          : row.mode === "UPI"
+            ? "UPI"
+            : row.mode === "CARD"
+              ? "Card"
+              : "Not recorded",
         row.showroom || "—",
         row.amount,
       ]),
@@ -361,14 +533,35 @@ async function loadReport(
   }
   if (report === "pending") {
     const data = await apiFetch<{
-      pending: { customerName: string; billNo: string; billedOn: string; showroom: string | null; invoiced: number; paid: number; balance: number; status: string }[];
+      pending: {
+        customerName: string;
+        billNo: string;
+        billedOn: string;
+        showroom: string | null;
+        invoiced: number;
+        paid: number;
+        balance: number;
+        status: string;
+      }[];
       total: number;
       totals: { invoiced: number; paid: number; balance: number };
-    }>(`/api/reports/pending?books=${range.books}&page=${full ? 1 : page}${full ? "&export=1" : ""}`);
+    }>(
+      `/api/reports/pending?books=${range.books}&page=${full ? 1 : page}${full ? "&export=1" : ""}`,
+    );
     const start = full ? 0 : (page - 1) * 50;
     return {
       note: bookNote(range.books),
-      columns: ["Sl.no.", "Customer", "Showroom", "Bill no.", "Date", "Inv amount", "Paid", "Balance", "Status"],
+      columns: [
+        "Sl.no.",
+        "Customer",
+        "Showroom",
+        "Bill no.",
+        "Date",
+        "Inv amount",
+        "Paid",
+        "Balance",
+        "Status",
+      ],
       rows: data.pending.map((row, index) => [
         start + index + 1,
         row.customerName || "—",
@@ -396,7 +589,15 @@ async function loadReport(
   }
   if (report === "mismatch") {
     const data = await apiFetch<{
-      mismatches: { inventoryNo: string; productCode: string; productName: string; received: number; billed: number; onHand: number; difference: number }[];
+      mismatches: {
+        inventoryNo: string;
+        productCode: string;
+        productName: string;
+        received: number;
+        billed: number;
+        onHand: number;
+        difference: number;
+      }[];
     }>("/api/reports/mismatch");
     const received = sumQty(data.mismatches.map((row) => row.received));
     const billed = sumQty(data.mismatches.map((row) => row.billed));
@@ -417,9 +618,15 @@ async function loadReport(
       totalRow: ["Total", "", "", received, billed, onHand, difference],
     };
   }
-  const data = await apiFetch<{ returns: { billNo: string; billedOn: string; customerName: string; net: number; remarks: string | null }[] }>(
-    `/api/reports/returns?${dates}`,
-  );
+  const data = await apiFetch<{
+    returns: {
+      billNo: string;
+      billedOn: string;
+      customerName: string;
+      net: number;
+      remarks: string | null;
+    }[];
+  }>(`/api/reports/returns?${dates}`);
   return {
     columns: ["Sl.no.", "Bill no.", "Date", "Customer", "Net", "Remarks"],
     rows: data.returns.map((row, index) => [
@@ -441,4 +648,3 @@ function sumQty(values: number[]): number {
 function sumRupees(values: number[]): number {
   return values.reduce((sum, value) => (Math.round(sum * 100) + Math.round(value * 100)) / 100, 0);
 }
-
