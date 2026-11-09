@@ -99,6 +99,7 @@ function compareBills(a: InvoiceSummary, b: InvoiceSummary, sort: BillSort): num
 export type InvoiceDetail = InvoiceSummary & {
   lines: InvoiceLine[];
   payments: InvoicePayment[];
+  customerPhone: string;
 };
 
 export type InvoiceItem = {

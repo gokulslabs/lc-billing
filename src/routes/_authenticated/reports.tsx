@@ -243,7 +243,11 @@ function ReportsPage() {
           sheet={result.data}
           report={report}
           period={
-            needsDate ? applied.date : needsRange ? `${applied.from} to ${applied.to}` : undefined
+            needsDate
+              ? `Date : ${legacyReportDate(applied.date)}`
+              : needsRange
+                ? `From date : ${legacyReportDate(applied.from)}\nTo date : ${legacyReportDate(applied.to)}`
+                : undefined
           }
           {...(report === "pending"
             ? { onExport: () => loadReport("pending", applied, 1, true) }
@@ -271,7 +275,12 @@ type Sheet = {
   total?: number;
 };
 
-const MONEY = new Set(["Gross", "Disc.", "Net", "Rate", "Amount", "Inv amount", "Paid", "Balance"]);
+const MONEY = new Set(["Gross", "Disc.", "Net", "Rate", "Amount", "Inv amount", "Paid", "Balance", "Gross Amount", "Disc. Amount", "Net Amount"]);
+
+function legacyReportDate(value: string): string {
+  const [year, month, day] = value.slice(0, 10).split("-");
+  return year && month && day ? `${day}-${month}-${year}` : value;
+}
 
 function showCell(column: string, value: SheetCell): string {
   if (typeof value !== "number") return value;
@@ -296,7 +305,7 @@ function ReportTable({
       {sheet.rows.length > 0 || sheet.totalRow ? (
         <div className="flex flex-wrap gap-2">
           <ExportExcelButton
-            filename={[report, period?.replaceAll(" ", "-")].filter(Boolean).join("-")}
+            filename={[report, period?.replaceAll(/[\s:]+/g, "-")].filter(Boolean).join("-")}
             load={async () => {
               const chosen = onExport ? await onExport() : sheet;
               return [
@@ -309,11 +318,12 @@ function ReportTable({
             }}
           />
           <PrintTableButton
-            title={`Ladies Collections — ${title}`}
+            title={label}
             load={async () => {
               const chosen = onExport ? await onExport() : sheet;
               return {
                 columns: chosen.columns,
+                lines: period ? period.split("\n") : [],
                 rows: [...chosen.rows, ...(chosen.totalRow ? [chosen.totalRow] : [])],
               };
             }}
@@ -405,11 +415,11 @@ async function loadReport(
     const discount = sumRupees(data.invoices.map((row) => row.discount));
     const net = sumRupees(data.invoices.map((row) => row.net));
     return {
-      columns: ["Sl.no.", "Invoice no.", "Date", "Customer", "Gross", "Disc.", "Net"],
+      columns: ["Sl.No.", "Invoice No.", "Date", "Customer Name", "Gross Amount", "Disc. Amount", "Net Amount"],
       rows: data.invoices.map((row, index) => [
         index + 1,
         row.billNo,
-        row.billedOn,
+        legacyReportDate(row.billedOn),
         row.customerName,
         row.gross,
         row.discount,
@@ -498,12 +508,12 @@ async function loadReport(
       }[];
     }>(`/api/reports/collections?date=${range.date}`);
     return {
-      columns: ["Sl.no.", "Showroom", "Bill no.", "Date", "Payment mode", "Remarks", "Amount"],
+      columns: ["Sl No.", "Show Room", "Bill No.", "Date", "Payment Mode", "Remarks", "Amount"],
       rows: data.collections.map((row, index) => [
         index + 1,
-        row.showroom || "—",
+        row.showroom || "",
         row.billNo,
-        row.paidOn,
+        legacyReportDate(row.paidOn),
         row.mode === "CASH"
           ? "Cash"
           : row.mode === "UPI"

@@ -15,6 +15,7 @@ import {
 } from "@/lib/products";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { DownloadPdfButton } from "@/components/app/DownloadPdfButton";
+import { PrintTableButton } from "@/components/app/PrintTableButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
@@ -242,28 +243,10 @@ function ProductPanel({
           />
           <DownloadPdfButton
             filename="products.pdf"
-            title="Ladies Collections — Products"
-            load={async () => {
-              const params = new URLSearchParams({ picker: "1" });
-              if (q.trim()) params.set("q", q.trim());
-              if (groupId) params.set("groupId", groupId);
-              if (sort !== "name-asc") params.set("sort", sort);
-              const data = await apiFetch<{ products: Product[] }>(
-                `/api/products?${params.toString()}`,
-              );
-              return {
-                columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
-                rows: data.products.map((product) => [
-                  product.code,
-                  product.groupName,
-                  product.name,
-                  product.unit,
-                  product.price,
-                  product.discountPercent || "",
-                ]),
-              };
-            }}
+            title="PRODUCTS LIST"
+            load={() => productPrintRows(q, groupId, sort)}
           />
+          <PrintTableButton title="PRODUCTS LIST" load={() => productPrintRows(q, groupId, sort)} />
           <Button
             className="rounded-full"
             onClick={() => setEditor("new")}
@@ -836,6 +819,25 @@ function GroupDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+async function productPrintRows(q: string, groupId: string, sort: ProductSort) {
+  const params = new URLSearchParams({ picker: "1" });
+  if (q.trim()) params.set("q", q.trim());
+  if (groupId) params.set("groupId", groupId);
+  if (sort !== "name-asc") params.set("sort", sort);
+  const data = await apiFetch<{ products: Product[] }>(`/api/products?${params.toString()}`);
+  return {
+    columns: ["SL.NO.", "PRODUCT CODE", "PRODUCT GROUP", "PRODUCT NAME", "UNIT", "PRICE"],
+    rows: data.products.map((product, index) => [
+      index + 1,
+      product.code,
+      product.groupName,
+      product.name,
+      product.unit,
+      product.price,
+    ]),
+  };
 }
 
 function Field({ id, label, children }: { id: string; label: string; children: ReactNode }) {

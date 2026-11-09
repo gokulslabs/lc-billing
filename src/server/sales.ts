@@ -261,7 +261,7 @@ sales.get("/", async (c) => {
 sales.post("/", async (c) => {
   const parsed = createInvoiceSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const customer = await supabaseAdmin.from("customers").select("id, name").eq("id", parsed.data.customerId).maybeSingle();
+  const customer = await supabaseAdmin.from("customers").select("id, name, phone").eq("id", parsed.data.customerId).maybeSingle();
   if (customer.error) return c.json({ error: "Could not check the customer." }, 500);
   if (!customer.data || isUnrecordedName(customer.data.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
 
@@ -280,7 +280,7 @@ sales.post("/", async (c) => {
       .single();
     if (isDuplicate(error) && attempt === 0) continue;
     if (error || !data) return c.json({ error: "Could not open the bill." }, 500);
-    return c.json({ invoice: emptyDetail(data as InvoiceRow, customer.data.name) }, 201);
+    return c.json({ invoice: emptyDetail(data as InvoiceRow, customer.data.name, customer.data.phone ?? "") }, 201);
   }
   return c.json({ error: "Could not open the bill." }, 500);
 });
@@ -624,7 +624,7 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
       .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
       .eq("invoice_id", id),
     supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, mode, showroom").eq("invoice_id", id).order("paid_on"),
-    supabaseAdmin.from("customers").select("name").eq("id", invoice.customer_id).maybeSingle(),
+    supabaseAdmin.from("customers").select("name, phone").eq("id", invoice.customer_id).maybeSingle(),
   ]);
   if (lines.error || payments.error || customer.error) return { error: "Could not load the bill.", status: 500 };
   const lineRows = (lines.data ?? []) as LineRow[];
@@ -645,6 +645,7 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
   return {
     invoice: {
       ...toSummary(invoice, customer.data?.name ?? "", total, collected),
+      customerPhone: customer.data?.phone ?? "",
       lines: mapped,
       payments: paymentRows,
     },
@@ -816,8 +817,8 @@ function toSummary(row: InvoiceRow, customerName: string, total: number, collect
   };
 }
 
-function emptyDetail(row: InvoiceRow, customerName: string): InvoiceDetail {
-  return { ...toSummary(row, customerName, 0, 0), lines: [], payments: [] };
+function emptyDetail(row: InvoiceRow, customerName: string, customerPhone = ""): InvoiceDetail {
+  return { ...toSummary(row, customerName, 0, 0), customerPhone, lines: [], payments: [] };
 }
 
 function toLine(row: LineRow, product: ProductInfo, status: string): InvoiceLine {

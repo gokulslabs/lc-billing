@@ -1,5 +1,4 @@
 import { useDeferredValue, useState, type ReactNode } from "react";
-import { flushSync } from "react-dom";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,6 +17,7 @@ import {
   type StitchingStatus,
 } from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { escapePrint, legacyDate, openLegacyPrint, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { PAGE_SIZE } from "@/lib/paging";
 import { Button } from "@/components/ui/button";
@@ -495,6 +495,11 @@ function OrderScreen({
   const [measurements, setMeasurements] = useState<StitchingMeasurement[]>([
     { label: "", value: "" },
   ]);
+  function printCopy(next: "customer" | "office") {
+    if (!order) return;
+    const body = next === "customer" ? customerCopyHtml(order) : officeCopyHtml(order);
+    if (!openLegacyPrint(body)) toast.error("Allow pop-ups to print the order.");
+  }
   const [seen, setSeen] = useState<string | null>(null);
   const savedMeasurements = order?.measurements.length
     ? order.measurements
@@ -615,9 +620,17 @@ function OrderScreen({
                 type="button"
                 variant="outline"
                 className="rounded-full"
-                onClick={() => window.print()}
+                onClick={() => printCopy("customer")}
               >
-                Print
+                Customer copy
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => printCopy("office")}
+              >
+                Office copy
               </Button>
               <ExportExcelButton
                 filename={`order-${order.orderNo}`}
@@ -841,108 +854,30 @@ function OrderScreen({
           ) : null}
         </div>
       </form>
-      {order ? <MeasurementSheet order={order} /> : null}
     </div>
   );
 }
 
-function MeasurementSheet({ order }: { order: StitchingOrder }) {
-  return (
-    <section className="measurement-sheet" aria-label="Printable measurement sheet">
-      <style>{`
-        .measurement-sheet { display: none; }
-        @media print {
-          @page { size: A5; margin: 8mm; }
-          body * { visibility: hidden !important; }
-          .measurement-sheet, .measurement-sheet * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .measurement-sheet {
-            display: block !important;
-            position: absolute;
-            inset: 0 auto auto 0;
-            width: 100%;
-            color: #202020;
-            background: white;
-            font-family: "Jost", "Segoe UI", sans-serif;
-          }
-        }
-        .measurement-sheet__header { border-bottom: 2px solid #202020; padding-bottom: 8px; }
-        .measurement-sheet__title { margin: 0; font-family: Georgia, serif; font-size: 24px; }
-        .measurement-sheet__sub { margin: 3px 0 0; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; }
-        .measurement-sheet__meta { width: 100%; margin-top: 12px; border-collapse: collapse; }
-        .measurement-sheet__meta td { padding: 3px 0; font-size: 12px; vertical-align: top; }
-        .measurement-sheet__label { width: 30%; color: #555; font-size: 10px !important; letter-spacing: .05em; text-transform: uppercase; }
-        .measurement-sheet__table { width: 100%; margin-top: 16px; border-collapse: collapse; }
-        .measurement-sheet__table th { padding: 6px 8px; background: #ececec; border: 1px solid #aaa; text-align: left; font-size: 10px; letter-spacing: .06em; text-transform: uppercase; }
-        .measurement-sheet__table td { padding: 7px 8px; border: 1px solid #aaa; font-size: 13px; }
-        .measurement-sheet__table td:last-child { font-weight: 600; }
-        .measurement-sheet__empty { padding: 18px 8px !important; color: #555; font-weight: 400 !important; text-align: center; }
-        .measurement-sheet__footer { margin-top: 18px; border-top: 1px solid #aaa; padding-top: 7px; color: #555; font-size: 10px; }
-      `}</style>
-      <div className="measurement-sheet__header">
-        <h2 className="measurement-sheet__title">Ladies Collections</h2>
-        <p className="measurement-sheet__sub">Stitching measurement sheet</p>
-      </div>
-      <table className="measurement-sheet__meta">
-        <tbody>
-          <tr>
-            <td className="measurement-sheet__label">Customer</td>
-            <td>{order.customerName || "—"}</td>
-          </tr>
-          {order.customerPhone ? (
-            <tr>
-              <td className="measurement-sheet__label">Phone</td>
-              <td>{order.customerPhone}</td>
-            </tr>
-          ) : null}
-          <tr>
-            <td className="measurement-sheet__label">Garment</td>
-            <td>{order.productName.replace(/ stitching$/i, "") || "—"}</td>
-          </tr>
-          <tr>
-            <td className="measurement-sheet__label">Order / bag</td>
-            <td>
-              {order.orderNo}
-              {order.bagNo ? ` / ${order.bagNo}` : ""}
-            </td>
-          </tr>
-          <tr>
-            <td className="measurement-sheet__label">Date / delivery</td>
-            <td>
-              {slashDate(order.orderedOn)}
-              {order.deliveryOn ? ` / ${slashDate(order.deliveryOn)}` : ""}
-            </td>
-          </tr>
-        </tbody>
-      </table>
-      <table className="measurement-sheet__table">
-        <thead>
-          <tr>
-            <th>Measurement</th>
-            <th>Value</th>
-          </tr>
-        </thead>
-        <tbody>
-          {order.measurements.length ? (
-            order.measurements.map((measurement, index) => (
-              <tr key={`${measurement.label}-${index}`}>
-                <td>{measurement.label}</td>
-                <td>{measurement.value}</td>
-              </tr>
-            ))
-          ) : (
-            <tr>
-              <td colSpan={2} className="measurement-sheet__empty">
-                No measurements saved for this order.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      {order.description ? <p>Description: {order.description}</p> : null}
-      {order.processes?.length ? <p>Process: {order.processes.join(", ")}</p> : null}
-      <p className="measurement-sheet__footer">Order status: {order.status}</p>
-    </section>
-  );
+function garmentName(name: string): string {
+  return name.replace(/ stitching$/i, "");
+}
+
+function customerCopyHtml(order: StitchingOrder): string {
+  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>CUSTOMER STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("NAME", order.customerName)}${slipRow("MOBILE NO.", order.customerPhone)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("EXPECTED RETURN DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("AMOUNT", plainAmount(order.amount))}<tr><th colspan="2"><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.<br>3. Amount may vary as per the execution duration.</h4></th></tr></tbody></table>`;
+}
+
+function officeCopyHtml(order: StitchingOrder): string {
+  const processes = (order.processes ?? [])
+    .map((process, index) => `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(process)}</h4></td></tr>`)
+    .join("");
+  const measurements = order.measurements
+    .filter((row) => row.label.trim() || row.value.trim())
+    .map(
+      (row, index) =>
+        `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(row.label)}</h4></td><td><h4>${escapePrint(row.value)}</h4></td></tr>`,
+    )
+    .join("");
+  return `<table><tbody>${shopHeading(false)}<tr><th class="center" colspan="2"><h4>STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("EXPECTED DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("NAME", order.customerName)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("DESCRIPTION", order.description ?? "")}</tbody></table><table><thead><tr><th colspan="2"><h4>PROCESS DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>PROCESS</h4></th></tr></thead><tbody>${processes}</tbody></table><table><thead><tr><th colspan="3"><h4>MEASUREMENT DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>TITLE</h4></th><th><h4>MEASUREMENT</h4></th></tr></thead><tbody>${measurements}</tbody></table>`;
 }
 
 function updateRow(

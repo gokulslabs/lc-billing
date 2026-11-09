@@ -116,7 +116,7 @@ function CustomersPage() {
             }}
           />
           <PrintTableButton
-            title="Ladies Collections — Customers"
+            title="CUSTOMERS LIST"
             load={async () => {
               const params = listParams();
               params.set("export", "1");
@@ -124,12 +124,13 @@ function CustomersPage() {
                 `/api/customers?${params.toString()}`,
               );
               return {
-                columns: ["Name", "Phone", "Book no.", "Address"],
-                rows: data.customers.map((customer) => [
+                columns: ["SL.NO.", "NAME", "ADDRESS", "PHONE NO.", "BOOK NO."],
+                rows: data.customers.map((customer, index) => [
+                  index + 1,
                   customer.name,
+                  customer.address ?? "",
                   customer.phone ?? "",
                   customer.bookNo ?? "",
-                  customer.address ?? "",
                 ]),
               };
             }}
