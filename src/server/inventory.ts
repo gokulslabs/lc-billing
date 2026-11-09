@@ -186,20 +186,33 @@ inventory.post("/verification/count", async (c) => {
   return c.json({ startedAt: data });
 });
 
+type ReportRow = import("@/integrations/supabase/types").Database["public"]["Views"]["stock_verification_report"]["Row"];
+const toReportItem = (row: ReportRow): InventoryItem => ({
+  id: row.id,
+  inventoryNo: row.inventory_no,
+  productId: row.product_id,
+  productCode: row.product_code,
+  productName: row.product_name,
+  groupName: row.group_name,
+  unit: row.unit === "MT" ? "MT" : "NO",
+  price: Number(row.price),
+  quantity: Number(row.quantity),
+  status: row.status,
+  verifiedAt: row.stock_verified_at,
+  verifiedQuantity: row.stock_verified_quantity == null ? null : Number(row.stock_verified_quantity),
+});
+
 inventory.get("/verification/lookup", async (c) => {
   const number = c.req.query("number")?.trim() ?? "";
   if (!number || number.length > 40) return c.json({ error: "Enter a valid inventory number." }, 400);
-  const { data, error } = await supabaseAdmin
-    .from("inventory_items")
-    .select("id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity")
-    .eq("inventory_no", number)
-    .maybeSingle();
+  const lookup = (value: string) =>
+    supabaseAdmin.from("stock_verification_report").select("*").eq("inventory_no", value).maybeSingle();
+  let { data, error } = await lookup(number);
+  if (!error && !data && number !== number.toUpperCase()) {
+    ({ data, error } = await lookup(number.toUpperCase()));
+  }
   if (error) return c.json({ error: "Could not look up stock." }, 500);
-  if (!data) return c.json({ item: null });
-  const catalogue = await loadCatalogue();
-  const product = catalogue?.get(data.product_id);
-  if (!product) return c.json({ error: "Could not load the product." }, 500);
-  return c.json({ item: toItem(data, product) });
+  return c.json({ item: data ? toReportItem(data) : null });
 });
 
 inventory.get("/verification", async (c) => {
@@ -217,21 +230,6 @@ inventory.get("/verification", async (c) => {
     }
     return filtered.order("inventory_no").order("id");
   };
-  type ReportRow = import("@/integrations/supabase/types").Database["public"]["Views"]["stock_verification_report"]["Row"];
-  const toReportItem = (row: ReportRow): InventoryItem => ({
-    id: row.id,
-    inventoryNo: row.inventory_no,
-    productId: row.product_id,
-    productCode: row.product_code,
-    productName: row.product_name,
-    groupName: row.group_name,
-    unit: row.unit === "MT" ? "MT" : "NO",
-    price: Number(row.price),
-    quantity: Number(row.quantity),
-    status: row.status,
-    verifiedAt: row.stock_verified_at,
-    verifiedQuantity: row.stock_verified_quantity == null ? null : Number(row.stock_verified_quantity),
-  });
   if (c.req.query("export") === "1") {
     const loaded = await readAll<ReportRow>((from, to) => query().range(from, to));
     if (!loaded) return c.json({ error: "Could not load stock verification." }, 500);
