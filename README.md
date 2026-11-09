@@ -27,3 +27,9 @@ image available through its API for up to 60 minutes.
 The endpoint accepts only the supported storefront garments. It caps requests
 at three active requests and 24 attempts per hour per server process.
 Set provider credit limits as appropriate for a public deployment.
+
+## Storefront accounts
+
+- `/auth` is the customer sign-in and registration page.
+- `/staff-login` is reserved for employees and administrators.
+- Apply `drizzle/migrations/0014_customer_accounts.sql` to the Supabase database before customer registration is enabled. The signup page checks the migration marker first, and customer accounts are excluded from the first-admin trigger.

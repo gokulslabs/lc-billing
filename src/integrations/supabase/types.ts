@@ -455,6 +455,7 @@ export type Database = {
       }
     }
     Functions: {
+      customer_signup_enabled: { Args: Record<PropertyKey, never>; Returns: boolean }
       start_stock_count: { Args: { actor: string; expected_start: string | null }; Returns: string }
       save_group_discounts: { Args: { changes: Json }; Returns: undefined }
       has_role: {

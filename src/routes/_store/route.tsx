@@ -1,9 +1,18 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { ArrowUpRight, Flower2, Search, ShoppingBag, Sparkles } from "lucide-react";
+import {
+  ArrowUpRight,
+  Flower2,
+  LogOut,
+  Search,
+  ShoppingBag,
+  Sparkles,
+  UserRound,
+} from "lucide-react";
 import { useEffect, useState } from "react";
 import { CartContext, type Cart } from "@/components/store/cart-state";
 import { categories, MAX_QUANTITY, productById } from "@/lib/storefront";
 import { useAuth } from "@/hooks/use-auth";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_store")({ component: StoreLayout });
 const cartKey = "lc-store-cart-v1";
@@ -143,6 +152,26 @@ function StoreLayout() {
               >
                 <Search size={19} strokeWidth={1.6} />
               </Link>
+              {user ? (
+                <button
+                  type="button"
+                  aria-label="Sign out of your account"
+                  title="Sign out"
+                  className="store-header-action"
+                  onClick={() => void supabase.auth.signOut()}
+                >
+                  <LogOut size={18} strokeWidth={1.6} />
+                </button>
+              ) : (
+                <Link
+                  to="/auth"
+                  aria-label="Customer sign in"
+                  title="Customer sign in"
+                  className="store-header-action"
+                >
+                  <UserRound size={19} strokeWidth={1.6} />
+                </Link>
+              )}
               <Link
                 to="/cart"
                 aria-label={`Shopping bag, ${count} items`}
@@ -183,11 +212,11 @@ function StoreLayout() {
             <div>
               <h2 className="store-editorial-label mb-4">Ladies Collections</h2>
               <p className="text-sm store-footer-muted">Sample collection · Preview checkout</p>
-              <Link
-                to={user ? "/admin/dashboard" : "/auth"}
-                className="store-editorial-link store-on-garnet mt-4"
-              >
-                {user ? "Open staff dashboard" : "Staff sign in"} <ArrowUpRight size={14} />
+              <Link to="/auth" className="store-editorial-link store-on-garnet mt-4">
+                Customer account <ArrowUpRight size={14} />
+              </Link>
+              <Link to="/staff-login" className="store-footer-link mt-3 block text-sm">
+                Staff sign in
               </Link>
             </div>
           </div>

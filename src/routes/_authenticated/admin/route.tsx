@@ -34,7 +34,7 @@ export const Route = createFileRoute("/_authenticated/admin")({
   ssr: false,
   beforeLoad: async () => {
     const { data } = await supabase.auth.getUser();
-    if (!data.user) throw redirect({ to: "/auth" });
+    if (!data.user) throw redirect({ to: "/staff-login" });
   },
   component: AuthenticatedLayout,
 });
@@ -79,7 +79,7 @@ function AuthenticatedLayout() {
     } catch {
       await supabase.auth.signOut({ scope: "local" });
     }
-    navigate({ to: "/auth", replace: true });
+    navigate({ to: "/staff-login", replace: true });
   }
 
   const idle = useIdleLogout(Boolean(user), signOut);

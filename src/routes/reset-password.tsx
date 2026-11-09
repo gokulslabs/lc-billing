@@ -42,7 +42,7 @@ function ResetPasswordPage() {
       return;
     }
     toast.success("Password updated.");
-    navigate({ to: "/admin", replace: true });
+    navigate({ to: user?.user_metadata["account_type"] === "customer" ? "/" : "/admin", replace: true });
   }
 
   return (
