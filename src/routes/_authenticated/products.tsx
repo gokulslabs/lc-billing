@@ -14,7 +14,7 @@ import {
   type Unit,
 } from "@/lib/products";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
-import { PrintTableButton } from "@/components/app/PrintTableButton";
+import { DownloadPdfButton } from "@/components/app/DownloadPdfButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
@@ -234,13 +234,14 @@ function ProductPanel({
                     product.name,
                     product.unit,
                     product.price,
-                    product.discountPercent,
+                    product.discountPercent || "",
                   ]),
                 },
               ];
             }}
           />
-          <PrintTableButton
+          <DownloadPdfButton
+            filename="products.pdf"
             title="Ladies Collections — Products"
             load={async () => {
               const params = new URLSearchParams({ picker: "1" });
@@ -258,7 +259,7 @@ function ProductPanel({
                   product.name,
                   product.unit,
                   product.price,
-                  product.discountPercent,
+                  product.discountPercent || "",
                 ]),
               };
             }}
@@ -289,7 +290,7 @@ function ProductPanel({
               <PhoneCard
                 key={product.id}
                 title={product.name || product.code}
-                detail={`${product.code} · ${product.groupName} · ${unitLabel(product.unit)} · ${formatRupees(product.price)} · ${product.discountPercent}%`}
+                detail={`${product.code} · ${product.groupName} · ${unitLabel(product.unit)} · ${formatRupees(product.price)}${product.discountPercent ? ` · ${product.discountPercent}%` : ""}`}
               >
                 <Button
                   variant="outline"
@@ -344,7 +345,7 @@ function ProductPanel({
                     <TableCell>{product.groupName}</TableCell>
                     <TableCell>{unitLabel(product.unit)}</TableCell>
                     <TableCell>{formatRupees(product.price)}</TableCell>
-                    <TableCell>{product.discountPercent}%</TableCell>
+                    <TableCell>{product.discountPercent ? `${product.discountPercent}%` : ""}</TableCell>
                     <TableCell className="space-x-2 text-right">
                       <Button
                         variant="outline"
@@ -446,15 +447,14 @@ function GroupDiscounts({ groups }: { groups: ProductGroup[] }) {
               min={0}
               max={100}
               step="0.01"
-              required
               className="w-28"
-              value={drafts[group.id]?.value ?? group.discountPercent}
+              value={drafts[group.id]?.value ?? (group.discountPercent || "")}
               onChange={(event) => {
                 const value = event.target.value;
                 setDrafts((current) => {
                   const previous = current[group.id]?.previous ?? group.discountPercent;
                   const next = { ...current };
-                  if (value !== "" && Number(value) === previous) delete next[group.id];
+                  if (Number(value) === previous) delete next[group.id];
                   else next[group.id] = { value, previous };
                   return next;
                 });
@@ -493,7 +493,7 @@ function GroupPanel({
               rows: groups.map((group) => [
                 group.name,
                 group.code,
-                group.discountPercent,
+                group.discountPercent || "",
                 group.productCount,
               ]),
             },
@@ -515,7 +515,7 @@ function GroupPanel({
               <PhoneCard
                 key={group.id}
                 title={group.name}
-                detail={`${group.code} · ${group.discountPercent}% · ${group.productCount} products`}
+                detail={`${group.code}${group.discountPercent ? ` · ${group.discountPercent}%` : ""} · ${group.productCount} products`}
               >
                 <Button
                   variant="outline"
@@ -557,7 +557,7 @@ function GroupPanel({
                   <TableRow key={group.id}>
                     <TableCell className="font-medium">{group.name}</TableCell>
                     <TableCell>{group.code}</TableCell>
-                    <TableCell>{group.discountPercent}%</TableCell>
+                    <TableCell>{group.discountPercent ? `${group.discountPercent}%` : ""}</TableCell>
                     <TableCell>{group.productCount}</TableCell>
                     <TableCell className="space-x-2 text-right">
                       <Button
@@ -754,14 +754,14 @@ function GroupDialog({
 }) {
   const [name, setName] = useState(group?.name ?? "");
   const [code, setCode] = useState(group?.code ?? "");
-  const [discount, setDiscount] = useState(group ? String(group.discountPercent) : "0");
+  const [discount, setDiscount] = useState(group?.discountPercent ? String(group.discountPercent) : "");
   const [seen, setSeen] = useState<string | null>(null);
   const mode = open ? (group?.id ?? "new") : null;
   if (mode && seen !== mode) {
     setSeen(mode);
     setName(group?.name ?? "");
     setCode(group?.code ?? "");
-    setDiscount(group ? String(group.discountPercent) : "0");
+    setDiscount(group?.discountPercent ? String(group.discountPercent) : "");
   }
 
   const save = useMutation({
@@ -825,7 +825,6 @@ function GroupDialog({
               inputMode="decimal"
               value={discount}
               onChange={(event) => setDiscount(event.target.value)}
-              required
             />
           </Field>
           <DialogFooter>

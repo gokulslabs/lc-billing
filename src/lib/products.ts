@@ -90,14 +90,14 @@ export function formatRupees(amount: number): string {
 
 export function nextProductCode(groupCode: string, existingCodes: readonly string[]): string {
   const prefix = groupCode.trim().toUpperCase();
-  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(\\d+)$`);
+  const pattern = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}-?(\\d+)$`);
   let max = 0;
   for (const code of existingCodes) {
     const match = pattern.exec(code.trim().toUpperCase());
     const serial = match?.[1] ? Number(match[1]) : 0;
     if (Number.isFinite(serial)) max = Math.max(max, serial);
   }
-  return `${prefix}${String(max + 1).padStart(3, "0")}`;
+  return `${prefix}-${String(max + 1).padStart(4, "0")}`;
 }
 
 export function zodMessage(error: z.ZodError): string {

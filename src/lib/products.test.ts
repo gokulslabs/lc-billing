@@ -2,12 +2,12 @@ import { describe, expect, it } from "vitest";
 import { nextProductCode, productSchema, productSort } from "./products";
 
 describe("nextProductCode", () => {
-  it("starts at 001 for an empty group", () => {
-    expect(nextProductCode("ss", [])).toBe("SS001");
+  it("starts at 0001 for an empty group", () => {
+    expect(nextProductCode("ss", [])).toBe("SS-0001");
   });
 
   it("continues after the highest code in that group", () => {
-    expect(nextProductCode("SS", ["SS001", "SS014", "SR003"])).toBe("SS015");
+    expect(nextProductCode("SS", ["SS001", "SS014", "SS-0612", "SR003"])).toBe("SS-0613");
   });
 });
 

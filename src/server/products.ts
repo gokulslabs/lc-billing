@@ -274,7 +274,7 @@ async function findGroup(id: string): Promise<ProductGroup | null> {
 
 async function generatedCode(group: ProductGroup): Promise<string | null> {
   const loaded = await readAll<{ code: string }>((from, to) =>
-    supabaseAdmin.from("products").select("code").eq("group_id", group.id).order("id").range(from, to),
+    supabaseAdmin.from("products").select("code").order("id").range(from, to),
   );
   if (!loaded) return null;
   return nextProductCode(
