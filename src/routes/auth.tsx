@@ -272,7 +272,7 @@ function CustomerAuthPage() {
               </div>
               {mode !== "forgot" ? (
                 <Link
-                  to="/login"
+                  to="/admin-login"
                   className="mt-5 block text-center text-xs text-muted-foreground hover:text-primary"
                 >
                   Staff sign in
