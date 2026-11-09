@@ -1,10 +1,12 @@
 import { useDeferredValue, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
+import { formatRupees } from "@/lib/products";
 import type { StitchingProcess } from "@/lib/settings";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
 import {
@@ -76,10 +78,10 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   );
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" } | null>(null);
-  function sortHeader(label: string, column: string) {
-    return (
   const dueFilter = ["soon", "today", "week", "overdue"].includes(status);
   const activeSort = sort ?? (dueFilter ? null : { column: "ordered_on", direction: "desc" });
+  function sortHeader(label: string, column: string) {
+    return (
       <TableHead
         aria-sort={
           activeSort?.column === column
@@ -241,8 +243,6 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             ))}
           </SelectContent>
         </Select>
-      </div>
-      {orders.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
         {status !== "board" ? (
           <Select
             value={activeSort?.column === "ordered_on" ? activeSort.direction : sort ? "column" : "due"}
@@ -262,6 +262,8 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
             </SelectContent>
           </Select>
         ) : null}
+      </div>
+      {orders.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {orders.error instanceof Error ? (
         <p className="text-sm text-destructive">{orders.error.message}</p>
       ) : null}
