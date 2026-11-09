@@ -38,20 +38,47 @@ function AuthPage() {
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/admin", replace: true });
-  }, [user, loading, navigate]);
+    if (loading || !user) return;
+    let active = true;
+    void supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", user.id)
+      .then(({ data, error }) => {
+        if (!active) return;
+        if (error) toast.error("We couldn't verify staff access. Please try again.");
+        else if (data.length) navigate({ to: "/admin", replace: true });
+      });
+    return () => {
+      active = false;
+    };
+  }, [user?.id, loading, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     try {
       if (mode === "signin") {
-        const { error } = await supabase.auth.signInWithPassword({
+        const { data: signedIn, error } = await supabase.auth.signInWithPassword({
           email: signInEmail(email),
           password,
         });
-        if (error) toast.error("Email, mobile, or password is incorrect.");
-        else navigate({ to: "/admin", replace: true });
+        if (error || !signedIn.user) {
+          toast.error("Email, mobile, or password is incorrect.");
+        } else {
+          const { data: roles, error: roleError } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", signedIn.user.id);
+          if (roleError) {
+            toast.error("We couldn't verify staff access. Please try again.");
+          } else if (!roles.length) {
+            await supabase.auth.signOut({ scope: "local" });
+            toast.error("This account doesn't have staff access. Use the customer sign-in instead.");
+          } else {
+            navigate({ to: "/admin", replace: true });
+          }
+        }
       } else if (
         !email.includes("@") ||
         signInEmail(email).endsWith("@staff.ladiescollections.local")

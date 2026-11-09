@@ -101,9 +101,14 @@ function AuthenticatedLayout() {
           <p className="mt-2 text-sm text-muted-foreground">
             Your account ({user.email}) is created. The shop owner needs to give you access before you can open the app.
           </p>
-          <Button variant="outline" className="mt-6 rounded-full" onClick={signOut}>
-            Sign out
-          </Button>
+          <div className="mt-6 flex flex-wrap justify-center gap-2">
+            <Button variant="outline" className="rounded-full" onClick={signOut}>
+              Sign out
+            </Button>
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to="/staff-login">Switch account</Link>
+            </Button>
+          </div>
         </div>
         {idleWarning}
       </main>
