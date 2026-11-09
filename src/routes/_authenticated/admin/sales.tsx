@@ -10,6 +10,7 @@ import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, ty
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
+import { escapePrint, legacyDate, openLegacyPrint, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -140,6 +141,24 @@ function SalesHome({
   });
   const rows = bills.data?.invoices ?? [];
   const matches = (people.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  async function loadBillsPrint() {
+    const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
+      `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
+    );
+    return {
+      columns: ["Sl.No.", "Invoice No.", "Date", "Customer Name", "Gross Amt", "Disc Amt", "Net Amt"],
+      lines: [`From date : ${legacyDate(listFrom)}`, `To date : ${legacyDate(listTo)}`],
+      rows: data.invoices.map((bill, index) => [
+        index + 1,
+        bill.billNo,
+        legacyDate(bill.billedOn),
+        bill.customerName,
+        plainAmount(bill.gross),
+        plainAmount(bill.discount),
+        plainAmount(bill.total),
+      ]),
+    };
+  }
   async function loadBillsExport() {
     const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
       `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
@@ -308,7 +327,7 @@ function SalesHome({
               filename="bills"
               load={async () => [{ name: "Bills", ...(await loadBillsExport()) }]}
             />
-            <PrintTableButton title="Ladies Collections — Bills" load={loadBillsExport} />
+            <PrintTableButton title="Invoice List (Date)" load={loadBillsPrint} />
           </div>
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
           {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
@@ -504,7 +523,13 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                 <p className="text-sm text-muted-foreground">Balance</p>
                 <p className="font-display text-4xl font-semibold tabular-nums">{formatRupees(invoice.balance)}</p>
               </div>
-              <Button variant="outline" className="rounded-full" onClick={() => window.print()}>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => {
+                  if (!openLegacyPrint(salesBillHtml(invoice))) toast.error("Allow pop-ups to print the bill.");
+                }}
+              >
                 Print
               </Button>
             </div>
@@ -518,7 +543,6 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
       {bill.error instanceof Error ? <p className="text-sm text-destructive">{bill.error.message}</p> : null}
       {invoice?.remarks ? <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p> : null}
       {invoice && invoice.status !== "cancelled" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
-      {invoice ? <Receipt invoice={invoice} /> : null}
       {invoice ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -1133,164 +1157,14 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   );
 }
 
-function Receipt({ invoice }: { invoice: InvoiceDetail }) {
-  const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
-  const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
-  const showDiscount = discount > 0.001;
-  return (
-    <section className="receipt">
-      <style>{`
-        .receipt { display: none; }
-        @media print {
-          @page { size: A5; margin: 8mm; }
-          body * { visibility: hidden !important; }
-          .receipt, .receipt * { visibility: visible !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-          .receipt {
-            display: block !important;
-            position: absolute;
-            left: 0;
-            top: 0;
-            width: 100%;
-            color: #243028;
-            background: white;
-            font-family: "Jost", "Segoe UI", sans-serif;
-          }
-        }
-        .receipt-sheet { color: #243028; }
-        .receipt-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-        .receipt-logo { width: 38mm; height: auto; }
-        .receipt-qr { width: 22mm; height: 22mm; }
-        .receipt-wares, .receipt-address { margin: 2px 0; font-size: 11px; }
-        .receipt-chip { display: inline-block; margin: 8px 0; padding: 2px 8px; background: #97da87; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; }
-        .receipt-meta, .receipt-lines, .receipt-totals, .receipt-paid { width: 100%; border-collapse: collapse; }
-        .receipt-meta td { padding: 3px 0; font-size: 12px; vertical-align: top; }
-        .receipt-meta .label, .receipt-lines th { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
-        .receipt-lines { margin-top: 10px; }
-        .receipt-lines th { background: #97da87; padding: 6px; text-align: left; font-weight: 600; }
-        .receipt-lines td { border-bottom: 1px solid #e3f5df; padding: 6px; font-size: 12px; vertical-align: top; }
-        .receipt-lines .item { font-weight: 600; }
-        .receipt-lines .sub { display: block; margin-top: 2px; font-size: 10px; font-weight: 400; }
-        .num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
-        .receipt-totals { margin-top: 8px; margin-left: auto; width: 220px; }
-        .receipt-totals td { padding: 3px 6px; font-size: 12px; }
-        .receipt-totals .balance td { border-top: 2px solid #97da87; padding-top: 8px; font-size: 14px; font-weight: 700; }
-        .receipt-paid { margin-top: 12px; }
-        .receipt-paid th { text-align: left; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; padding: 4px; background: #97da87; }
-        .receipt-paid td { padding: 4px; font-size: 12px; border-bottom: 1px solid #e3f5df; }
-        .receipt-terms { margin: 12px 0 0; font-size: 10px; }
-        .receipt-signs { display: flex; justify-content: space-between; margin-top: 28px; font-size: 11px; }
-      `}</style>
-      <div className="receipt-sheet">
-        <div className="receipt-top">
-          <img className="receipt-logo" src="/lc-logo.png" alt="Ladies Collection" />
-          <img className="receipt-qr" src="/upi-qr.png" alt="UPI" />
-        </div>
-        <p className="receipt-wares">Sarees, Churidars, Kurtis, Nighties, Western wear</p>
-        <p className="receipt-wares">Blouse stitching and aari work</p>
-        <p className="receipt-address"># 101/A, ARC 3T Road, opposite the Old Employment Office, Kagitha Patarai, Vellore 632 012</p>
-        <p className="receipt-address">93626 98863 · 98941 60179 · GSTIN 33BTNPS2196C2Z9</p>
-        <p className="receipt-chip">Cash bill</p>
-        <table className="receipt-meta">
-          <tbody>
-            <tr>
-              <td className="label">Bill no.</td>
-              <td>{invoice.billNo}</td>
-              <td className="label num">Date</td>
-              <td className="num">{slashDate(invoice.billedOn)}</td>
-            </tr>
-            <tr>
-              <td className="label">Customer</td>
-              <td colSpan={3}>{invoice.customerName}</td>
-            </tr>
-          </tbody>
-        </table>
-        <table className="receipt-lines">
-          <thead>
-            <tr>
-              <th>Sl.</th>
-              <th>Particulars</th>
-              <th className="num">Qty</th>
-              <th className="num">Rate</th>
-              {showDiscount ? <th className="num">Discount</th> : null}
-              <th className="num">Amount</th>
-            </tr>
-          </thead>
-          <tbody>
-            {invoice.lines.map((line, index) => (
-              <tr key={line.id}>
-                <td>{index + 1}</td>
-                <td>
-                  <span className="item">{line.productName}</span>
-                  <span className="sub">
-                    {line.productCode} · {line.inventoryNo}
-                  </span>
-                </td>
-                <td className="num">{line.quantity}</td>
-                <td className="num">{formatRupees(line.rate)}</td>
-                {showDiscount ? <td className="num">{line.discount > 0.001 ? formatRupees(line.discount) : ""}</td> : null}
-                <td className="num">{formatRupees(line.amount)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <table className="receipt-totals">
-          <tbody>
-            <tr>
-              <td>Gross</td>
-              <td className="num">{formatRupees(gross)}</td>
-            </tr>
-            {showDiscount ? (
-              <tr>
-                <td>Discount</td>
-                <td className="num">{formatRupees(discount)}</td>
-              </tr>
-            ) : null}
-            <tr>
-              <td>Net</td>
-              <td className="num">{formatRupees(invoice.total)}</td>
-            </tr>
-            {invoice.payments.length > 0 ? (
-              <tr>
-                <td>Paid</td>
-                <td className="num">{formatRupees(invoice.collected)}</td>
-              </tr>
-            ) : null}
-            <tr className="balance">
-              <td>Balance</td>
-              <td className="num">{formatRupees(invoice.balance)}</td>
-            </tr>
-          </tbody>
-        </table>
-        {invoice.payments.length > 0 ? (
-          <table className="receipt-paid">
-            <thead>
-              <tr>
-                <th>Payment</th>
-                <th>Date</th>
-                <th>Mode</th>
-                <th className="num">Amount</th>
-              </tr>
-            </thead>
-            <tbody>
-              {invoice.payments.map((payment, index) => (
-                <tr key={payment.id}>
-                  <td>{index + 1}</td>
-                  <td>{slashDate(payment.paidOn)}</td>
-                  <td>{paymentLabel(payment.mode)}</td>
-                  <td className="num">{formatRupees(payment.amount)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : null}
-        <p className="receipt-terms">Complaint within 3 days. Not responsible for damage or colour fade. Goods once sold cannot be taken back.</p>
-        <div className="receipt-signs">
-          <p>Customer's signature</p>
-          <p>For Ladies Collection</p>
-        </div>
-      </div>
-    </section>
-  );
+function salesBillHtml(invoice: InvoiceDetail): string {
+  const lines = invoice.lines
+    .map(
+      (line, index) =>
+        `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(line.productName)}</h4></td><td><h4>${plainAmount(line.amount)}</h4></td></tr>`,
+    )
+    .join("");
+  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>SALES BILL</h4></th></tr>${slipRow("BILL NO.", invoice.billNo)}${slipRow("DATE", legacyDate(invoice.billedOn))}${slipRow("NAME", invoice.customerName)}${slipRow("MOBILE NO.", invoice.customerPhone)}</tbody></table><table><thead><tr><th><h4>SL.NO.</h4></th><th><h4>PARTICULARS</h4></th><th><h4>AMOUNT</h4></th></tr></thead><tbody>${lines}</tbody></table><table><tbody>${slipRow("TOTAL AMOUNT", plainAmount(invoice.total))}</tbody></table><table><tbody><tr><th><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.</h4></th></tr></tbody></table>`;
 }
 
 function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {

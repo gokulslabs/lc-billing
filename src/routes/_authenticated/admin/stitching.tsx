@@ -18,6 +18,7 @@ import {
   type StitchingStatus,
 } from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { escapePrint, legacyDate, openLegacyPrint, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { PAGE_SIZE } from "@/lib/paging";
 import { Button } from "@/components/ui/button";
@@ -471,9 +472,9 @@ function OrderScreen({
     queryFn: () => apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`),
   });
   const order = existing.data?.order;
-  const [printCopy, setPrintCopy] = useState<"customer" | "office">("office");
+  const [printSheetCopy, setPrintSheetCopy] = useState<"customer" | "office">("office");
   function printOrder(copy: "customer" | "office") {
-    flushSync(() => setPrintCopy(copy));
+    flushSync(() => setPrintSheetCopy(copy));
     window.print();
   }
   const processOptions = useQuery({
@@ -500,6 +501,11 @@ function OrderScreen({
   const [measurements, setMeasurements] = useState<StitchingMeasurement[]>([
     { label: "", value: "" },
   ]);
+  function printCopy(next: "customer" | "office") {
+    if (!order) return;
+    const body = next === "customer" ? customerCopyHtml(order) : officeCopyHtml(order);
+    if (!openLegacyPrint(body)) toast.error("Allow pop-ups to print the order.");
+  }
   const [seen, setSeen] = useState<string | null>(null);
   const savedMeasurements = order?.measurements.length
     ? order.measurements
@@ -620,7 +626,7 @@ function OrderScreen({
                 type="button"
                 variant="outline"
                 className="rounded-full"
-                onClick={() => printOrder("customer")}
+onClick={() => printCopy("customer")}
               >
                 Customer copy
               </Button>
@@ -628,9 +634,17 @@ function OrderScreen({
                 type="button"
                 variant="outline"
                 className="rounded-full"
-                onClick={() => printOrder("office")}
+onClick={() => printCopy("office")}
               >
                 Office copy
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => printOrder(printSheetCopy)}
+              >
+                Print order sheet
               </Button>
               <ExportExcelButton
                 filename={`order-${order.orderNo}`}
@@ -854,7 +868,7 @@ function OrderScreen({
           ) : null}
         </div>
       </form>
-      {order ? <MeasurementSheet order={order} copy={printCopy} /> : null}
+{order ? <MeasurementSheet order={order} copy={printSheetCopy} /> : null}
     </div>
   );
 }
@@ -968,6 +982,28 @@ function MeasurementSheet({ order, copy }: { order: StitchingOrder; copy: "custo
       <p className="measurement-sheet__footer">Order status: {order.status}</p>
     </section>
   );
+}
+
+function garmentName(name: string): string {
+  return name.replace(/ stitching$/i, "");
+}
+
+function customerCopyHtml(order: StitchingOrder): string {
+  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>CUSTOMER STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("NAME", order.customerName)}${slipRow("MOBILE NO.", order.customerPhone)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("EXPECTED RETURN DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("AMOUNT", plainAmount(order.amount))}<tr><th colspan="2"><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.<br>3. Amount may vary as per the execution duration.</h4></th></tr></tbody></table>`;
+}
+
+function officeCopyHtml(order: StitchingOrder): string {
+  const processes = (order.processes ?? [])
+    .map((process, index) => `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(process)}</h4></td></tr>`)
+    .join("");
+  const measurements = order.measurements
+    .filter((row) => row.label.trim() || row.value.trim())
+    .map(
+      (row, index) =>
+        `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(row.label)}</h4></td><td><h4>${escapePrint(row.value)}</h4></td></tr>`,
+    )
+    .join("");
+  return `<table><tbody>${shopHeading(false)}<tr><th class="center" colspan="2"><h4>STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("EXPECTED DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("NAME", order.customerName)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("DESCRIPTION", order.description ?? "")}</tbody></table><table><thead><tr><th colspan="2"><h4>PROCESS DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>PROCESS</h4></th></tr></thead><tbody>${processes}</tbody></table><table><thead><tr><th colspan="3"><h4>MEASUREMENT DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>TITLE</h4></th><th><h4>MEASUREMENT</h4></th></tr></thead><tbody>${measurements}</tbody></table>`;
 }
 
 function updateRow(
