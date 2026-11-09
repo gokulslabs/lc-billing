@@ -1,4 +1,4 @@
-import { useDeferredValue, useState, type FormEvent } from "react";
+import { useDeferredValue, useRef, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -139,6 +139,7 @@ function StockVerificationPage() {
 function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
   const queryClient = useQueryClient();
   const [number, setNumber] = useState("");
+  const numberInput = useRef<HTMLInputElement>(null);
   const [item, setItem] = useState<InventoryItem | null>(null);
   const [message, setMessage] = useState("");
   const [status, setStatus] = useState("available");
@@ -163,13 +164,27 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
     onError: (error: Error) => setMessage(error.message),
   });
   const record = useMutation({
-    mutationFn: (path: string) => apiFetch<{ item: InventoryItem }>(path, { method: "POST" }),
+    mutationFn: async (inventoryNo: string) => {
+      const { item: found } = await apiFetch<{ item: InventoryItem | null }>(
+        `/api/inventory/verification/lookup?number=${encodeURIComponent(inventoryNo)}`,
+      );
+      if (!found) throw new Error("That inventory number is not on the stock list.");
+      return apiFetch<{ item: InventoryItem }>(`/api/inventory/${found.id}/verify`, {
+        method: "POST",
+      });
+    },
     onSuccess: ({ item: saved }) => {
       setItem(saved);
+      setNumber("");
+      numberInput.current?.focus();
       setMessage(`Recorded ${saved.inventoryNo} as verified.`);
       void queryClient.invalidateQueries({ queryKey: ["stock-verification"] });
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (error: Error) => {
+      setMessage(error.message);
+      setNumber("");
+      numberInput.current?.focus();
+    },
   });
   const update = useMutation({
     mutationFn: ({ path, body }: { path: string; body: object }) =>
@@ -186,14 +201,15 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
   });
   function onLookup(event: FormEvent) {
     event.preventDefault();
+    if (busy || !number.trim()) return;
     setMessage("");
     setItem(null);
-    lookup.mutate();
+    if (mode === "scan") record.mutate(number.trim());
+    else lookup.mutate();
   }
   function onSave(event: FormEvent) {
     event.preventDefault();
     if (!item) return;
-    if (mode === "scan") record.mutate(`/api/inventory/${item.id}/verify`);
     if (mode === "status")
       update.mutate({ path: `/api/inventory/${item.id}/stock-status`, body: { status } });
     if (mode === "quantity")
@@ -203,8 +219,7 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
       });
   }
   const busy = lookup.isPending || record.isPending || update.isPending;
-  const label =
-    mode === "scan" ? "Record scan" : mode === "status" ? "Save status" : "Save quantity";
+  const label = mode === "status" ? "Save status" : "Save quantity";
   return (
     <div className="space-y-5">
       <form className="flex flex-wrap items-end gap-3" onSubmit={onLookup}>
@@ -212,19 +227,30 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
           <Label htmlFor={`stock-${mode}`}>Inventory no.</Label>
           <Input
             id={`stock-${mode}`}
+            ref={numberInput}
             value={number}
-            onChange={(event) => setNumber(event.target.value)}
+            onChange={(event) => {
+              setNumber(event.target.value);
+              if (mode !== "scan") setItem(null);
+            }}
             className="w-56"
             autoComplete="off"
+            autoFocus={mode === "scan"}
+            readOnly={busy}
             required
           />
         </div>
         <Button type="submit" className="rounded-full" disabled={busy}>
-          {lookup.isPending ? "Looking…" : "Get"}
+          {record.isPending ? "Recording…" : mode === "scan" ? "Record scan" : lookup.isPending ? "Looking…" : "Get"}
         </Button>
       </form>
-      {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
-      {item ? (
+      {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
+      {item && mode === "scan" ? (
+        <div className="max-w-lg rounded-2xl border border-border bg-card p-4">
+          <ItemSummary item={item} />
+        </div>
+      ) : null}
+      {item && mode !== "scan" ? (
         <form
           className="max-w-lg space-y-4 rounded-2xl border border-border bg-card p-4"
           onSubmit={onSave}
@@ -259,7 +285,7 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
             </div>
           ) : null}
           <Button type="submit" className="rounded-full" disabled={busy}>
-            {record.isPending || update.isPending ? "Saving…" : label}
+            {update.isPending ? "Saving…" : label}
           </Button>
         </form>
       ) : null}
@@ -326,7 +352,7 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
                   "Unit",
                   "Status",
                   "Rate",
-                  ...(view === "verified" ? ["Quantity at verification", "Verified at"] : []),
+                  ...(view === "verified" ? ["Quantity at verification", "Recorded at"] : []),
                 ],
                 rows: items.map((item, index) => [
                   index + 1,
@@ -362,7 +388,7 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
               {view === "verified" ? (
                 <>
                   <TableHead>Quantity at verification</TableHead>
-                  <TableHead>Verified</TableHead>
+                  <TableHead>Recorded at</TableHead>
                 </>
               ) : null}
             </TableRow>
