@@ -215,7 +215,7 @@ function StoreLayout() {
               <Link to="/auth" className="store-editorial-link store-on-garnet mt-4">
                 Customer account <ArrowUpRight size={14} />
               </Link>
-              <Link to="/staff-login" className="store-footer-link mt-3 block text-sm">
+              <Link to="/login" className="store-footer-link mt-3 block text-sm">
                 Staff sign in
               </Link>
             </div>
