@@ -1,7 +1,6 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
 import {
   ArrowUpRight,
-  Flower2,
   LogOut,
   Search,
   ShoppingBag,
@@ -21,7 +20,7 @@ function Brand() {
   return (
     <Link to="/" className="store-brand" aria-label="Ladies Collections home">
       <span className="store-brand-seal">
-        <Flower2 size={20} strokeWidth={1.5} />
+        <img src="/lc-logo.png" alt="" className="h-full w-full rounded-full object-contain" />
       </span>
       <span className="leading-none">
         <span className="store-brand-name">Ladies Collections</span>
