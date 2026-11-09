@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import type { InventoryItem } from "@/lib/inventory";
 import { formatRupees, unitLabel } from "@/lib/products";
 import { Button } from "@/components/ui/button";
@@ -47,6 +48,28 @@ const TABS = [
 ] as const;
 
 function StockVerificationPage() {
+  const isAdmin = useIsAdmin();
+  const queryClient = useQueryClient();
+  const count = useQuery({
+    queryKey: ["stock-verification", "count"],
+    queryFn: () => apiFetch<{ startedAt: string | null }>("/api/inventory/verification/count"),
+  });
+  const start = useMutation({
+    mutationFn: (expectedStart: string | null) =>
+      apiFetch<{ startedAt: string }>("/api/inventory/verification/count", {
+        method: "POST",
+        body: JSON.stringify({ expectedStart }),
+      }),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ["stock-verification"] });
+      toast.success("New stock count started.");
+    },
+    onError: async (error: Error) => {
+      toast.error(error.message);
+      await queryClient.invalidateQueries({ queryKey: ["stock-verification", "count"] });
+    },
+  });
+  const startedAt = count.data?.startedAt;
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
@@ -55,6 +78,35 @@ function StockVerificationPage() {
           Scan each number on the shelf. Verified stock is recorded, and unscanned available stock
           stays on the shortage list.
         </p>
+      </div>
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border p-4">
+        <p className="text-sm">
+          {count.isError
+            ? "Could not load count details."
+            : count.isPending
+              ? "Loading count…"
+              : startedAt
+                ? `Current count started ${new Date(startedAt).toLocaleString("en-IN", { timeZone: "Asia/Kolkata" })}`
+                : "Initial stock count"}
+        </p>
+        {isAdmin && count.data ? (
+          <Button
+            type="button"
+            variant="outline"
+            disabled={start.isPending}
+            onClick={() => {
+              if (
+                window.confirm(
+                  "Start a new stock count? Current scans will be archived and available items will need to be scanned again.",
+                )
+              ) {
+                start.mutate(count.data.startedAt);
+              }
+            }}
+          >
+            {start.isPending ? "Starting…" : "Start new count"}
+          </Button>
+        ) : null}
       </div>
       <Tabs defaultValue="scanning">
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
@@ -274,7 +326,7 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
                   "Unit",
                   "Status",
                   "Rate",
-                  ...(view === "verified" ? ["Verified at"] : []),
+                  ...(view === "verified" ? ["Quantity at verification", "Verified at"] : []),
                 ],
                 rows: items.map((item, index) => [
                   index + 1,
@@ -286,7 +338,9 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
                   item.unit,
                   item.status,
                   item.price,
-                  ...(view === "verified" ? [item.verifiedAt ?? ""] : []),
+                  ...(view === "verified"
+                    ? [item.verifiedQuantity ?? "", item.verifiedAt ?? ""]
+                    : []),
                 ]),
               },
             ];
@@ -305,13 +359,18 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
               <TableHead>Quantity</TableHead>
               <TableHead>Status</TableHead>
               <TableHead>Rate</TableHead>
-              {view === "verified" ? <TableHead>Verified</TableHead> : null}
+              {view === "verified" ? (
+                <>
+                  <TableHead>Quantity at verification</TableHead>
+                  <TableHead>Verified</TableHead>
+                </>
+              ) : null}
             </TableRow>
           </TableHeader>
           <TableBody>
             {visibleItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={view === "verified" ? 9 : 8} className="text-muted-foreground">
+                <TableCell colSpan={view === "verified" ? 10 : 8} className="text-muted-foreground">
                   {rows.isLoading ? "Loading rows…" : rows.error ? "Rows unavailable." : "No rows."}
                 </TableCell>
               </TableRow>
@@ -328,6 +387,9 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
                   </TableCell>
                   <TableCell className="capitalize">{item.status}</TableCell>
                   <TableCell>{formatRupees(item.price)}</TableCell>
+                  {view === "verified" ? (
+                    <TableCell>{item.verifiedQuantity ?? "—"}</TableCell>
+                  ) : null}
                   {view === "verified" ? (
                     <TableCell>
                       {item.verifiedAt

@@ -197,7 +197,7 @@ function SalesHome({
         className="flex max-w-xl flex-wrap items-center gap-2 sm:flex-nowrap"
         onSubmit={(event) => {
           event.preventDefault();
-          if (matches.length === 1 && matches[0]) openFor.mutate(matches[0].id);
+          if (q.trim() && !openExact.isPending) openExact.mutate(q.trim());
         }}
       >
         <Label htmlFor="sales-search" className="sr-only">
@@ -215,11 +215,10 @@ function SalesHome({
           autoFocus
         />
         <Button
-          type="button"
+          type="submit"
           variant="outline"
           className="rounded-full"
           disabled={!q.trim() || openExact.isPending}
-          onClick={() => openExact.mutate(q.trim())}
         >
           {openExact.isPending ? "Looking up…" : "Open by bill no."}
         </Button>

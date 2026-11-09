@@ -163,6 +163,29 @@ inventory.get("/summary", async (c) => {
   return c.json({ groups: summary, slips, quantity });
 });
 
+inventory.get("/verification/count", async (c) => {
+  const { data, error } = await supabaseAdmin.from("stock_count_rounds")
+    .select("started_at").order("started_at", { ascending: false }).limit(1).maybeSingle();
+  if (error) return c.json({ error: "Could not load the stock count." }, 500);
+  return c.json({ startedAt: data?.started_at ?? null });
+});
+
+inventory.post("/verification/count", async (c) => {
+  const denied = await denyUnlessAdmin(c, "Only an admin can start a new stock count.");
+  if (denied) return denied;
+  const body = await readJson(c) as { expectedStart?: unknown } | null;
+  const expectedStart = body?.expectedStart;
+  if (expectedStart !== null && (typeof expectedStart !== "string" || !Number.isFinite(Date.parse(expectedStart)))) {
+    return c.json({ error: "Reload the stock count before starting a new one." }, 400);
+  }
+  const { data, error } = await supabaseAdmin.rpc("start_stock_count", {
+    actor: c.get("userId"), expected_start: expectedStart,
+  });
+  if (error?.code === "40001") return c.json({ error: "Another admin already started a count. Refresh and try again." }, 409);
+  if (error) return c.json({ error: "Could not start a stock count." }, 500);
+  return c.json({ startedAt: data });
+});
+
 inventory.get("/verification/lookup", async (c) => {
   const number = c.req.query("number")?.trim() ?? "";
   if (!number || number.length > 40) return c.json({ error: "Enter a valid inventory number." }, 400);
@@ -293,35 +316,54 @@ inventory.post("/", async (c) => {
   const requested = parsed.data.inventoryNo ?? "";
   const plan = slipPlan(product.unit, parsed.data.quantity, requested);
   if (typeof plan === "string") return c.json({ error: plan }, 400);
-  const numbers = requested.trim() ? [requested.trim()] : await allocateRun(plan.count);
-  if (!numbers) return c.json({ error: "Could not choose an inventory number." }, 500);
-
-  const generated = requested.trim().length === 0;
-  const items: InventoryItem[] = [];
-  for (const inventoryNo of numbers) {
-    const saved = await insertSlip(product, inventoryNo, plan.each, parsed.data, generated);
-    if ("error" in saved) return c.json({ error: saved.error }, saved.status);
-    items.push(saved.item);
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    const numbers = requested ? [requested] : await allocateRun(plan.count);
+    if (!numbers) return c.json({ error: "Could not choose an inventory number." }, 500);
+    const { data, error } = await supabaseAdmin
+      .from("inventory_items")
+      .insert(numbers.map((number) => ({
+        inventory_no: number,
+        product_id: product.id,
+        quantity: plan.each,
+        received_quantity: plan.each,
+        status: "available",
+        supplier_name: parsed.data.supplierName || null,
+        supplier_bill_no: parsed.data.supplierBillNo || null,
+        cost: parsed.data.cost ?? null,
+      })))
+      .select("id, inventory_no, product_id, quantity, status");
+    if (!requested && attempt === 0 && isDuplicate(error)) continue;
+    if (isDuplicate(error)) return c.json({ error: "Inventory numbers changed. Check the number and try again." }, 409);
+    if (error || !data?.length) return c.json({ error: "Could not add stock." }, 500);
+    const positions = new Map(numbers.map((number, index) => [number, index]));
+    const items = data
+      .sort((a, b) => (positions.get(a.inventory_no) ?? 0) - (positions.get(b.inventory_no) ?? 0))
+      .map((row) => toItem(row, product));
+    return c.json({ item: items[0], items }, 201);
   }
-  const first = items[0];
-  if (!first) return c.json({ error: "Could not add stock." }, 500);
-  return c.json({ item: first, items }, 201);
+  return c.json({ error: "Could not add stock." }, 500);
 });
 
 inventory.post("/:id/verify", async (c) => {
+  const id = c.req.param("id");
+  const existing = await supabaseAdmin.from("inventory_items").select("quantity, product_id").eq("id", id).maybeSingle();
+  if (existing.error) return c.json({ error: "Could not check stock." }, 500);
+  if (!existing.data) return c.json({ error: "Stock row not found." }, 404);
+  const catalogue = await loadCatalogue();
+  const product = catalogue?.get(existing.data.product_id);
+  if (!product) return c.json({ error: "Could not load the product." }, 500);
   const { data, error } = await supabaseAdmin
     .from("inventory_items")
-    .update({ stock_verified_at: new Date().toISOString(), stock_verified_quantity: null })
-    .eq("id", c.req.param("id"))
+    .update({ stock_verified_at: new Date().toISOString(), stock_verified_quantity: existing.data.quantity })
+    .eq("id", id)
+    .eq("quantity", existing.data.quantity)
+    .eq("product_id", existing.data.product_id)
     .select(
       "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
     )
     .maybeSingle();
   if (error) return c.json({ error: "Could not record the stock scan." }, 500);
-  if (!data) return c.json({ error: "Stock row not found." }, 404);
-  const catalogue = await loadCatalogue();
-  const product = catalogue?.get(data.product_id);
-  if (!product) return c.json({ error: "Could not load the product." }, 500);
+  if (!data) return c.json({ error: "Stock changed during the scan. Look it up and try again." }, 409);
   return c.json({ item: toItem(data as ItemRow, product) });
 });
 
@@ -506,41 +548,6 @@ function matches(product: CatalogueProduct, q: string): boolean {
   return product.name.toLowerCase().includes(needle) || product.code.toLowerCase().includes(needle);
 }
 
-async function insertSlip(
-  product: CatalogueProduct,
-  inventoryNo: string,
-  quantity: number,
-  receipt: { supplierName: string; supplierBillNo: string; cost?: number | undefined },
-  generated: boolean,
-): Promise<{ item: InventoryItem } | { error: string; status: 400 | 500 }> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const number = attempt === 0 ? inventoryNo : await allocateNo();
-    if (!number) return { error: "Could not choose an inventory number.", status: 500 };
-    const { data, error } = await supabaseAdmin
-      .from("inventory_items")
-      .insert({
-        inventory_no: number,
-        product_id: product.id,
-        quantity,
-        received_quantity: quantity,
-        status: "available",
-        supplier_name: receipt.supplierName || null,
-        supplier_bill_no: receipt.supplierBillNo || null,
-        cost: receipt.cost ?? null,
-      })
-      .select(
-        "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
-      )
-      .single();
-    if (isDuplicate(error)) {
-      if (generated && attempt === 0) continue;
-      return { error: "That inventory number is already used.", status: 400 };
-    }
-    if (error || !data) return { error: "Could not add stock.", status: 500 };
-    return { item: toItem(data as ItemRow, product) };
-  }
-  return { error: "Could not add stock.", status: 500 };
-}
 
 async function allocateRun(count: number): Promise<string[] | null> {
   const first = await allocateNo();

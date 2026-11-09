@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      stock_count_rounds: {
+        Row: { started_at: string; started_by: string; previous_scans: Json }
+        Insert: { started_at: string; started_by: string; previous_scans: Json }
+        Update: { started_at?: string; started_by?: string; previous_scans?: Json }
+        Relationships: []
+      }
       product_groups: {
         Row: {
           code: string
@@ -449,6 +455,7 @@ export type Database = {
       }
     }
     Functions: {
+      start_stock_count: { Args: { actor: string; expected_start: string | null }; Returns: string }
       save_group_discounts: { Args: { changes: Json }; Returns: undefined }
       has_role: {
         Args: {

@@ -11,9 +11,9 @@ export const requireShop: MiddlewareHandler<ShopEnv> = async (c, next) => {
   return next();
 };
 
-export async function denyUnlessAdmin(c: Context): Promise<Response | null> {
+export async function denyUnlessAdmin(c: Context, message = "Only an admin can export."): Promise<Response | null> {
   const { data, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", c.get("userId")).eq("role", "admin");
   if (error) return c.json({ error: "Could not check access." }, 500);
-  if (!data?.length) return c.json({ error: "Only an admin can export." }, 403);
+  if (!data?.length) return c.json({ error: message }, 403);
   return null;
 }

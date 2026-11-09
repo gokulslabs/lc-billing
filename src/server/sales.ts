@@ -165,7 +165,7 @@ sales.get("/preview", async (c) => {
       rate: product.price,
       discountPercent: product.discountPercent,
       status: stock.status,
-      available: Number(stock.quantity),
+      available: stock.status === "available" ? Number(stock.quantity) : 0,
     },
   });
 });
@@ -347,6 +347,9 @@ sales.post("/:id/lines", async (c) => {
 
   const stock = await findStock(parsed.data.inventoryNo);
   if (!stock) return c.json({ error: "Inventory number not found." }, 400);
+  if (stock.status !== "available") {
+    return c.json({ error: "This inventory number is marked unavailable for sale." }, 400);
+  }
   const products = await loadProducts([stock.product_id]);
   const product = products?.get(stock.product_id);
   if (!product) return c.json({ error: "Could not load this product." }, 500);
@@ -369,6 +372,7 @@ sales.post("/:id/lines", async (c) => {
     .update({ quantity: left, status: left > 0 ? "available" : "sold" })
     .eq("id", stock.id)
     .eq("quantity", available)
+    .eq("status", "available")
     .select("id")
     .maybeSingle();
   if (moved.error || !moved.data) return c.json({ error: "Stock changed. Try the line again." }, 409);
