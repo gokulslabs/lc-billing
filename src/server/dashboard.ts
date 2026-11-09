@@ -88,6 +88,7 @@ dashboard.get("/", async (c) => {
     sumMoney(payments.rows.filter((row) => row.mode === mode).map((row) => Number(row.amount)));
   const stats: DashboardStats = {
     salesAmount: sales.amount,
+    salesQuantity: sales.quantity,
     billsToday: invoices.rows.length,
     collections: sumMoney(payments.rows.map((row) => Number(row.amount))),
     dueOnToday: Math.max(0, Math.round((sales.amount - collectedOnToday) * 100) / 100),

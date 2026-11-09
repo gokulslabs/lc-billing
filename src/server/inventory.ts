@@ -163,30 +163,62 @@ inventory.get("/summary", async (c) => {
   return c.json({ groups: summary, slips, quantity });
 });
 
-inventory.get("/verification", async (c) => {
-  const view = c.req.query("view") === "verified" ? "verified" : "shortage";
+inventory.get("/verification/lookup", async (c) => {
+  const number = c.req.query("number")?.trim() ?? "";
+  if (!number || number.length > 40) return c.json({ error: "Enter a valid inventory number." }, 400);
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .select("id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity")
+    .eq("inventory_no", number)
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not look up stock." }, 500);
+  if (!data) return c.json({ item: null });
   const catalogue = await loadCatalogue();
-  if (!catalogue) return c.json({ error: "Could not load products." }, 500);
-  const loaded = await readAll<ItemRow>((from, to) => {
-    const query = supabaseAdmin
-      .from("inventory_items")
-      .select(
-        "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",
-      )
-      .order("inventory_no")
-      .range(from, to);
-    return view === "verified"
-      ? query.not("stock_verified_at", "is", null)
-      : query.eq("status", "available").is("stock_verified_at", null);
+  const product = catalogue?.get(data.product_id);
+  if (!product) return c.json({ error: "Could not load the product." }, 500);
+  return c.json({ item: toItem(data, product) });
+});
+
+inventory.get("/verification", async (c) => {
+  const verified = c.req.query("view") === "verified";
+  const search = (c.req.query("q") ?? "").trim().slice(0, 80).replace(/[%_,.()*"\\]/g, "");
+  const page = readPage(c.req.query("page"), 2_000_000);
+  const query = () => {
+    const selected = supabaseAdmin.from("stock_verification_report").select("*", { count: "exact" });
+    const filtered = verified
+      ? selected.not("stock_verified_at", "is", null)
+      : selected.eq("status", "available").is("stock_verified_at", null);
+    if (search) {
+      filtered.or(["inventory_no", "product_code", "product_name", "group_name", "status"]
+        .map((column) => `${column}.ilike.%${search}%`).join(","));
+    }
+    return filtered.order("inventory_no").order("id");
+  };
+  type ReportRow = import("@/integrations/supabase/types").Database["public"]["Views"]["stock_verification_report"]["Row"];
+  const toReportItem = (row: ReportRow): InventoryItem => ({
+    id: row.id,
+    inventoryNo: row.inventory_no,
+    productId: row.product_id,
+    productCode: row.product_code,
+    productName: row.product_name,
+    groupName: row.group_name,
+    unit: row.unit === "MT" ? "MT" : "NO",
+    price: Number(row.price),
+    quantity: Number(row.quantity),
+    status: row.status,
+    verifiedAt: row.stock_verified_at,
+    verifiedQuantity: row.stock_verified_quantity == null ? null : Number(row.stock_verified_quantity),
   });
-  if (!loaded) return c.json({ error: "Could not load stock verification." }, 500);
-  return c.json({
-    items: loaded.rows.flatMap((row) => {
-      const product = catalogue.get(row.product_id);
-      return product ? [toItem(row, product)] : [];
-    }),
-    truncated: loaded.truncated,
-  });
+  if (c.req.query("export") === "1") {
+    const loaded = await readAll<ReportRow>((from, to) => query().range(from, to));
+    if (!loaded) return c.json({ error: "Could not load stock verification." }, 500);
+    if (loaded.truncated) return c.json({ error: "Too many rows to export. Narrow the search and try again." }, 400);
+    return c.json({ items: loaded.rows.map(toReportItem) });
+  }
+  const { from, to } = pageRange(page);
+  const { data, count, error } = await query().range(from, to);
+  if (error) return c.json({ error: "Could not load stock verification." }, 500);
+  return c.json({ items: (data ?? []).map(toReportItem), total: count ?? 0 });
 });
 
 inventory.get("/", async (c) => {
@@ -478,7 +510,7 @@ async function insertSlip(
   product: CatalogueProduct,
   inventoryNo: string,
   quantity: number,
-  receipt: { supplierName: string; supplierBillNo: string; cost: number },
+  receipt: { supplierName: string; supplierBillNo: string; cost?: number | undefined },
   generated: boolean,
 ): Promise<{ item: InventoryItem } | { error: string; status: 400 | 500 }> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -492,9 +524,9 @@ async function insertSlip(
         quantity,
         received_quantity: quantity,
         status: "available",
-        supplier_name: receipt.supplierName,
-        supplier_bill_no: receipt.supplierBillNo,
-        cost: receipt.cost,
+        supplier_name: receipt.supplierName || null,
+        supplier_bill_no: receipt.supplierBillNo || null,
+        cost: receipt.cost ?? null,
       })
       .select(
         "id, inventory_no, product_id, quantity, status, stock_verified_at, stock_verified_quantity",

@@ -28,11 +28,13 @@ const NEEDS: { key: keyof DashboardStats; label: string; detail: string; href: s
   { key: "overdueStitching", label: "Stitching past the date", detail: "Orders awaiting completion", href: "/stitching?board=overdue" },
 ];
 
-function CloseFigure({ label, value }: { label: string; value: number | undefined }) {
+function CloseFigure({ label, value, quantity = false }: { label: string; value: number | undefined; quantity?: boolean }) {
   return (
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
-      <p className="mt-1 text-2xl font-semibold tabular-nums">{value == null ? "…" : formatRupees(value)}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">
+        {value == null ? "…" : quantity ? value.toLocaleString("en-IN") : formatRupees(value)}
+      </p>
     </div>
   );
 }
@@ -79,6 +81,7 @@ function Dashboard() {
                   rows: [
                     ["Bills today", figures.billsToday],
                     ["Billed", figures.salesAmount],
+                    ["Sales quantity", figures.salesQuantity],
                     ["Collected", figures.collections],
                     ["Still due on today's bills", figures.dueOnToday],
                     ["Cash", figures.cash],
@@ -118,6 +121,7 @@ function Dashboard() {
           <CloseFigure label="Cash" value={stats.data?.stats.cash} />
           <CloseFigure label="UPI" value={stats.data?.stats.upi} />
           <CloseFigure label="Card" value={stats.data?.stats.card} />
+          <CloseFigure label="Sales quantity" value={stats.data?.stats.salesQuantity} quantity />
         </a>
       </section>
     </div>

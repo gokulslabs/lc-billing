@@ -46,11 +46,21 @@ function CustomersPage() {
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" }>({
+    column: "name",
+    direction: "asc",
+  });
+  const columns = [
+    { id: "name", label: "Name" },
+    { id: "phone", label: "Phone" },
+    { id: "book_no", label: "Book no." },
+    { id: "address", label: "Address" },
+  ];
   const [editor, setEditor] = useState<Customer | "new" | null>(null);
   const customers = useQuery({
-    queryKey: ["customers", deferred, page],
+    queryKey: ["customers", deferred, page, sort],
     queryFn: () => {
-      const params = new URLSearchParams();
+      const params = new URLSearchParams({ sort: sort.column, dir: sort.direction });
       if (deferred.trim()) params.set("q", deferred.trim());
       params.set("page", String(page));
       return apiFetch<{ customers: Customer[]; total: number }>(
@@ -73,7 +83,7 @@ function CustomersPage() {
           <ExportExcelButton
             filename="customers"
             load={async () => {
-              const params = new URLSearchParams();
+              const params = new URLSearchParams({ sort: sort.column, dir: sort.direction });
               if (deferred.trim()) params.set("q", deferred.trim());
               params.set("export", "1");
               const data = await apiFetch<{ customers: Customer[] }>(
@@ -96,7 +106,11 @@ function CustomersPage() {
           <PrintTableButton
             title="Ladies Collections — Customers"
             load={async () => {
-              const params = new URLSearchParams({ export: "1" });
+              const params = new URLSearchParams({
+                export: "1",
+                sort: sort.column,
+                dir: sort.direction,
+              });
               if (deferred.trim()) params.set("q", deferred.trim());
               const data = await apiFetch<{ customers: Customer[] }>(
                 `/api/customers?${params.toString()}`,
@@ -123,7 +137,7 @@ function CustomersPage() {
           setQ(event.target.value);
           setPage(1);
         }}
-        placeholder="Search name, phone or book number"
+        placeholder="Search name, phone, book number or address"
         className="w-full max-w-sm"
       />
       {customers.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
@@ -181,10 +195,36 @@ function CustomersPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead>Book no.</TableHead>
-                  <TableHead>Address</TableHead>
+                  {columns.map(({ id, label }) => (
+                    <TableHead
+                      key={id}
+                      aria-sort={
+                        sort.column === id
+                          ? sort.direction === "asc"
+                            ? "ascending"
+                            : "descending"
+                          : undefined
+                      }
+                    >
+                      <button
+                        type="button"
+                        className="cursor-pointer hover:underline"
+                        onClick={() => {
+                          setSort({
+                            column: id,
+                            direction:
+                              sort.column === id && sort.direction === "asc" ? "desc" : "asc",
+                          });
+                          setPage(1);
+                        }}
+                      >
+                        {label}{" "}
+                        <span aria-hidden="true">
+                          {sort.column === id ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
+                        </span>
+                      </button>
+                    </TableHead>
+                  ))}
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
               </TableHeader>

@@ -93,6 +93,7 @@ function ProductsPage() {
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
           <TabsTrigger value="products">Products</TabsTrigger>
           <TabsTrigger value="groups">Groups</TabsTrigger>
+          <TabsTrigger value="discounts">Group discounts</TabsTrigger>
         </TabsList>
         <TabsContent value="products" className="space-y-4">
           <ProductPanel
@@ -126,6 +127,15 @@ function ProductsPage() {
             loading={groups.isLoading}
             error={groups.error instanceof Error ? groups.error.message : null}
           />
+        </TabsContent>
+        <TabsContent value="discounts">
+          {groups.isLoading ? (
+            <p>Loading groups…</p>
+          ) : groups.error ? (
+            <p role="alert">{groups.error.message}</p>
+          ) : (
+            <GroupDiscounts groups={groups.data?.groups ?? []} />
+          )}
         </TabsContent>
       </Tabs>
     </div>
@@ -388,6 +398,75 @@ function ProductPanel({
         }}
       />
     </>
+  );
+}
+
+function GroupDiscounts({ groups }: { groups: ProductGroup[] }) {
+  const queryClient = useQueryClient();
+  const [drafts, setDrafts] = useState<Record<string, { value: string; previous: number }>>({});
+  const save = useMutation({
+    mutationFn: () =>
+      apiFetch("/api/product-groups/discounts", {
+        method: "PATCH",
+        body: JSON.stringify(
+          Object.entries(drafts).map(([id, draft]) => ({
+            id,
+            discount: Number(draft.value),
+            previous: draft.previous,
+          })),
+        ),
+      }),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["product-groups"] }),
+        queryClient.invalidateQueries({ queryKey: ["products"] }),
+      ]);
+      setDrafts({});
+      toast.success("Group discounts saved.");
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+  if (!groups.length) return <p>No product groups yet.</p>;
+  return (
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (!save.isPending && Object.keys(drafts).length) save.mutate();
+      }}
+    >
+      <fieldset disabled={save.isPending} className="space-y-3">
+        <legend className="text-lg font-semibold">Group-wise discounts</legend>
+        {groups.map((group) => (
+          <div key={group.id} className="flex items-center justify-between gap-4 border-b pb-2">
+            <Label htmlFor={`discount-${group.id}`}>{group.name} (%)</Label>
+            <Input
+              id={`discount-${group.id}`}
+              type="number"
+              min={0}
+              max={100}
+              step="0.01"
+              required
+              className="w-28"
+              value={drafts[group.id]?.value ?? group.discountPercent}
+              onChange={(event) => {
+                const value = event.target.value;
+                setDrafts((current) => {
+                  const previous = current[group.id]?.previous ?? group.discountPercent;
+                  const next = { ...current };
+                  if (value !== "" && Number(value) === previous) delete next[group.id];
+                  else next[group.id] = { value, previous };
+                  return next;
+                });
+              }}
+            />
+          </div>
+        ))}
+      </fieldset>
+      <Button type="submit" disabled={save.isPending || !Object.keys(drafts).length}>
+        {save.isPending ? "Saving…" : "Save discounts"}
+      </Button>
+    </form>
   );
 }
 

@@ -1,5 +1,6 @@
 import { useRef, type CSSProperties } from "react";
-import { createFileRoute, Link, Outlet, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import { BackButton } from "@/components/app/BackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, LogOut, Tag, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ export const Route = createFileRoute("/_authenticated")({
 });
 
 function AuthenticatedLayout() {
+  const pathname = useLocation({ select: (location) => location.pathname });
   const { user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -170,6 +172,11 @@ function AuthenticatedLayout() {
           <ThemeToggle iconOnly className="ml-auto" />
           <SidebarTrigger />
         </header>
+        {pathname.replace(/\/$/, "") !== "/dashboard" ? (
+          <div className="flex justify-end px-4 pt-4 print:hidden md:px-10">
+            <BackButton />
+          </div>
+        ) : null}
         <Outlet />
         <PhoneBar />
       </SidebarInset>

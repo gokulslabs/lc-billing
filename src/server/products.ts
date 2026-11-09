@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import {
   nextProductCode,
@@ -40,8 +41,7 @@ function rankProducts<T extends { order: (column: string, options?: { ascending?
   const chosen = productSort(raw);
   const ordered =
     chosen.column === "group" || chosen.column === "discount"
-      ? query.order(chosen.column === "group" ? "name" : "discount_percent", {
-          referencedTable: "product_groups",
+      ? query.order(chosen.column === "group" ? "product_groups(name)" : "product_groups(discount_percent)", {
           ascending: chosen.ascending,
         })
       : query.order(chosen.column, { ascending: chosen.ascending });
@@ -57,6 +57,23 @@ groups.get("/", async (c) => {
   const loaded = await loadGroups();
   if ("error" in loaded) return c.json({ error: loaded.error }, 500);
   return c.json({ groups: loaded.groups });
+});
+
+const groupDiscountChanges = z.array(z.object({
+  id: z.string().uuid(),
+  discount: productGroupSchema.shape.discountPercent.multipleOf(0.01),
+  previous: productGroupSchema.shape.discountPercent,
+})).min(1).max(1000);
+
+groups.patch("/discounts", async (c) => {
+  const parsed = groupDiscountChanges.safeParse(await readJson(c));
+  if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
+  const { error } = await supabaseAdmin.rpc("save_group_discounts", { changes: parsed.data });
+  if (error?.code === "40001") {
+    return c.json({ error: "A group changed. Reload the list and review your discounts." }, 409);
+  }
+  if (error) return c.json({ error: "Could not save group discounts." }, 500);
+  return c.json({ ok: true });
 });
 
 groups.post("/", async (c) => {

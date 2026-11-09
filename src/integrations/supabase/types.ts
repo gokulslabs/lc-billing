@@ -97,6 +97,8 @@ export type Database = {
       }
       inventory_items: {
         Row: {
+          stock_verified_at: string | null
+          stock_verified_quantity: number | null
           created_at: string
           id: string
           inventory_no: string
@@ -109,6 +111,8 @@ export type Database = {
           cost: number | null
         }
         Insert: {
+          stock_verified_at?: string | null
+          stock_verified_quantity?: number | null
           created_at?: string
           id?: string
           inventory_no: string
@@ -121,6 +125,8 @@ export type Database = {
           cost?: number | null
         }
         Update: {
+          stock_verified_at?: string | null
+          stock_verified_quantity?: number | null
           created_at?: string
           id?: string
           inventory_no?: string
@@ -274,6 +280,8 @@ export type Database = {
       }
       stitching_orders: {
         Row: {
+          description: string | null
+          processes: string[]
           amount: number
           bag_no: string | null
           created_at: string
@@ -286,6 +294,8 @@ export type Database = {
           stitching_product_id: string | null
         }
         Insert: {
+          description?: string | null
+          processes?: string[]
           amount?: number
           bag_no?: string | null
           created_at?: string
@@ -298,6 +308,8 @@ export type Database = {
           stitching_product_id?: string | null
         }
         Update: {
+          description?: string | null
+          processes?: string[]
           amount?: number
           bag_no?: string | null
           created_at?: string
@@ -418,9 +430,26 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      stock_verification_report: {
+        Row: {
+          id: string
+          inventory_no: string
+          product_id: string
+          quantity: number
+          status: string
+          stock_verified_at: string | null
+          stock_verified_quantity: number | null
+          product_code: string
+          product_name: string
+          unit: string
+          price: number
+          group_name: string
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      save_group_discounts: { Args: { changes: Json }; Returns: undefined }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

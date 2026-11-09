@@ -241,6 +241,10 @@ function ReportsPage() {
       {result.data ? (
         <ReportTable
           sheet={result.data}
+          report={report}
+          period={
+            needsDate ? applied.date : needsRange ? `${applied.from} to ${applied.to}` : undefined
+          }
           {...(report === "pending"
             ? { onExport: () => loadReport("pending", applied, 1, true) }
             : {})}
@@ -274,13 +278,25 @@ function showCell(column: string, value: SheetCell): string {
   return MONEY.has(column) ? formatRupees(value) : String(value);
 }
 
-function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promise<Sheet> }) {
+function ReportTable({
+  sheet,
+  report,
+  period,
+  onExport,
+}: {
+  sheet: Sheet;
+  report: ReportId;
+  period: string | undefined;
+  onExport?: () => Promise<Sheet>;
+}) {
+  const label = REPORTS.find((entry) => entry.id === report)?.label ?? "Report";
+  const title = [label, period].filter(Boolean).join(" — ");
   return (
     <div className="space-y-3">
       {sheet.rows.length > 0 || sheet.totalRow ? (
         <div className="flex flex-wrap gap-2">
           <ExportExcelButton
-            filename="report"
+            filename={[report, period?.replaceAll(" ", "-")].filter(Boolean).join("-")}
             load={async () => {
               const chosen = onExport ? await onExport() : sheet;
               return [
@@ -293,7 +309,7 @@ function ReportTable({ sheet, onExport }: { sheet: Sheet; onExport?: () => Promi
             }}
           />
           <PrintTableButton
-            title="Ladies Collections — Report"
+            title={`Ladies Collections — ${title}`}
             load={async () => {
               const chosen = onExport ? await onExport() : sheet;
               return {

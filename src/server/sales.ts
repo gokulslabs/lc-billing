@@ -86,6 +86,19 @@ type ProductInfo = {
 const sales = new Hono<Env>();
 sales.use("*", requireShop);
 
+sales.get("/lookup", async (c) => {
+  const billNo = c.req.query("billNo")?.trim() ?? "";
+  if (!billNo || billNo.length > 80) return c.json({ error: "Enter a valid bill number." }, 400);
+  const { data, error } = await supabaseAdmin
+    .from("invoices")
+    .select("id")
+    .eq("bill_no", billNo)
+    .maybeSingle();
+  if (error) return c.json({ error: "Could not look up the bill." }, 500);
+  if (!data) return c.json({ error: "No bill found with that exact number." }, 404);
+  return c.json({ id: data.id });
+});
+
 sales.get("/items", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);

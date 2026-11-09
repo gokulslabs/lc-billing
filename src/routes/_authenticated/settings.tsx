@@ -154,6 +154,7 @@ function Garments({ garments }: { garments: StitchingGarment[] }) {
       />
       <NameTable
         heading="Product name"
+        sortable
         rows={garments.map((garment) => ({ id: garment.id, name: garment.name }))}
         onRemove={(row) => {
           if (!window.confirm(`Remove ${row.name}? Its measurement heads are removed with it. This cannot be undone.`)) return;
@@ -319,23 +320,37 @@ function NameTable({
   heading,
   rows,
   onRemove,
+  sortable = false,
 }: {
   heading: string;
   rows: { id: string; name: string }[];
   onRemove: (row: { id: string; name: string }) => void;
+  sortable?: boolean;
 }) {
+  const [direction, setDirection] = useState<"ascending" | "descending">();
+  const ordered = direction
+    ? [...rows].sort((a, b) => (direction === "ascending" ? 1 : -1) * a.name.localeCompare(b.name))
+    : rows;
   return (
     <div className="rounded-2xl border border-border bg-card">
       <Table>
         <TableHeader>
           <TableRow>
             <TableHead className="w-20">Sl.no.</TableHead>
-            <TableHead>{heading}</TableHead>
+            <TableHead aria-sort={direction}>
+              {sortable ? (
+                <button type="button" className="cursor-pointer hover:underline" onClick={() =>
+                  setDirection((current) => current === "ascending" ? "descending" : "ascending")
+                }>
+                  {heading} <span aria-hidden="true">{direction === "ascending" ? "↑" : direction === "descending" ? "↓" : "↕"}</span>
+                </button>
+              ) : heading}
+            </TableHead>
             <TableHead className="w-28 text-right">Action</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
-          {rows.map((row, index) => (
+          {ordered.map((row, index) => (
             <TableRow key={row.id}>
               <TableCell>{index + 1}</TableCell>
               <TableCell className="font-medium">{row.name}</TableCell>

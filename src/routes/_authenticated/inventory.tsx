@@ -8,7 +8,6 @@ import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
 import { LabelSheet, type BarcodeLabel } from "@/components/app/BarcodeLabel";
-import { BackButton } from "@/components/app/BackButton";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
@@ -67,7 +66,6 @@ function InventoryPage() {
             Stock by number, current quantity by group, purchase receipts, and barcode labels.
           </p>
         </div>
-        <BackButton />
       </div>
       <Tabs defaultValue="stock">
         <TabsList className="h-auto w-full justify-start overflow-x-auto">
@@ -436,9 +434,6 @@ function StockDialog({
       if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
       const paid = cost.trim() === "" ? undefined : Number(cost);
       if (paid !== undefined && !Number.isFinite(paid)) throw new Error("Enter the cost.");
-      if (!item && (!supplierName.trim() || !supplierBillNo.trim() || paid === undefined)) {
-        throw new Error("Enter the supplier, their bill number, and the cost.");
-      }
       const body = JSON.stringify({
         productId,
         inventoryNo,
@@ -472,7 +467,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "One receipt: supplier, their bill, cost, then the product. Pieces with a blank inventory number get one IN number and one sticker each. Metres stay on one number. Saving prints the bars."}
+              : "Choose the product and enter the quantity. If you have a receipt, enter the supplier, bill number and cost together. Pieces with a blank inventory number get one sticker each. Metres stay on one number."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -528,7 +523,6 @@ function StockDialog({
               id="stock-supplier"
               value={supplierName}
               onChange={(event) => setSupplierName(event.target.value)}
-              required={item === null}
             />
           </Field>
           <Field label="Supplier bill no." id="stock-supplier-bill">
@@ -536,7 +530,6 @@ function StockDialog({
               id="stock-supplier-bill"
               value={supplierBillNo}
               onChange={(event) => setSupplierBillNo(event.target.value)}
-              required={item === null}
             />
           </Field>
           <Field label="Cost each" id="stock-cost">
@@ -545,7 +538,6 @@ function StockDialog({
               value={cost}
               onChange={(event) => setCost(event.target.value)}
               inputMode="decimal"
-              required={item === null}
             />
           </Field>
           <Field label="Quantity" id="stock-qty">
@@ -670,6 +662,8 @@ function CurrentStockPanel() {
       ),
   });
   const groups = summary.data?.groups ?? [];
+  const totalQuantity = summary.data?.quantity ?? 0;
+  const totalValue = groups.reduce((paise, group) => paise + Math.round(group.amount * 100), 0) / 100;
   const selected = groups.find((group) => group.id === groupId);
 
   if (groupId) {
@@ -782,10 +776,11 @@ function CurrentStockPanel() {
       {groups.length > 0 ? (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            {formatQty(summary.data?.quantity ?? 0)} on the shelf across{" "}
+            {formatQty(totalQuantity)} on the shelf across{" "}
             {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. A piece counts as 1 and
             fabric counts as metres, so this is not the number of rows on the stock list. Sold
-            numbers stay on that list and are not in this total.
+            numbers stay on that list and are not in this total. Total stock value:{" "}
+            <strong>{formatRupees(totalValue)}</strong>.
           </p>
           <ExportExcelButton
             filename="current-stock"
@@ -793,7 +788,10 @@ function CurrentStockPanel() {
               {
                 name: "Current stock",
                 columns: ["Group", "Quantity", "Amount"],
-                rows: groups.map((group) => [group.name, group.quantity, group.amount]),
+                rows: [
+                  ...groups.map((group) => [group.name, group.quantity, group.amount]),
+                  ["Total", totalQuantity, totalValue],
+                ],
               },
             ]}
           />
@@ -990,7 +988,7 @@ function PurchasesPanel() {
                     <TableCell>{receiptBlank(row.supplierName)}</TableCell>
                     <TableCell>{receiptBlank(row.supplierBillNo)}</TableCell>
                     <TableCell>
-                      {row.cost == null ? "Migrated — not recorded" : formatRupees(row.cost)}
+                      {row.cost == null ? "Not recorded" : formatRupees(row.cost)}
                     </TableCell>
                     <TableCell>
                       {formatQty(row.quantity)} {row.unit}
@@ -1010,7 +1008,7 @@ function PurchasesPanel() {
 }
 
 function receiptBlank(value: string): string {
-  return value.trim() ? value : "Migrated — not recorded";
+  return value.trim() ? value : "Not recorded";
 }
 
 function formatQty(value: number): string {

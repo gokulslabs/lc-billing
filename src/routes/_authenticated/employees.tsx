@@ -16,6 +16,8 @@ import {
 } from "@/lib/employees";
 import { Badge } from "@/components/ui/badge";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { ListFooter } from "@/components/app/ListFooter";
+import { PAGE_SIZE } from "@/lib/paging";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,6 +69,11 @@ function EmployeesPage() {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<Employee | "new" | null>(null);
   const [passwordFor, setPasswordFor] = useState<Employee | null>(null);
+  const [sort, setSort] = useState<{ key: "fullName" | "department" | "mobile"; ascending: boolean }>({
+    key: "fullName",
+    ascending: true,
+  });
+  const [page, setPage] = useState(1);
 
   const employees = useQuery({
     queryKey: ["employees"],
@@ -75,6 +82,12 @@ function EmployeesPage() {
   });
 
   const denied = employees.error instanceof Error && employees.error.message.includes("admin");
+  const rows = [...(employees.data?.employees ?? [])].sort((a, b) =>
+    (sort.ascending ? 1 : -1) * (a[sort.key] ?? "").localeCompare(b[sort.key] ?? "", "en-IN", { numeric: true }),
+  );
+  const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
+  const offset = (currentPage - 1) * PAGE_SIZE;
+  const visible = rows.slice(offset, offset + PAGE_SIZE);
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
@@ -91,7 +104,7 @@ function EmployeesPage() {
                 {
                   name: "Employees",
                   columns: ["Name", "Email", "Mobile", "Department", "Gender", "Address", "Access"],
-                  rows: (employees.data?.employees ?? []).map((employee) => [
+                  rows: rows.map((employee) => [
                     employee.fullName,
                     employee.email,
                     employee.mobile ?? "",
@@ -131,16 +144,27 @@ function EmployeesPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Department</TableHead>
-                <TableHead>Mobile</TableHead>
+                <TableHead>Sl. no.</TableHead>
+                {([
+                  ["fullName", "Name"], ["department", "Department"], ["mobile", "Mobile"],
+                ] as const).map(([key, label]) => (
+                  <TableHead key={key} aria-sort={sort.key === key ? (sort.ascending ? "ascending" : "descending") : undefined}>
+                    <button type="button" className="cursor-pointer hover:underline" onClick={() => {
+                      setSort({ key, ascending: sort.key !== key || !sort.ascending });
+                      setPage(1);
+                    }}>
+                      {label} <span aria-hidden="true">{sort.key === key ? (sort.ascending ? "↑" : "↓") : "↕"}</span>
+                    </button>
+                  </TableHead>
+                ))}
                 <TableHead>Access</TableHead>
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {employees.data?.employees.map((employee) => (
+              {visible.map((employee, index) => (
                 <TableRow key={employee.id}>
+                  <TableCell>{offset + index + 1}</TableCell>
                   <TableCell>
                     <div className="font-medium">{employee.fullName}</div>
                     <div className="text-xs text-muted-foreground">{employee.email}</div>
@@ -164,6 +188,7 @@ function EmployeesPage() {
           </Table>
         </div>
       )}
+      <ListFooter page={currentPage} total={rows.length} shown={visible.length} onPage={setPage} />
 
       <EmployeeDialog
         open={editor !== null}

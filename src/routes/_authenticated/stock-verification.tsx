@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useDeferredValue, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -7,6 +7,8 @@ import type { InventoryItem } from "@/lib/inventory";
 import { formatRupees, unitLabel } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { ListFooter } from "@/components/app/ListFooter";
+import { PAGE_SIZE } from "@/lib/paging";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -93,12 +95,10 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
     mutationFn: async () => {
       const query = number.trim();
       if (!query) throw new Error("Enter an inventory number.");
-      const data = await apiFetch<{ items: InventoryItem[] }>(
-        `/api/inventory?q=${encodeURIComponent(query)}`,
+      const data = await apiFetch<{ item: InventoryItem | null }>(
+        `/api/inventory/verification/lookup?number=${encodeURIComponent(query)}`,
       );
-      return (
-        data.items.find((row) => row.inventoryNo.toUpperCase() === query.toUpperCase()) ?? null
-      );
+      return data.item;
     },
     onSuccess: (found) => {
       setItem(found);
@@ -216,15 +216,22 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
 }
 
 function VerificationList({ view }: { view: "verified" | "shortage" }) {
+  const [search, setSearch] = useState("");
+  const deferredSearch = useDeferredValue(search);
+  const [page, setPage] = useState(1);
+  const params = new URLSearchParams({ view, q: deferredSearch });
   const rows = useQuery({
-    queryKey: ["stock-verification", view],
-    queryFn: () => apiFetch<{ items: InventoryItem[] }>(`/api/inventory/verification?view=${view}`),
+    queryKey: ["stock-verification", view, deferredSearch, page],
+    queryFn: ({ signal }) =>
+      apiFetch<{ items: InventoryItem[]; total: number }>(
+        `/api/inventory/verification?${params}&page=${page}`,
+        { signal },
+      ),
   });
   const heading = view === "verified" ? "Stock verified list" : "Stock shortage list";
-  if (rows.isLoading) return <p className="text-sm text-muted-foreground">Loading…</p>;
-  if (rows.error instanceof Error)
-    return <p className="text-sm text-destructive">{rows.error.message}</p>;
-  const items = rows.data?.items ?? [];
+  const visibleItems = rows.data?.items ?? [];
+  const total = rows.data?.total ?? 0;
+  const offset = (page - 1) * PAGE_SIZE;
   return (
     <div className="space-y-3">
       <div>
@@ -235,65 +242,92 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
             : "Available numbers not yet recorded during a shelf count."}
         </p>
       </div>
-      {items.length > 0 ? (
+      <Input
+        aria-label="Search stock verification"
+        placeholder="Inventory no., code, product, group or status"
+        value={search}
+        onChange={(event) => {
+          setSearch(event.target.value);
+          setPage(1);
+        }}
+        className="max-w-sm"
+      />
+      {rows.isLoading ? <p role="status">Loading…</p> : null}
+      {rows.error ? <p role="alert">{rows.error.message}</p> : null}
+      {total > 0 ? (
         <ExportExcelButton
           filename={view === "verified" ? "stock-verified" : "stock-shortage"}
-          load={async () => [
-            {
-              name: heading,
-              columns: [
-                "Inventory no.",
-                "Code",
-                "Product",
-                "Group",
-                "Quantity",
-                "Unit",
-                "Status",
-                ...(view === "verified" ? ["Verified at"] : []),
-              ],
-              rows: items.map((item) => [
-                item.inventoryNo,
-                item.productCode,
-                item.productName,
-                item.groupName,
-                item.quantity,
-                item.unit,
-                item.status,
-                ...(view === "verified" ? [item.verifiedAt ?? ""] : []),
-              ]),
-            },
-          ]}
+          load={async () => {
+            const { items } = await apiFetch<{ items: InventoryItem[] }>(
+              `/api/inventory/verification?${params}&export=1`,
+            );
+            return [
+              {
+                name: heading,
+                columns: [
+                  "Sl. no.",
+                  "Inventory no.",
+                  "Code",
+                  "Product",
+                  "Group",
+                  "Quantity",
+                  "Unit",
+                  "Status",
+                  "Rate",
+                  ...(view === "verified" ? ["Verified at"] : []),
+                ],
+                rows: items.map((item, index) => [
+                  index + 1,
+                  item.inventoryNo,
+                  item.productCode,
+                  item.productName,
+                  item.groupName,
+                  item.quantity,
+                  item.unit,
+                  item.status,
+                  item.price,
+                  ...(view === "verified" ? [item.verifiedAt ?? ""] : []),
+                ]),
+              },
+            ];
+          }}
         />
       ) : null}
       <div className="overflow-x-auto rounded-2xl border border-border bg-card">
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead>Sl. no.</TableHead>
               <TableHead>Inventory no.</TableHead>
+              <TableHead>Group</TableHead>
+              <TableHead>Code</TableHead>
               <TableHead>Product</TableHead>
               <TableHead>Quantity</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead>Rate</TableHead>
               {view === "verified" ? <TableHead>Verified</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.length === 0 ? (
+            {visibleItems.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={view === "verified" ? 5 : 4} className="text-muted-foreground">
-                  No rows.
+                <TableCell colSpan={view === "verified" ? 9 : 8} className="text-muted-foreground">
+                  {rows.isLoading ? "Loading rows…" : rows.error ? "Rows unavailable." : "No rows."}
                 </TableCell>
               </TableRow>
             ) : (
-              items.map((item) => (
+              visibleItems.map((item, index) => (
                 <TableRow key={item.id}>
+                  <TableCell>{offset + index + 1}</TableCell>
                   <TableCell className="font-mono text-xs">{item.inventoryNo}</TableCell>
-                  <TableCell>
-                    {item.productCode} · {item.productName}
-                  </TableCell>
+                  <TableCell>{item.groupName}</TableCell>
+                  <TableCell>{item.productCode}</TableCell>
+                  <TableCell>{item.productName}</TableCell>
                   <TableCell>
                     {formatQty(item.quantity)} {unitLabel(item.unit)}
                   </TableCell>
                   <TableCell className="capitalize">{item.status}</TableCell>
+                  <TableCell>{formatRupees(item.price)}</TableCell>
                   {view === "verified" ? (
                     <TableCell>
                       {item.verifiedAt
@@ -310,6 +344,7 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
           </TableBody>
         </Table>
       </div>
+      <ListFooter page={page} total={total} shown={visibleItems.length} onPage={setPage} />
     </div>
   );
 }

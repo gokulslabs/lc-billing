@@ -26,8 +26,11 @@ export function PrintTableButton({
     popup.document.write(
       "<!doctype html><title>Preparing printout…</title><p>Preparing printout…</p>",
     );
+    popup.document.close();
     try {
       const sheet = await load();
+      if (popup.closed) return;
+      popup.document.open();
       popup.document.write(printDocument(title, sheet));
       popup.document.close();
       popup.focus();

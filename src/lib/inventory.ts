@@ -40,10 +40,14 @@ const supplierBillNo = z.string().trim().max(40, "Supplier bill number is too lo
 const cost = z.number().min(0, "Cost cannot be negative.").max(9_999_999, "Cost is too large.");
 
 export const stockReceiptSchema = inventorySchema.extend({
-  supplierName: supplierName.min(1, "Enter the supplier."),
-  supplierBillNo: supplierBillNo.min(1, "Enter the supplier bill number."),
-  cost,
-});
+  supplierName: supplierName.default(""),
+  supplierBillNo: supplierBillNo.default(""),
+  cost: cost.optional(),
+}).refine(
+  (receipt) => (!receipt.supplierName && !receipt.supplierBillNo && receipt.cost === undefined)
+    || Boolean(receipt.supplierName && receipt.supplierBillNo && receipt.cost !== undefined),
+  "Enter all three receipt details or leave them blank.",
+);
 
 export const inventoryUpdateSchema = inventorySchema.extend({
   quantity: z

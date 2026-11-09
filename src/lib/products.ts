@@ -60,6 +60,8 @@ export const PRODUCT_SORTS = [
   { id: "code-desc", label: "Code Z to A" },
   { id: "group-asc", label: "Group A to Z" },
   { id: "group-desc", label: "Group Z to A" },
+  { id: "unit-asc", label: "Unit A to Z" },
+  { id: "unit-desc", label: "Unit Z to A" },
   { id: "discount-desc", label: "Highest discount" },
   { id: "discount-asc", label: "Lowest discount" },
 ] as const;
@@ -68,19 +70,11 @@ export type ProductSort = (typeof PRODUCT_SORTS)[number]["id"];
 
 export function productSort(value: string | undefined): {
   id: ProductSort;
-  column: "name" | "code" | "price" | "group" | "discount";
+  column: "name" | "code" | "price" | "group" | "discount" | "unit";
   ascending: boolean;
 } {
   const id = PRODUCT_SORTS.some((sort) => sort.id === value) ? (value as ProductSort) : "name-asc";
-  const column = id.startsWith("price")
-    ? "price"
-    : id.startsWith("code")
-      ? "code"
-      : id.startsWith("group")
-        ? "group"
-        : id.startsWith("discount")
-          ? "discount"
-          : "name";
+  const column = id.slice(0, id.lastIndexOf("-")) as "name" | "code" | "price" | "group" | "discount" | "unit";
   return { id, column, ascending: id.endsWith("-asc") };
 }
 

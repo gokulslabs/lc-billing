@@ -30,6 +30,8 @@ type OrderRow = {
   delivery_on: string | null;
   status: string;
   amount: number | string;
+  description: string | null;
+  processes: string[];
 };
 
 const stitching = new Hono<Env>();
@@ -45,6 +47,9 @@ stitching.get("/", async (c) => {
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
   const status = (c.req.query("status") ?? "").trim();
   const due = c.req.query("due") ?? "";
+  const sort = c.req.query("sort");
+  const sortRelation = sort === "customer" ? "customers" : sort === "product" ? "stitching_products" : null;
+  const sortColumn = sort === "order_no" || sort === "bag_no" || sort === "ordered_on" || sort === "status" ? sort : null;
   const soon = due === "soon";
   const safe = q.replace(/[%_,.()]/g, "").toLowerCase();
   const page = readPage(c.req.query("page"));
@@ -63,7 +68,12 @@ stitching.get("/", async (c) => {
   const ordersQuery = () => {
     const ranked = supabaseAdmin
       .from("stitching_orders")
-      .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount", { count: "exact" });
+      .select(
+        sortRelation
+          ? `id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount, description, processes,${sortRelation}(name)`
+          : "id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount, description, processes",
+        { count: "exact" },
+      );
     const matched =
       due === "today"
         ? ranked.in("status", ["PENDING", "TRIAL"]).eq("delivery_on", today)
@@ -82,12 +92,18 @@ stitching.get("/", async (c) => {
       : customerIds.length > 0
         ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
         : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
+    const orderBy = sortRelation ? `${sortRelation}(name)` : sortColumn;
+    if (orderBy) {
+      return searched.order(orderBy, { ascending: c.req.query("dir") !== "desc", nullsFirst: false }).order("id");
+    }
     return due === "today" || due === "week" || due === "overdue" || soon
       ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
       : searched.order("ordered_on", { ascending: true }).order("id", { ascending: true });
   };
   if (exporting) {
-    const loaded = await readAll<OrderRow>((from, to) => ordersQuery().range(from, to));
+    const loaded = await readAll<OrderRow>((from, to) =>
+      ordersQuery().range(from, to).overrideTypes<OrderRow[], { merge: false }>(),
+    );
     if (!loaded) return c.json({ error: "Could not load orders." }, 500);
     const named = await withNames(loaded.rows);
     if (!named) return c.json({ error: "Could not load orders." }, 500);
@@ -99,7 +115,7 @@ stitching.get("/", async (c) => {
     });
   }
   const { from, to } = pageRange(page);
-  const { data, error, count } = await ordersQuery().range(from, to);
+  const { data, error, count } = await ordersQuery().range(from, to).overrideTypes<OrderRow[], { merge: false }>();
   if (error) return c.json({ error: "Could not load orders." }, 500);
   const rows = (data ?? []) as OrderRow[];
   const named = await withNames(rows);
@@ -129,8 +145,10 @@ stitching.post("/", async (c) => {
         delivery_on: parsed.deliveryOn,
         status: parsed.input.status,
         amount: parsed.input.amount,
+        description: parsed.input.description ?? null,
+        processes: parsed.input.processes ?? [],
       })
-      .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount")
+      .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount, description, processes")
       .single();
     if (isDuplicate(error) && attempt === 0) continue;
     if (error || !data) return c.json({ error: "Could not save the order." }, 500);
@@ -182,6 +200,8 @@ stitching.patch("/:id", async (c) => {
       delivery_on: parsed.deliveryOn,
       status: parsed.input.status,
       amount: parsed.input.amount,
+      ...(parsed.input.description !== undefined ? { description: parsed.input.description } : {}),
+      ...(parsed.input.processes !== undefined ? { processes: parsed.input.processes } : {}),
     })
     .eq("id", id);
   if (error) return c.json({ error: "Could not update the order." }, 500);
@@ -218,7 +238,7 @@ async function readOrder(c: { req: { json: () => Promise<unknown> } }): Promise<
 async function loadOrder(id: string): Promise<StitchingOrder | null> {
   const { data, error } = await supabaseAdmin
     .from("stitching_orders")
-    .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount")
+    .select("id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount, description, processes")
     .eq("id", id)
     .maybeSingle();
   if (error || !data) return null;
@@ -341,6 +361,8 @@ function toOrder(
     deliveryOn: row.delivery_on,
     status: isStatus(row.status) ? row.status : "PENDING",
     amount: Number(row.amount),
+    description: row.description,
+    processes: row.processes,
     measurements: measurements.get(row.id) ?? [],
   };
 }

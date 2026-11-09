@@ -2,6 +2,11 @@ import { z } from "zod";
 
 export const STITCHING_STATUSES = ["PENDING", "TRIAL", "READY", "DELIVERED"] as const;
 export type StitchingStatus = (typeof STITCHING_STATUSES)[number];
+export const STITCHING_DESCRIPTIONS = [
+  "STITCHING",
+  "AARI WORK + STITCHING",
+  "AARI WORK + MAGGAM WORK + STITCHING",
+] as const;
 
 export type StitchingMeasurement = {
   label: string;
@@ -33,6 +38,8 @@ export type StitchingOrder = {
   deliveryOn: string | null;
   status: StitchingStatus;
   amount: number;
+  description?: string | null;
+  processes?: string[];
   measurements: StitchingMeasurement[];
 };
 
@@ -56,6 +63,8 @@ export const stitchingOrderSchema = z.object({
   status: z.enum(STITCHING_STATUSES, { message: "Choose a status." }),
   amount: z.number().min(0, "Amount cannot be negative.").max(9_999_999, "Amount is too large."),
   measurements: z.array(measurementSchema).max(40, "Too many measurements."),
+  description: z.enum(STITCHING_DESCRIPTIONS).nullable().optional(),
+  processes: z.array(z.string().trim().min(1).max(40)).max(100).optional(),
 });
 
 export type StitchingOrderInput = z.infer<typeof stitchingOrderSchema>;

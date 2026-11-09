@@ -9,6 +9,7 @@ import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
 import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
+import { PrintTableButton } from "@/components/app/PrintTableButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -127,12 +128,31 @@ function SalesHome({
     onSuccess: (result) => onOpen(result.invoice.id),
     onError: (error: Error) => toast.error(error.message),
   });
+  const openExact = useMutation({
+    mutationFn: (billNo: string) =>
+      apiFetch<{ id: string }>(`/api/invoices/lookup?billNo=${encodeURIComponent(billNo)}`),
+    onSuccess: ({ id }) => onOpen(id),
+    onError: (error: Error) => toast.error(error.message),
+  });
   const items = useQuery({
     queryKey: ["invoice-items", deferred, listFrom, listTo, page],
     queryFn: () => apiFetch<{ items: InvoiceItem[]; total: number }>(`/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, page })}`),
   });
   const rows = bills.data?.invoices ?? [];
   const matches = (people.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  async function loadBillsExport() {
+    const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
+      `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
+    );
+    return {
+      columns: ["Bill no.", "Date", "Customer", "Gross", "Discount", "Net", "Collected", "Balance", "Status"],
+      rows: data.invoices.map((bill) => [
+        bill.billNo, bill.billedOn, bill.customerName, bill.gross, bill.discount,
+        bill.total, bill.collected, bill.balance, billStatusLabel(bill.status),
+      ]),
+    };
+  }
+
   function chooseSort(column: BillSort) {
     setPage(1);
     if (sort === column) {
@@ -174,10 +194,10 @@ function SalesHome({
         </div>
       </div>
       <form
-        className="max-w-xl"
+        className="flex max-w-xl flex-wrap items-center gap-2 sm:flex-nowrap"
         onSubmit={(event) => {
           event.preventDefault();
-          if (matches.length === 1) openFor.mutate(matches[0].id);
+          if (matches.length === 1 && matches[0]) openFor.mutate(matches[0].id);
         }}
       >
         <Label htmlFor="sales-search" className="sr-only">
@@ -191,9 +211,18 @@ function SalesHome({
             setPage(1);
           }}
           placeholder="Name, phone, book no., or bill no."
-          className="h-12 text-base"
+          className="h-12 min-w-0 flex-1 text-base"
           autoFocus
         />
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          disabled={!q.trim() || openExact.isPending}
+          onClick={() => openExact.mutate(q.trim())}
+        >
+          {openExact.isPending ? "Looking up…" : "Open by bill no."}
+        </Button>
       </form>
       {looking ? (
         <div className="max-w-xl space-y-2">
@@ -275,21 +304,13 @@ function SalesHome({
           <TabsTrigger value="close">Day close</TabsTrigger>
         </TabsList>
         <TabsContent value="bills" className="space-y-4">
-          <ExportExcelButton
-            filename="bills"
-            load={async () => {
-              const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
-                `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
-              );
-              return [
-                {
-                  name: "Bills",
-                  columns: ["Bill no.", "Date", "Customer", "Gross", "Discount", "Net", "Collected", "Balance", "Status"],
-                  rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.customerName, bill.gross, bill.discount, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
-                },
-              ];
-            }}
-          />
+          <div className="flex flex-wrap gap-2">
+            <ExportExcelButton
+              filename="bills"
+              load={async () => [{ name: "Bills", ...(await loadBillsExport()) }]}
+            />
+            <PrintTableButton title="Ladies Collections — Bills" load={loadBillsExport} />
+          </div>
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
           {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
           {!bills.isLoading && rows.length === 0 ? (
@@ -1003,7 +1024,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
   const create = useMutation({
     mutationFn: async () => {
-      let id = customerId || (matches.length === 1 ? matches[0].id : "");
+      let id = customerId || (matches.length === 1 ? (matches[0]?.id ?? "") : "");
       if (!id && matches.length > 1) throw new Error("Tap the customer in the list.");
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");

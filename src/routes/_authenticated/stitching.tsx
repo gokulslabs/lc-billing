@@ -5,9 +5,11 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
+import type { StitchingProcess } from "@/lib/settings";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
 import {
   STITCHING_STATUSES,
+  STITCHING_DESCRIPTIONS,
   type StitchingMeasurement,
   type StitchingOrder,
   type StitchingProduct,
@@ -15,6 +17,7 @@ import {
 } from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
+import { PAGE_SIZE } from "@/lib/paging";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -72,11 +75,46 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           : "",
   );
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" } | null>(null);
+  function sortHeader(label: string, column: string) {
+    return (
+      <TableHead
+        aria-sort={
+          sort?.column === column
+            ? sort.direction === "asc"
+              ? "ascending"
+              : "descending"
+            : undefined
+        }
+      >
+        <button
+          type="button"
+          className="cursor-pointer hover:underline"
+          onClick={() => {
+            setSort({
+              column,
+              direction: sort?.column === column && sort.direction === "asc" ? "desc" : "asc",
+            });
+            setPage(1);
+          }}
+        >
+          {label}{" "}
+          <span aria-hidden="true">
+            {sort?.column === column ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
+          </span>
+        </button>
+      </TableHead>
+    );
+  }
   const orders = useQuery({
-    queryKey: ["stitching-orders", deferred, status, page],
+    queryKey: ["stitching-orders", deferred, status, page, sort],
     enabled: status !== "board",
     queryFn: () => {
       const params = new URLSearchParams();
+      if (sort) {
+        params.set("sort", sort.column);
+        params.set("dir", sort.direction);
+      }
       if (deferred.trim()) params.set("q", deferred.trim());
       if (status === "soon" || status === "today" || status === "week" || status === "overdue")
         params.set("due", status);
@@ -108,6 +146,10 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
               filename="stitching-orders"
               load={async () => {
                 const params = new URLSearchParams({ export: "1" });
+                if (sort) {
+                  params.set("sort", sort.column);
+                  params.set("dir", sort.direction);
+                }
                 if (deferred.trim()) params.set("q", deferred.trim());
                 if (
                   status === "soon" ||
@@ -219,18 +261,20 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Order</TableHead>
-                <TableHead>Bag</TableHead>
-                <TableHead>Customer</TableHead>
-                <TableHead>Product</TableHead>
-                <TableHead>Date</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Sl. no.</TableHead>
+                {sortHeader("Order", "order_no")}
+                {sortHeader("Bag", "bag_no")}
+                {sortHeader("Customer", "customer")}
+                {sortHeader("Product", "product")}
+                {sortHeader("Date", "ordered_on")}
+                {sortHeader("Status", "status")}
                 <TableHead />
               </TableRow>
             </TableHeader>
             <TableBody>
-              {rows.map((order) => (
+              {rows.map((order, index) => (
                 <TableRow key={order.id}>
+                  <TableCell>{(page - 1) * PAGE_SIZE + index + 1}</TableCell>
                   <TableCell className="font-medium">{order.orderNo}</TableCell>
                   <TableCell>{order.bagNo || "—"}</TableCell>
                   <TableCell>
@@ -404,6 +448,18 @@ function OrderScreen({
     queryFn: () => apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`),
   });
   const order = existing.data?.order;
+  const processOptions = useQuery({
+    queryKey: ["settings"],
+    queryFn: () => apiFetch<{ processes: StitchingProcess[] }>("/api/settings"),
+  });
+  const [description, setDescription] = useState("");
+  const [processes, setProcesses] = useState<string[]>([]);
+  const processNames = [
+    ...new Set([
+      ...(processOptions.data?.processes.map((process) => process.name) ?? []),
+      ...(order?.processes ?? []),
+    ]),
+  ];
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
@@ -428,6 +484,8 @@ function OrderScreen({
       deliveryOn !== (order.deliveryOn ?? "") ||
       status !== order.status ||
       amount !== String(order.amount) ||
+      description !== (order.description ?? "") ||
+      JSON.stringify(processes) !== JSON.stringify(order.processes ?? []) ||
       JSON.stringify(measurements) !== JSON.stringify(savedMeasurements)
     : customerQuery.trim().length > 0 ||
       customerId.length > 0 ||
@@ -435,6 +493,8 @@ function OrderScreen({
       bagNo.trim().length > 0 ||
       deliveryOn.length > 0 ||
       amount !== "0" ||
+      description !== "" ||
+      processes.length > 0 ||
       measurements.some((row) => row.label.trim().length > 0 || row.value.trim().length > 0);
   useUnsavedWork(id ? `stitch-${id}` : "stitch-new", orderDirty);
   const mode = id ?? "new";
@@ -448,6 +508,8 @@ function OrderScreen({
     setDeliveryOn(order.deliveryOn ?? "");
     setStatus(order.status);
     setAmount(String(order.amount));
+    setDescription(order.description ?? "");
+    setProcesses(order.processes ?? []);
     setMeasurements(order.measurements.length ? order.measurements : [{ label: "", value: "" }]);
   }
   const customers = useQuery({
@@ -474,6 +536,8 @@ function OrderScreen({
         deliveryOn,
         status,
         amount: value,
+        description: description || null,
+        processes,
         measurements,
       });
       if (id)
@@ -620,6 +684,24 @@ function OrderScreen({
               maxLength={40}
             />
           </Field>
+          <Field label="Description" id="stitch-description">
+            <Select
+              value={description || "none"}
+              onValueChange={(value) => setDescription(value === "none" ? "" : value)}
+            >
+              <SelectTrigger id="stitch-description">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">Select description</SelectItem>
+                {STITCHING_DESCRIPTIONS.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {option}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
           <Field label="Amount" id="stitch-amount">
             <Input
               id="stitch-amount"
@@ -660,6 +742,26 @@ function OrderScreen({
             </SelectContent>
           </Select>
         </Field>
+        <fieldset className="space-y-2">
+          <legend className="text-lg font-semibold">Process</legend>
+          {processOptions.isLoading ? <p>Loading processes…</p> : null}
+          {processOptions.isError ? <p role="alert">Could not load the process options.</p> : null}
+          {processNames.map((name) => (
+            <label key={name} className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={processes.includes(name)}
+                onChange={(event) => {
+                  const checked = event.target.checked;
+                  setProcesses((current) =>
+                    checked ? [...current, name] : current.filter((item) => item !== name),
+                  );
+                }}
+              />
+              {name}
+            </label>
+          ))}
+        </fieldset>
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Measurements</h2>
@@ -813,6 +915,8 @@ function MeasurementSheet({ order }: { order: StitchingOrder }) {
           )}
         </tbody>
       </table>
+      {order.description ? <p>Description: {order.description}</p> : null}
+      {order.processes?.length ? <p>Process: {order.processes.join(", ")}</p> : null}
       <p className="measurement-sheet__footer">Order status: {order.status}</p>
     </section>
   );
