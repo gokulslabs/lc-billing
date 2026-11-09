@@ -46,7 +46,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const Route = createFileRoute("/_authenticated/inventory")({
+export const Route = createFileRoute("/_authenticated/admin/inventory")({
   head: () => ({
     meta: [
       { title: "Inventory — Ladies Collections" },

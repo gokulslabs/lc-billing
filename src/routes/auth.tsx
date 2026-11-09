@@ -35,7 +35,7 @@ function AuthPage() {
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
-    if (!loading && user) navigate({ to: "/dashboard", replace: true });
+    if (!loading && user) navigate({ to: "/admin", replace: true });
   }, [user, loading, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -45,7 +45,7 @@ function AuthPage() {
       if (mode === "signin") {
         const { error } = await supabase.auth.signInWithPassword({ email: signInEmail(email), password });
         if (error) toast.error("Email, mobile, or password is incorrect.");
-        else navigate({ to: "/dashboard", replace: true });
+        else navigate({ to: "/admin", replace: true });
       } else if (!email.includes("@") || signInEmail(email).endsWith("@staff.ladiescollections.local")) {
         toast.error("A mobile login has no inbox. Ask the owner for the password.");
       } else {

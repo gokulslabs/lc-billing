@@ -35,7 +35,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/customers/")({
+export const Route = createFileRoute("/_authenticated/admin/customers/")({
   head: () => ({
     meta: [
       { title: "Customers — Ladies Collections" },
@@ -180,7 +180,7 @@ function CustomersPage() {
                 key={customer.id}
                 title={
                   <Link
-                    to="/customers/$customerId"
+                    to="/admin/customers/$customerId"
                     params={{ customerId: customer.id }}
                     className="hover:underline"
                   >
@@ -258,7 +258,7 @@ function CustomersPage() {
                   <TableRow key={customer.id}>
                     <TableCell>
                       <Link
-                        to="/customers/$customerId"
+                        to="/admin/customers/$customerId"
                         params={{ customerId: customer.id }}
                         className="font-medium hover:underline"
                       >

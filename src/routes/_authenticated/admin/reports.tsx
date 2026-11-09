@@ -28,7 +28,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/reports")({
+export const Route = createFileRoute("/_authenticated/admin/reports")({
   head: () => ({
     meta: [
       { title: "Reports — Ladies Collections" },

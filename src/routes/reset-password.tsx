@@ -42,7 +42,7 @@ function ResetPasswordPage() {
       return;
     }
     toast.success("Password updated.");
-    navigate({ to: "/dashboard", replace: true });
+    navigate({ to: "/admin", replace: true });
   }
 
   return (

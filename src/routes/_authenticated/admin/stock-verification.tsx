@@ -29,7 +29,7 @@ import {
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const Route = createFileRoute("/_authenticated/stock-verification")({
+export const Route = createFileRoute("/_authenticated/admin/stock-verification")({
   head: () => ({
     meta: [
       { title: "Stock verification — Ladies Collections" },

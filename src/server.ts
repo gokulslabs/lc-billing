@@ -3,6 +3,8 @@ import "./lib/error-capture";
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
 import { api } from "./server/api";
+import { trialRoomApi } from "./server/trial-room";
+import { trialRoomApiPath } from "./lib/trial-room";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -49,6 +51,7 @@ export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
       const path = new URL(request.url).pathname;
+      if (path === trialRoomApiPath) return trialRoomApi.fetch(request);
       if (path === "/api" || path.startsWith("/api/")) return api.fetch(request);
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);

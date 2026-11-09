@@ -8,7 +8,7 @@ import { formatRupees } from "@/lib/products";
 import { shopDateLabel, shopGreeting } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 
-export const Route = createFileRoute("/_authenticated/dashboard")({
+export const Route = createFileRoute("/_authenticated/admin/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard — Ladies Collections" },
@@ -21,11 +21,11 @@ export const Route = createFileRoute("/_authenticated/dashboard")({
 });
 
 const NEEDS: { key: keyof DashboardStats; label: string; detail: string; href: string }[] = [
-  { key: "billsToday", label: "Bills today", detail: "Open Sales to write the next one", href: "/sales" },
-  { key: "unpaidBills", label: "Unpaid bills", detail: "Open the bills list to follow up", href: "/sales?view=due" },
-  { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/stitching?board=ready" },
-  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders awaiting completion", href: "/stitching?board=today" },
-  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders awaiting completion", href: "/stitching?board=overdue" },
+  { key: "billsToday", label: "Bills today", detail: "Open Sales to write the next one", href: "/admin/sales" },
+  { key: "unpaidBills", label: "Unpaid bills", detail: "Open the bills list to follow up", href: "/admin/sales?view=due" },
+  { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/admin/stitching?board=ready" },
+  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders awaiting completion", href: "/admin/stitching?board=today" },
+  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders awaiting completion", href: "/admin/stitching?board=overdue" },
 ];
 
 function CloseFigure({ label, value, quantity = false }: { label: string; value: number | undefined; quantity?: boolean }) {
@@ -114,7 +114,7 @@ function Dashboard() {
 
       <section>
         <h2 className="mb-4 text-2xl font-semibold">Today's close</h2>
-        <a href="/sales?view=close" className="grid gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary md:grid-cols-3">
+        <a href="/admin/sales?view=close" className="grid gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary md:grid-cols-3">
           <CloseFigure label="Billed" value={stats.data?.stats.salesAmount} />
           <CloseFigure label="Collected" value={stats.data?.stats.collections} />
           <CloseFigure label="Still due on today's bills" value={stats.data?.stats.dueOnToday} />

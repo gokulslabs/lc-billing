@@ -18,7 +18,7 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-export const Route = createFileRoute("/_authenticated/sales")({
+export const Route = createFileRoute("/_authenticated/admin/sales")({
   head: () => ({
     meta: [
       { title: "Sales & billing — Ladies Collections" },
@@ -41,7 +41,7 @@ function SalesPage() {
         onBack={() => {
           setBillId(null);
           setList(true);
-          if (window.location.search.includes("bill=")) window.history.replaceState(null, "", "/sales");
+          if (window.location.search.includes("bill=")) window.history.replaceState(null, "", "/admin/sales");
         }}
       />
     );
@@ -340,7 +340,7 @@ function SalesHome({
                       <TableCell className="font-medium">{bill.billNo}</TableCell>
                       <TableCell className="whitespace-nowrap">{slashDate(bill.billedOn)}</TableCell>
                       <TableCell>
-                        <Link to="/customers/$customerId" params={{ customerId: bill.customerId }} className="hover:underline">
+                        <Link to="/admin/customers/$customerId" params={{ customerId: bill.customerId }} className="hover:underline">
                           {bill.customerName}
                         </Link>
                       </TableCell>
@@ -490,7 +490,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
           {invoice ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              <Link to="/customers/$customerId" params={{ customerId: invoice.customerId }} className="hover:underline">
+              <Link to="/admin/customers/$customerId" params={{ customerId: invoice.customerId }} className="hover:underline">
                 {invoice.customerName}
               </Link>{" "}
               · {invoice.billedOn} · {billStatusLabel(invoice.status)}

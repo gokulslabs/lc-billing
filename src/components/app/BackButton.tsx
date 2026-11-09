@@ -11,7 +11,7 @@ export function BackButton() {
       className="rounded-full"
       onClick={() => {
         if (router.history.canGoBack()) router.history.back();
-        else void router.navigate({ to: "/dashboard", replace: true });
+        else void router.navigate({ to: "/admin/dashboard", replace: true });
       }}
     >
       <ArrowLeft className="h-4 w-4" />

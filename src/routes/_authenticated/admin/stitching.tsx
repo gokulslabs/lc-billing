@@ -39,7 +39,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/stitching")({
+export const Route = createFileRoute("/_authenticated/admin/stitching")({
   head: () => ({
     meta: [
       { title: "Stitching — Ladies Collections" },
@@ -471,6 +471,11 @@ function OrderScreen({
     queryFn: () => apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`),
   });
   const order = existing.data?.order;
+  const [printCopy, setPrintCopy] = useState<"customer" | "office">("office");
+  function printOrder(copy: "customer" | "office") {
+    flushSync(() => setPrintCopy(copy));
+    window.print();
+  }
   const processOptions = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiFetch<{ processes: StitchingProcess[] }>("/api/settings"),
@@ -615,9 +620,17 @@ function OrderScreen({
                 type="button"
                 variant="outline"
                 className="rounded-full"
-                onClick={() => window.print()}
+                onClick={() => printOrder("customer")}
               >
-                Print
+                Customer copy
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => printOrder("office")}
+              >
+                Office copy
               </Button>
               <ExportExcelButton
                 filename={`order-${order.orderNo}`}
@@ -841,12 +854,13 @@ function OrderScreen({
           ) : null}
         </div>
       </form>
-      {order ? <MeasurementSheet order={order} /> : null}
+      {order ? <MeasurementSheet order={order} copy={printCopy} /> : null}
     </div>
   );
 }
 
-function MeasurementSheet({ order }: { order: StitchingOrder }) {
+function MeasurementSheet({ order, copy }: { order: StitchingOrder; copy: "customer" | "office" }) {
+  const office = copy === "office";
   return (
     <section className="measurement-sheet" aria-label="Printable measurement sheet">
       <style>{`
@@ -880,7 +894,9 @@ function MeasurementSheet({ order }: { order: StitchingOrder }) {
       `}</style>
       <div className="measurement-sheet__header">
         <h2 className="measurement-sheet__title">Ladies Collections</h2>
-        <p className="measurement-sheet__sub">Stitching measurement sheet</p>
+        <p className="measurement-sheet__sub">
+          {office ? "Stitching order copy · Office" : "Customer stitching order copy"}
+        </p>
       </div>
       <table className="measurement-sheet__meta">
         <tbody>
@@ -906,40 +922,49 @@ function MeasurementSheet({ order }: { order: StitchingOrder }) {
             </td>
           </tr>
           <tr>
-            <td className="measurement-sheet__label">Date / delivery</td>
-            <td>
-              {slashDate(order.orderedOn)}
-              {order.deliveryOn ? ` / ${slashDate(order.deliveryOn)}` : ""}
-            </td>
+            <td className="measurement-sheet__label">Order date</td>
+            <td>{slashDate(order.orderedOn)}</td>
           </tr>
-        </tbody>
-      </table>
-      <table className="measurement-sheet__table">
-        <thead>
           <tr>
-            <th>Measurement</th>
-            <th>Value</th>
+            <td className="measurement-sheet__label">Expected delivery</td>
+            <td>{order.deliveryOn ? slashDate(order.deliveryOn) : "—"}</td>
           </tr>
-        </thead>
-        <tbody>
-          {order.measurements.length ? (
-            order.measurements.map((measurement, index) => (
-              <tr key={`${measurement.label}-${index}`}>
-                <td>{measurement.label}</td>
-                <td>{measurement.value}</td>
-              </tr>
-            ))
-          ) : (
+          {!office ? (
             <tr>
-              <td colSpan={2} className="measurement-sheet__empty">
-                No measurements saved for this order.
-              </td>
+              <td className="measurement-sheet__label">Amount</td>
+              <td>{formatRupees(order.amount)}</td>
             </tr>
-          )}
+          ) : null}
         </tbody>
       </table>
-      {order.description ? <p>Description: {order.description}</p> : null}
-      {order.processes?.length ? <p>Process: {order.processes.join(", ")}</p> : null}
+      {office && order.description ? <p>Description: {order.description}</p> : null}
+      {office && order.processes?.length ? <p>Process: {order.processes.join(", ")}</p> : null}
+      {office ? (
+        <table className="measurement-sheet__table">
+          <thead>
+            <tr>
+              <th>Measurement</th>
+              <th>Value</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.measurements.length ? (
+              order.measurements.map((measurement, index) => (
+                <tr key={`${measurement.label}-${index}`}>
+                  <td>{measurement.label}</td>
+                  <td>{measurement.value}</td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={2} className="measurement-sheet__empty">
+                  No measurements saved for this order.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      ) : null}
       <p className="measurement-sheet__footer">Order status: {order.status}</p>
     </section>
   );

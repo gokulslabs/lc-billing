@@ -12,7 +12,7 @@ import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-export const Route = createFileRoute("/_authenticated/customers/$customerId")({
+export const Route = createFileRoute("/_authenticated/admin/customers/$customerId")({
   head: () => ({
     meta: [
       { title: "Customer — Ladies Collections" },
@@ -40,7 +40,7 @@ function CustomerHistoryPage() {
         body: JSON.stringify({ customerId }),
       }),
     onSuccess: (result) => {
-      window.location.assign(`/sales?bill=${result.invoice.id}`);
+      window.location.assign(`/admin/sales?bill=${result.invoice.id}`);
     },
     onError: (error: Error) => toast.error(error.message),
   });
@@ -49,7 +49,7 @@ function CustomerHistoryPage() {
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
       <div>
         <Button variant="outline" className="mb-4 rounded-full" asChild>
-          <Link to="/customers">Customers</Link>
+          <Link to="/admin/customers">Customers</Link>
         </Button>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-3xl font-semibold md:text-4xl">{customer?.name ?? "Customer"}</h1>
@@ -110,7 +110,7 @@ function CustomerHistoryPage() {
               <article key={bill.id} className="rounded-2xl border border-border bg-card p-4">
                 <div className="flex flex-wrap items-baseline justify-between gap-3">
                   <p className="font-medium">
-                    <a href={`/sales?bill=${bill.id}`} className="hover:underline">
+                    <a href={`/admin/sales?bill=${bill.id}`} className="hover:underline">
                       {bill.billNo}
                     </a>{" "}
                     · {bill.billedOn}
