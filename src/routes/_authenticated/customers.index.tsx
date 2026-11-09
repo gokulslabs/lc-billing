@@ -20,6 +20,13 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Table,
   TableBody,
   TableCell,
@@ -45,6 +52,7 @@ function CustomersPage() {
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const deferred = useDeferredValue(q);
+  const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" }>({
     column: "name",
@@ -57,11 +65,16 @@ function CustomersPage() {
     { id: "address", label: "Address" },
   ];
   const [editor, setEditor] = useState<Customer | "new" | null>(null);
+  function listParams() {
+    const params = new URLSearchParams({ sort: sort.column, dir: sort.direction });
+    if (deferred.trim()) params.set("q", deferred.trim());
+    if (filter === "not-recorded") params.set("filter", filter);
+    return params;
+  }
   const customers = useQuery({
-    queryKey: ["customers", deferred, page, sort],
+    queryKey: ["customers", deferred, page, sort, filter],
     queryFn: () => {
-      const params = new URLSearchParams({ sort: sort.column, dir: sort.direction });
-      if (deferred.trim()) params.set("q", deferred.trim());
+      const params = listParams();
       params.set("page", String(page));
       return apiFetch<{ customers: Customer[]; total: number }>(
         `/api/customers?${params.toString()}`,
@@ -83,8 +96,7 @@ function CustomersPage() {
           <ExportExcelButton
             filename="customers"
             load={async () => {
-              const params = new URLSearchParams({ sort: sort.column, dir: sort.direction });
-              if (deferred.trim()) params.set("q", deferred.trim());
+              const params = listParams();
               params.set("export", "1");
               const data = await apiFetch<{ customers: Customer[] }>(
                 `/api/customers?${params.toString()}`,
@@ -106,12 +118,8 @@ function CustomersPage() {
           <PrintTableButton
             title="Ladies Collections — Customers"
             load={async () => {
-              const params = new URLSearchParams({
-                export: "1",
-                sort: sort.column,
-                dir: sort.direction,
-              });
-              if (deferred.trim()) params.set("q", deferred.trim());
+              const params = listParams();
+              params.set("export", "1");
               const data = await apiFetch<{ customers: Customer[] }>(
                 `/api/customers?${params.toString()}`,
               );
@@ -131,15 +139,32 @@ function CustomersPage() {
           </Button>
         </div>
       </div>
-      <Input
-        value={q}
-        onChange={(event) => {
-          setQ(event.target.value);
-          setPage(1);
-        }}
-        placeholder="Search name, phone, book number or address"
-        className="w-full max-w-sm"
-      />
+      <div className="flex flex-wrap gap-3">
+        <Input
+          value={q}
+          onChange={(event) => {
+            setQ(event.target.value);
+            setPage(1);
+          }}
+          placeholder="Search name, phone, book number or address"
+          className="w-full max-w-sm"
+        />
+        <Select
+          value={filter}
+          onValueChange={(value) => {
+            setFilter(value);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger aria-label="Filter customers" className="w-44">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All customers</SelectItem>
+            <SelectItem value="not-recorded">Not recorded</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
       {customers.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
       {customers.error instanceof Error ? (
         <p className="text-sm text-destructive">{customers.error.message}</p>

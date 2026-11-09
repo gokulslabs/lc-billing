@@ -4,6 +4,7 @@ import { paymentStatus } from "@/lib/sales";
 import {
   blankToNull,
   customerSchema,
+  UNRECORDED_NAME,
   zodMessage,
   type Customer,
   type CustomerBill,
@@ -49,11 +50,13 @@ customers.get("/", async (c) => {
   const ascending = c.req.query("dir") !== "desc";
   const picker = c.req.query("picker") === "1" && Boolean(safe);
   const exporting = c.req.query("export") === "1";
+  const notRecorded = c.req.query("filter") === "not-recorded";
   if (exporting) {
     const denied = await denyUnlessAdmin(c);
     if (denied) return denied;
     const loaded = await readAll<CustomerRow>((from, to) => {
       const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no").order(column, { ascending, nullsFirst: false }).order("id");
+      if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
       const filtered = safe ? ranked.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%,address.ilike.%${safe}%`) : ranked;
       return filtered.range(from, to);
     });
@@ -62,6 +65,7 @@ customers.get("/", async (c) => {
   }
   const { from, to } = picker ? { from: 0, to: 199 } : pageRange(page);
   const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no", { count: "exact" }).order(column, { ascending, nullsFirst: false }).order("id");
+  if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
   const fields = picker ? ["name", "phone", "book_no"] : ["name", "phone", "book_no", "address"];
   const filtered = safe ? ranked.or(fields.map((field) => `${field}.ilike.%${safe}%`).join(",")) : ranked;
   const { data, error, count } = await filtered.range(from, to);
