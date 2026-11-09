@@ -78,10 +78,12 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const [sort, setSort] = useState<{ column: string; direction: "asc" | "desc" } | null>(null);
   function sortHeader(label: string, column: string) {
     return (
+  const dueFilter = ["soon", "today", "week", "overdue"].includes(status);
+  const activeSort = sort ?? (dueFilter ? null : { column: "ordered_on", direction: "desc" });
       <TableHead
         aria-sort={
-          sort?.column === column
-            ? sort.direction === "asc"
+          activeSort?.column === column
+            ? activeSort.direction === "asc"
               ? "ascending"
               : "descending"
             : undefined
@@ -93,14 +95,14 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           onClick={() => {
             setSort({
               column,
-              direction: sort?.column === column && sort.direction === "asc" ? "desc" : "asc",
+              direction: activeSort?.column === column && activeSort.direction === "asc" ? "desc" : "asc",
             });
             setPage(1);
           }}
         >
           {label}{" "}
           <span aria-hidden="true">
-            {sort?.column === column ? (sort.direction === "asc" ? "↑" : "↓") : "↕"}
+            {activeSort?.column === column ? (activeSort.direction === "asc" ? "↑" : "↓") : "↕"}
           </span>
         </button>
       </TableHead>
@@ -241,6 +243,25 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
         </Select>
       </div>
       {orders.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+        {status !== "board" ? (
+          <Select
+            value={activeSort?.column === "ordered_on" ? activeSort.direction : sort ? "column" : "due"}
+            onValueChange={(value) => {
+              setSort(value === "due" ? null : { column: "ordered_on", direction: value === "asc" ? "asc" : "desc" });
+              setPage(1);
+            }}
+          >
+            <SelectTrigger aria-label="Sort orders" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="desc">Newest first</SelectItem>
+              <SelectItem value="asc">Oldest first</SelectItem>
+              {dueFilter ? <SelectItem value="due">Due date first</SelectItem> : null}
+              {sort && sort.column !== "ordered_on" ? <SelectItem value="column" disabled>Column sort</SelectItem> : null}
+            </SelectContent>
+          </Select>
+        ) : null}
       {orders.error instanceof Error ? (
         <p className="text-sm text-destructive">{orders.error.message}</p>
       ) : null}

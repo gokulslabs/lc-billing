@@ -93,12 +93,14 @@ stitching.get("/", async (c) => {
         ? filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`)
         : filtered.or(`order_no.ilike.%${safe}%,bag_no.ilike.%${safe}%`);
     const orderBy = sortRelation ? `${sortRelation}(name)` : sortColumn;
-    if (orderBy) {
+    if (orderBy && orderBy !== "ordered_on") {
       return searched.order(orderBy, { ascending: c.req.query("dir") !== "desc", nullsFirst: false }).order("id");
     }
-    return due === "today" || due === "week" || due === "overdue" || soon
-      ? searched.order("delivery_on", { ascending: true }).order("id", { ascending: true })
-      : searched.order("ordered_on", { ascending: true }).order("id", { ascending: true });
+    if (!orderBy && (due === "today" || due === "week" || due === "overdue" || soon)) {
+      return searched.order("delivery_on", { ascending: true }).order("id", { ascending: true });
+    }
+    const ascending = orderBy === "ordered_on" && c.req.query("dir") !== "desc";
+    return searched.order("ordered_on", { ascending }).order("order_no", { ascending });
   };
   if (exporting) {
     const loaded = await readAll<OrderRow>((from, to) =>
