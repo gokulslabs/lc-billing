@@ -3,7 +3,7 @@ import { ArrowUpRight, Minus, Plus, Star } from "lucide-react";
 import { formatRupees } from "@/lib/products";
 import { MAX_QUANTITY, salePrice, storeImage, type StoreProduct } from "@/lib/storefront";
 
-export const wrap = "mx-auto w-full max-w-7xl px-4 sm:px-8";
+export const wrap = "mx-auto w-full max-w-[100rem] px-4 sm:px-8";
 export const eyebrow = "store-editorial-label text-primary";
 export const field =
   "store-field w-full rounded-md border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-2 focus-visible:outline-ring";

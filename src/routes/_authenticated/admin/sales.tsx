@@ -183,7 +183,7 @@ function SalesHome({
   }
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-3">
@@ -468,7 +468,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
   };
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <Button

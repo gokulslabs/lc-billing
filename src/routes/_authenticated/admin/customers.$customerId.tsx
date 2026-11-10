@@ -46,7 +46,7 @@ function CustomerHistoryPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-4 md:p-10">
       <div>
         <Button variant="outline" className="mb-4 rounded-full" asChild>
           <Link to="/admin/customers">Customers</Link>

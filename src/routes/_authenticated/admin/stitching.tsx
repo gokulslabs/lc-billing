@@ -133,7 +133,7 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
   const rows = orders.data?.orders ?? [];
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-6 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-semibold">Orders list</h1>

@@ -57,7 +57,7 @@ function Dashboard() {
   const today = shopDateLabel();
 
   return (
-    <div className="mx-auto max-w-6xl space-y-10 p-6 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-10 p-6 md:p-10">
       <section className="rounded-3xl bg-[image:var(--gradient-primary)] p-8 text-primary-foreground shadow-[var(--shadow-soft)] md:p-10">
         <p className="text-xs uppercase tracking-[0.3em] opacity-90">{today}</p>
         <h1 className="mt-3 text-4xl font-semibold md:text-5xl">

@@ -58,7 +58,7 @@ export const Route = createFileRoute("/_authenticated/admin/inventory")({
 
 function InventoryPage() {
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-4 md:p-10">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-3xl font-semibold md:text-4xl">Inventory</h1>

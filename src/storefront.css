@@ -95,7 +95,7 @@
 
 .store-header-inner,
 .store-footer-inner {
-  max-width: 80rem;
+  max-width: 100rem;
   margin-inline: auto;
   padding-inline: 1rem;
 }
@@ -219,7 +219,7 @@
 
 .store-hero {
   display: grid;
-  max-width: 105rem;
+  max-width: 100rem;
   margin-inline: auto;
   background: var(--store-garnet);
   color: var(--store-ivory);

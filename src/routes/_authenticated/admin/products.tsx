@@ -82,7 +82,7 @@ function ProductsPage() {
   });
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-10">
+    <div className="mx-auto max-w-[100rem] space-y-8 p-4 md:p-10">
       <div>
         <h1 className="text-3xl font-semibold md:text-4xl">Products</h1>
         <p className="mt-2 text-sm text-muted-foreground">
