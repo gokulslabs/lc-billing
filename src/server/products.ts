@@ -144,10 +144,12 @@ products.get("/", async (c) => {
   const sort = c.req.query("sort");
   if (picker) {
     const loaded = await readAll<ProductRow>((from, to) => {
-      const ranked = rankProducts(
-        supabaseAdmin.from("products").select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)"),
-        sort,
-      );
+      const source = supabaseAdmin
+        .from("products")
+        .select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)");
+      const ranked = sort
+        ? rankProducts(source, sort)
+        : source.order("created_at", { ascending: false }).order("id", { ascending: false });
       const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;
       const filtered = safe ? grouped.or(`name.ilike.%${safe}%,code.ilike.%${safe}%`) : grouped;
       return filtered.range(from, to);

@@ -564,17 +564,17 @@ function BarcodePanel() {
   const [starting, setStarting] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
-  useEffect(() => {
-    if (labels.length === 0) return;
-    const frame = requestAnimationFrame(() => window.print());
-    return () => cancelAnimationFrame(frame);
-  }, [labels]);
   const print = useMutation({
     mutationFn: () => {
       const count = Number(quantity);
       if (!Number.isFinite(count)) throw new Error("Enter how many labels.");
-      const params = new URLSearchParams({ starting: starting.trim(), quantity: String(count) });
-      return apiFetch<{ labels: BarcodeLabel[] }>(`/api/inventory/barcodes?${params.toString()}`);
+      const params = new URLSearchParams({
+        starting: starting.trim(),
+        quantity: String(count),
+      });
+      return apiFetch<{ numbers: string[]; labels: BarcodeLabel[] }>(
+        `/api/inventory/barcodes?${params.toString()}`,
+      );
     },
     onSuccess: (result) => setLabels(result.labels),
     onError: (error: Error) => toast.error(error.message),
@@ -583,8 +583,9 @@ function BarcodePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        The bars are the inventory number, including IN. The billing gun reads them. Showing labels
-        does not add stock.
+        Enter the first inventory number (for example, IN0021288) and the number of consecutive
+        labels. Review the barcode numbers and prices below, then click Print when they look right.
+        Showing labels does not add or change stock.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
@@ -594,26 +595,37 @@ function BarcodePanel() {
           print.mutate();
         }}
       >
-        <Field label="Starting number" id="barcode-start">
+        <Field label="Starting barcode no." id="barcode-start">
           <Input
             id="barcode-start"
             value={starting}
-            onChange={(event) => setStarting(event.target.value)}
-            className="w-40"
+            onChange={(event) => {
+              setStarting(event.target.value);
+              setLabels([]);
+            }}
+            className="w-48"
+            placeholder="IN0021288"
             required
           />
         </Field>
-        <Field label="Labels" id="barcode-count">
+        <Field label="Quantity" id="barcode-count">
           <Input
             id="barcode-count"
             value={quantity}
-            onChange={(event) => setQuantity(event.target.value)}
+            onChange={(event) => {
+              setQuantity(event.target.value);
+              setLabels([]);
+            }}
             className="w-28"
+            type="number"
+            min={1}
+            max={200}
+            step={1}
             required
           />
         </Field>
         <Button type="submit" className="rounded-full" disabled={print.isPending}>
-          {print.isPending ? "Preparing…" : "Print barcodes"}
+          {print.isPending ? "Preparing preview…" : "Show barcodes"}
         </Button>
         {labels.length > 0 ? (
           <Button
@@ -622,7 +634,7 @@ function BarcodePanel() {
             className="rounded-full"
             onClick={() => window.print()}
           >
-            Reprint
+            Print
           </Button>
         ) : null}
         {labels.length > 0 ? (
@@ -638,7 +650,15 @@ function BarcodePanel() {
           />
         ) : null}
       </form>
-      {labels.length > 0 ? <LabelSheet labels={labels} /> : null}
+      {labels.length > 0 ? (
+        <section className="space-y-3" aria-label="Barcode label preview">
+          <div className="text-sm font-medium">
+            Preview · {labels.length} label
+            {labels.length === 1 ? "" : "s"}
+          </div>
+          <LabelSheet labels={labels} />
+        </section>
+      ) : null}
     </div>
   );
 }
