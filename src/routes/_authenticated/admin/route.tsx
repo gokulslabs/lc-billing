@@ -156,26 +156,35 @@ function AuthenticatedLayout() {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
-          <div className="mb-2 min-w-0 group-data-[collapsible=icon]:hidden">
-            <div className="truncate text-sm font-medium" title={user.email ?? undefined}>
-              {profile?.full_name?.trim() || "Staff"}
-            </div>
-            <div className="text-xs capitalize text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
-          </div>
           <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full group-data-[collapsible=icon]:hidden" load={loadMasterExport} />
           <ThemeToggle className="mb-2" />
-          <Button variant="outline" size="sm" className="w-full rounded-full group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0" title="Sign out" onClick={signOut}>
-            <LogOut className="h-4 w-4 group-data-[collapsible=icon]:mr-0 mr-2" />
-            <span className="group-data-[collapsible=icon]:hidden">Sign out</span>
-          </Button>
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
       <SidebarInset className="pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
-        <header className="flex h-14 items-center gap-2 border-b border-border px-4 print:hidden md:hidden">
-          <span className="font-display text-lg font-semibold">Ladies Collections</span>
-          <ThemeToggle iconOnly className="ml-auto" />
-          <SidebarTrigger />
+        <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 print:hidden md:px-10">
+          <span className="font-display text-lg font-semibold md:hidden">Ladies Collections</span>
+          <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
+            <div className="min-w-0 text-right">
+              <div className="max-w-32 truncate text-sm font-medium" title={profile?.full_name?.trim() || user.email || undefined}>
+                {profile?.full_name?.trim() || "Staff"}
+              </div>
+              <div className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              className="shrink-0 rounded-full px-2.5 sm:px-3"
+              title="Sign out"
+              aria-label="Sign out"
+              onClick={signOut}
+            >
+              <LogOut className="h-4 w-4 sm:mr-2" />
+              <span className="hidden sm:inline">Sign out</span>
+            </Button>
+            <ThemeToggle iconOnly className="md:hidden" />
+            <SidebarTrigger className="md:hidden" />
+          </div>
         </header>
         {pathname.replace(/\/$/, "") !== "/admin/dashboard" ? (
           <div className="mx-auto flex w-full max-w-[100rem] justify-end px-4 pt-4 print:hidden md:px-10">
