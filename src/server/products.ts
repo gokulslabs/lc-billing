@@ -15,6 +15,7 @@ import { PAGE_SIZE, pageRange, readPage } from "@/lib/paging";
 import { correctedSpelling } from "@/lib/settings";
 import { requireShop } from "@/server/guard";
 import { readAll } from "@/server/read-all";
+import { getCatalogue, invalidateCatalogueCache } from "@/server/catalogue-cache";
 
 type Env = { Variables: { userId: string } };
 
@@ -73,6 +74,7 @@ groups.patch("/discounts", async (c) => {
     return c.json({ error: "A group changed. Reload the list and review your discounts." }, 409);
   }
   if (error) return c.json({ error: "Could not save group discounts." }, 500);
+  invalidateCatalogueCache();
   return c.json({ ok: true });
 });
 
@@ -92,6 +94,7 @@ groups.post("/", async (c) => {
     .select("id, name, code, discount_percent")
     .single();
   if (error || !data) return c.json({ error: "Could not save the group." }, 500);
+  invalidateCatalogueCache();
   return c.json({ group: toGroup(data as GroupRow, 0) }, 201);
 });
 
@@ -114,9 +117,11 @@ groups.patch("/:id", async (c) => {
     .maybeSingle();
   if (error) return c.json({ error: "Could not update the group." }, 500);
   if (!data) return c.json({ error: "Group not found." }, 404);
-  const counts = await productCounts();
-  if (!counts) return c.json({ error: "Could not count products." }, 500);
-  return c.json({ group: toGroup(data as GroupRow, counts.get(id) ?? 0) });
+  invalidateCatalogueCache();
+  const catalogue = await getCatalogue();
+  if (!catalogue) return c.json({ error: "Could not load catalogue." }, 500);
+  const count = catalogue.groups.find((group) => group.id === id)?.productCount ?? 0;
+  return c.json({ group: toGroup(data as GroupRow, count) });
 });
 
 groups.delete("/:id", async (c) => {
@@ -129,6 +134,7 @@ groups.delete("/:id", async (c) => {
   if ((count ?? 0) > 0) return c.json({ error: "Move or remove the products in this group first." }, 400);
   const { error } = await supabaseAdmin.from("product_groups").delete().eq("id", id);
   if (error) return c.json({ error: "Could not remove the group." }, 500);
+  invalidateCatalogueCache();
   return c.json({ ok: true });
 });
 
@@ -191,6 +197,7 @@ products.post("/", async (c) => {
   if (!code) return c.json({ error: "Could not create a product code." }, 500);
   const saved = await insertProduct({ ...parsed.data, code }, group);
   if ("error" in saved) return c.json({ error: saved.error }, saved.status);
+  invalidateCatalogueCache();
   return c.json({ product: saved.product }, 201);
 });
 
@@ -217,12 +224,14 @@ products.patch("/:id", async (c) => {
   if (isDuplicate(error)) return c.json({ error: "That product code is already used." }, 400);
   if (error) return c.json({ error: "Could not update the product." }, 500);
   if (!data) return c.json({ error: "Product not found." }, 404);
+  invalidateCatalogueCache();
   return c.json({ product: toProduct(data as ProductRow, group) });
 });
 
 products.delete("/:id", async (c) => {
   const { error } = await supabaseAdmin.from("products").delete().eq("id", c.req.param("id"));
   if (error) return c.json({ error: "Could not remove the product." }, 500);
+  invalidateCatalogueCache();
   return c.json({ ok: true });
 });
 
@@ -237,25 +246,17 @@ async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<u
 }
 
 async function loadGroups(): Promise<{ groups: ProductGroup[] } | { error: string }> {
-  const loaded = await readAll<GroupRow>((from, to) =>
-    supabaseAdmin.from("product_groups").select("id, name, code, discount_percent").order("name").order("id").range(from, to),
-  );
-  if (!loaded) return { error: "Could not load groups." };
-  const counts = await productCounts();
-  if (!counts) return { error: "Could not count products." };
-  return { groups: loaded.rows.map((row) => toGroup(row, counts.get(row.id) ?? 0)) };
-}
-
-async function productCounts(): Promise<Map<string, number> | null> {
-  const loaded = await readAll<{ group_id: string }>((from, to) =>
-    supabaseAdmin.from("products").select("group_id").order("id").range(from, to),
-  );
-  if (!loaded) return null;
-  const counts = new Map<string, number>();
-  for (const row of loaded.rows) {
-    counts.set(row.group_id, (counts.get(row.group_id) ?? 0) + 1);
-  }
-  return counts;
+  const catalogue = await getCatalogue();
+  if (!catalogue) return { error: "Could not load groups." };
+  return {
+    groups: catalogue.groups.map((group) => ({
+      id: group.id,
+      name: group.name,
+      code: group.code,
+      discountPercent: group.discountPercent,
+      productCount: group.productCount,
+    })),
+  };
 }
 
 async function groupCodeTaken(code: string, exceptId?: string): Promise<boolean | "error"> {

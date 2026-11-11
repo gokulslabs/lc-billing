@@ -17,10 +17,10 @@ import {
   type PurchaseRow,
 } from "@/lib/inventory";
 import { lineAmount, shopToday } from "@/lib/sales";
-import type { Unit } from "@/lib/products";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { pageRange, readPage } from "@/lib/paging";
 import { readAll } from "@/server/read-all";
+import { getCatalogue, type CatalogueProduct } from "@/server/catalogue-cache";
 
 type Env = { Variables: { userId: string } };
 
@@ -32,16 +32,6 @@ type ItemRow = {
   status: string;
   stock_verified_at?: string | null;
   stock_verified_quantity?: number | string | null;
-};
-
-type CatalogueProduct = {
-  id: string;
-  code: string;
-  name: string;
-  unit: Unit;
-  price: number;
-  groupId: string;
-  groupName: string;
 };
 
 function sortInventoryQuery<
@@ -517,39 +507,8 @@ inventory.delete("/:id", async (c) => {
 });
 
 async function loadCatalogue(): Promise<Map<string, CatalogueProduct> | null> {
-  const groups = await readAll<{ id: string; name: string }>((from, to) =>
-    supabaseAdmin.from("product_groups").select("id, name").order("id").range(from, to),
-  );
-  if (!groups) return null;
-  const names = new Map(groups.rows.map((group) => [group.id, group.name]));
-  const products = await readAll<{
-    id: string;
-    group_id: string;
-    code: string;
-    name: string;
-    unit: string;
-    price: number | string;
-  }>((from, to) =>
-    supabaseAdmin
-      .from("products")
-      .select("id, group_id, code, name, unit, price")
-      .order("id")
-      .range(from, to),
-  );
-  if (!products) return null;
-  const catalogue = new Map<string, CatalogueProduct>();
-  for (const row of products.rows) {
-    catalogue.set(row.id, {
-      id: row.id,
-      code: row.code,
-      name: row.name,
-      unit: row.unit === "MT" ? "MT" : "NO",
-      price: Number(row.price),
-      groupId: row.group_id,
-      groupName: names.get(row.group_id) ?? "",
-    });
-  }
-  return catalogue;
+  const loaded = await getCatalogue();
+  return loaded ? new Map(loaded.products.map((product) => [product.id, product])) : null;
 }
 
 function productFilter(
