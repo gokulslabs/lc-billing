@@ -631,8 +631,14 @@ function BarcodePanel() {
           type="button"
           variant="outline"
           className="rounded-full"
-          disabled={labels.length === 0 || print.isPending}
-          onClick={() => window.print()}
+          disabled={print.isPending}
+          onClick={() => {
+            if (labels.length === 0) {
+              print.mutate();
+              return;
+            }
+            window.print();
+          }}
         >
           Print
         </Button>
