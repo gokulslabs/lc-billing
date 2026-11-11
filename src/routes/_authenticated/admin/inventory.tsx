@@ -3,7 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { formatPurchaseNumbers, type InventoryItem, type PurchaseLine } from "@/lib/inventory";
+import {
+  formatPurchaseNumbers,
+  INVENTORY_SORTS,
+  type InventoryItem,
+  type InventorySort,
+  type PurchaseLine,
+} from "@/lib/inventory";
 import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/products";
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
@@ -97,6 +103,7 @@ function StockPanel() {
   const deferred = useDeferredValue(q);
   const [groupId, setGroupId] = useState("");
   const [productId, setProductId] = useState("");
+  const [sort, setSort] = useState<InventorySort>("latest");
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
   const [stickers, setStickers] = useState<BarcodeLabel[]>([]);
@@ -115,12 +122,13 @@ function StockPanel() {
     queryFn: () => apiFetch<{ products: Product[] }>(`/api/products?groupId=${groupId}&picker=1`),
   });
   const stock = useQuery({
-    queryKey: ["inventory", deferred, groupId, productId, page],
+    queryKey: ["inventory", deferred, groupId, productId, sort, page],
     queryFn: () => {
       const params = new URLSearchParams();
       if (deferred.trim()) params.set("q", deferred.trim());
       if (groupId) params.set("groupId", groupId);
       if (productId) params.set("productId", productId);
+      params.set("sort", sort);
       params.set("page", String(page));
       return apiFetch<{ items: InventoryItem[]; total: number }>(
         `/api/inventory?${params.toString()}`,
@@ -138,6 +146,7 @@ function StockPanel() {
           if (deferred.trim()) params.set("q", deferred.trim());
           if (groupId) params.set("groupId", groupId);
           if (productId) params.set("productId", productId);
+          params.set("sort", sort);
           const data = await apiFetch<{ items: InventoryItem[] }>(
             `/api/inventory?${params.toString()}`,
           );
@@ -168,7 +177,7 @@ function StockPanel() {
           ];
         }}
       />
-      <div className="grid items-center gap-2 md:grid-cols-[minmax(12rem,1fr)_10.5rem_12rem_auto]">
+      <div className="grid items-center gap-2 md:grid-cols-2 2xl:grid-cols-[minmax(12rem,1fr)_10.5rem_12rem_11rem_auto]">
         <Input
           value={q}
           onChange={(event) => {
@@ -213,6 +222,24 @@ function StockPanel() {
             {(products.data?.products ?? []).map((product) => (
               <SelectItem key={product.id} value={product.id}>
                 {product.code} · {product.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select
+          value={sort}
+          onValueChange={(value) => {
+            setSort(value as InventorySort);
+            setPage(1);
+          }}
+        >
+          <SelectTrigger className="w-full" aria-label="Sort inventory">
+            <SelectValue placeholder="Sort inventory" />
+          </SelectTrigger>
+          <SelectContent>
+            {INVENTORY_SORTS.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.label}
               </SelectItem>
             ))}
           </SelectContent>

@@ -75,6 +75,18 @@ export const barcodeSchema = z.object({
 
 export type InventoryInput = z.infer<typeof inventorySchema>;
 
+export const INVENTORY_SORTS = [
+  { id: "latest", label: "Latest added" },
+  { id: "oldest", label: "Oldest added" },
+  { id: "number-asc", label: "Inventory no. A to Z" },
+  { id: "number-desc", label: "Inventory no. Z to A" },
+  { id: "quantity-desc", label: "Quantity high to low" },
+  { id: "quantity-asc", label: "Quantity low to high" },
+  { id: "status-asc", label: "Status A to Z" },
+] as const;
+
+export type InventorySort = (typeof INVENTORY_SORTS)[number]["id"];
+
 export function quantityForUnit(unit: Unit, value: number): string | null {
   if (unit === "NO" && !Number.isInteger(value)) return "Pieces must be a whole number.";
   const decimals = value.toString().split(".")[1]?.length ?? 0;

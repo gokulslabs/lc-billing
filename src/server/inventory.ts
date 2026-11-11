@@ -44,6 +44,28 @@ type CatalogueProduct = {
   groupName: string;
 };
 
+function sortInventoryQuery<
+  T extends { order: (column: string, options?: { ascending?: boolean }) => T },
+>(query: T, sort: string): T {
+  switch (sort) {
+    case "oldest":
+      return query.order("created_at", { ascending: true }).order("id", { ascending: true });
+    case "number-asc":
+      return query.order("inventory_no", { ascending: true }).order("id", { ascending: true });
+    case "number-desc":
+      return query.order("inventory_no", { ascending: false }).order("id", { ascending: false });
+    case "quantity-desc":
+      return query.order("quantity", { ascending: false }).order("inventory_no", { ascending: true });
+    case "quantity-asc":
+      return query.order("quantity", { ascending: true }).order("inventory_no", { ascending: true });
+    case "status-asc":
+      return query.order("status", { ascending: true }).order("inventory_no", { ascending: true });
+    case "latest":
+    default:
+      return query.order("created_at", { ascending: false }).order("id", { ascending: false });
+  }
+}
+
 const inventory = new Hono<Env>();
 inventory.use("*", requireShop);
 
@@ -247,6 +269,7 @@ inventory.get("/", async (c) => {
   const groupId = c.req.query("groupId") ?? "";
   const productId = c.req.query("productId") ?? "";
   const availableOnly = c.req.query("available") === "1";
+  const sort = c.req.query("sort") ?? "latest";
   const page = readPage(c.req.query("page"));
   const catalogue = await loadCatalogue();
   if (!catalogue) return c.json({ error: "Could not load products." }, 500);
@@ -281,7 +304,7 @@ inventory.get("/", async (c) => {
       : nameMatches.length > 0
         ? scoped.or(`inventory_no.ilike.%${safe}%,product_id.in.(${nameMatches.join(",")})`)
         : scoped.ilike("inventory_no", `%${safe}%`);
-    return searched.order("created_at", { ascending: false }).order("id", { ascending: false });
+    return sortInventoryQuery(searched, sort);
   };
   if (exporting) {
     const loaded = await readAll<ItemRow>((from, to) => stockQuery().range(from, to));
