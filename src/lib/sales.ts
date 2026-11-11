@@ -138,6 +138,10 @@ export const returnLineSchema = z.object({
   quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
 });
 
+export const invoiceDiscountSchema = z.object({
+  discount: z.number().min(0, "Discount cannot be negative.").max(9_999_999, "Discount is too large."),
+});
+
 export const removePaymentSchema = z.object({
   reason: z.string().trim().min(1, "Enter a reason.").max(300, "Reason is too long."),
 });

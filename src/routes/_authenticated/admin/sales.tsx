@@ -515,6 +515,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               · {invoice.billedOn} · {billStatusLabel(invoice.status)}
             </p>
           ) : null}
+          {invoice && invoice.status !== "cancelled" ? <ChangeBillCustomer invoice={invoice} onSaved={refresh} /> : null}
         </div>
         {invoice ? (
           <div className="flex w-full max-w-sm flex-col items-stretch gap-3 print:hidden">
@@ -543,6 +544,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
       {bill.error instanceof Error ? <p className="text-sm text-destructive">{bill.error.message}</p> : null}
       {invoice?.remarks ? <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p> : null}
       {invoice && invoice.status !== "cancelled" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
+      {invoice && invoice.status !== "cancelled" ? <InvoiceDiscountForm invoice={invoice} onSaved={refresh} /> : null}
       {invoice ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -614,6 +616,130 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           {invoice.status !== "cancelled" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function InvoiceDiscountForm({ invoice, onSaved }: { invoice: InvoiceDetail; onSaved: () => void }) {
+  const existingDiscount = Number(invoice.lines.reduce((sum, line) => sum + line.discount, 0).toFixed(2));
+  const [discount, setDiscount] = useState(String(existingDiscount));
+  useEffect(() => setDiscount(String(existingDiscount)), [invoice.id, existingDiscount]);
+  const save = useMutation({
+    mutationFn: () => {
+      const amount = Number(discount);
+      if (!Number.isFinite(amount) || amount < 0) throw new Error("Enter a valid discount amount.");
+      return apiFetch<{ invoice: InvoiceDetail }>(`/api/invoices/${invoice.id}/discount`, {
+        method: "POST",
+        body: JSON.stringify({ discount: amount }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Bill discount saved.");
+      onSaved();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  return (
+    <form
+      className="flex flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        save.mutate();
+      }}
+    >
+      <Field label="Bill discount (₹)" id="bill-discount">
+        <Input
+          id="bill-discount"
+          type="number"
+          min="0"
+          step="0.01"
+          value={discount}
+          onChange={(event) => setDiscount(event.target.value)}
+          className="w-40"
+          disabled={invoice.lines.length === 0 || save.isPending}
+        />
+      </Field>
+      <Button type="submit" variant="outline" className="rounded-full" disabled={invoice.lines.length === 0 || save.isPending}>
+        {save.isPending ? "Saving…" : "Save discount"}
+      </Button>
+      <p className="w-full text-sm text-muted-foreground">Updates this bill’s total discount across its items. It cannot reduce the total below payments already collected.</p>
+    </form>
+  );
+}
+
+function ChangeBillCustomer({ invoice, onSaved }: { invoice: InvoiceDetail; onSaved: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const [customerId, setCustomerId] = useState("");
+  const deferred = useDeferredValue(q);
+  const customers = useQuery({
+    queryKey: ["customers", "change-bill-customer", deferred],
+    enabled: open && deferred.trim().length > 0,
+    queryFn: () => apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`),
+  });
+  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  const save = useMutation({
+    mutationFn: () => {
+      if (!customerId) throw new Error("Choose a customer first.");
+      return apiFetch<{ invoice: InvoiceDetail }>(`/api/invoices/${invoice.id}/customer`, {
+        method: "POST",
+        body: JSON.stringify({ customerId }),
+      });
+    },
+    onSuccess: () => {
+      toast.success("Bill customer updated.");
+      setOpen(false);
+      setQ("");
+      setCustomerId("");
+      onSaved();
+    },
+    onError: (error: Error) => toast.error(error.message),
+  });
+
+  if (!open) {
+    return (
+      <Button type="button" variant="ghost" size="sm" className="mt-1 h-auto px-0 text-sm" onClick={() => setOpen(true)}>
+        Change customer
+      </Button>
+    );
+  }
+  return (
+    <div className="mt-3 max-w-xl space-y-3 rounded-2xl border border-border bg-card p-4">
+      <Field label="Find customer" id={`change-bill-customer-${invoice.id}`}>
+        <Input
+          id={`change-bill-customer-${invoice.id}`}
+          value={q}
+          onChange={(event) => {
+            setQ(event.target.value);
+            setCustomerId("");
+          }}
+          placeholder="Name, phone, or book number"
+          autoFocus
+        />
+      </Field>
+      <div className="max-h-40 space-y-1 overflow-auto">
+        {matches.map((customer) => (
+          <button
+            key={customer.id}
+            type="button"
+            className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
+            onClick={() => setCustomerId(customer.id)}
+          >
+            {customerMatchLabel(customer)}
+          </button>
+        ))}
+        {q.trim() && customers.data && matches.length === 0 ? <p className="text-sm text-muted-foreground">No matching customer.</p> : null}
+        {customers.data && customers.data.total > customers.data.customers.length ? (
+          <p className="text-sm text-muted-foreground">Showing {customers.data.customers.length} of {customers.data.total}. Type more to narrow the search.</p>
+        ) : null}
+      </div>
+      <div className="flex gap-2">
+        <Button type="button" variant="outline" className="rounded-full" onClick={() => setOpen(false)}>Close</Button>
+        <Button type="button" className="rounded-full" disabled={!customerId || save.isPending} onClick={() => save.mutate()}>
+          {save.isPending ? "Saving…" : "Save customer"}
+        </Button>
+      </div>
     </div>
   );
 }
