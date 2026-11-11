@@ -64,8 +64,7 @@ export const barcodeSchema = z.object({
     .string()
     .trim()
     .min(1, "Enter a starting number.")
-    .max(40, "Starting number is too long.")
-    .regex(/^(\D*)(\d+)$/, "Enter an inventory number such as IN0021288."),
+    .max(40, "Starting number or product code is too long."),
   quantity: z
     .number()
     .int("Label count must be a whole number.")

@@ -610,9 +610,9 @@ function BarcodePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Enter the first inventory number (for example, IN0021288) and the number of consecutive
-        labels. Review the barcode numbers and prices below, then click Print when they look right.
-        Showing labels does not add or change stock.
+        Enter an inventory number (for example, IN0021288) for consecutive labels, or enter a
+        product code to print labels for that product's inventory. Review the inventory numbers
+        and prices below, then click Print. Showing labels does not add or change stock.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
@@ -622,7 +622,7 @@ function BarcodePanel() {
           print.mutate();
         }}
       >
-        <Field label="Starting barcode no." id="barcode-start">
+        <Field label="Starting inventory no. or product code" id="barcode-start">
           <Input
             id="barcode-start"
             value={starting}
@@ -631,7 +631,7 @@ function BarcodePanel() {
               setLabels([]);
             }}
             className="w-48"
-            placeholder="IN0021288"
+            placeholder="IN0021288 or SR-0002"
             required
           />
         </Field>
