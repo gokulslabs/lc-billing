@@ -625,18 +625,17 @@ function BarcodePanel() {
           />
         </Field>
         <Button type="submit" className="rounded-full" disabled={print.isPending}>
-          {print.isPending ? "Preparing preview…" : "Show barcodes"}
+          {print.isPending ? "Preparing preview…" : "Show"}
         </Button>
-        {labels.length > 0 ? (
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full"
-            onClick={() => window.print()}
-          >
-            Print
-          </Button>
-        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          disabled={labels.length === 0 || print.isPending}
+          onClick={() => window.print()}
+        >
+          Print
+        </Button>
         {labels.length > 0 ? (
           <ExportExcelButton
             filename="barcode-labels"
