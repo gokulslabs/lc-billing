@@ -6,7 +6,7 @@ import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
-import { billStatusLabel, shopToday } from "@/lib/sales";
+import { billStatusLabel, paymentModeLabel, shopToday } from "@/lib/sales";
 import { formatRupees } from "@/lib/products";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -57,7 +57,7 @@ type ReportId = (typeof REPORTS)[number]["id"];
 
 const REPORT_NOTES: Record<ReportId, string> = {
   invoices:
-    "One row per bill in the dates, excluding drafts and cancelled bills. Gross, discount and net are on the bill.",
+    "One row per bill in the dates, excluding drafts and cancelled bills. Gross, discount and net are on the bill. For legacy comparisons, use these bill-level discounts: the old site's date report was observed to show ₹0 discounts and gross as net; verify older totals against the bill details or this report.",
   items: "One row per line on those bills. This is the same list as Extract, without the customer.",
   extract: "The same lines as Items, with the customer name added.",
   collections: "Payments taken on the chosen date, one row per payment.",
@@ -514,13 +514,7 @@ async function loadReport(
         row.showroom || "",
         row.billNo,
         legacyReportDate(row.paidOn),
-        row.mode === "CASH"
-          ? "Cash"
-          : row.mode === "UPI"
-            ? "UPI"
-            : row.mode === "CARD"
-              ? "Card"
-              : "Not recorded",
+        paymentModeLabel(row.mode),
         row.remarks || "—",
         row.amount,
       ]),
@@ -544,13 +538,7 @@ async function loadReport(
         row.paidOn,
         row.billNo || "—",
         row.customerName || "—",
-        row.mode === "CASH"
-          ? "Cash"
-          : row.mode === "UPI"
-            ? "UPI"
-            : row.mode === "CARD"
-              ? "Card"
-              : "Not recorded",
+        paymentModeLabel(row.mode),
         row.showroom || "—",
         row.amount,
       ]),

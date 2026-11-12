@@ -4,7 +4,7 @@ import type { Employee } from "@/lib/employees";
 import { formatPurchaseNumbers, type InventoryItem, type PurchaseLine } from "@/lib/inventory";
 import type { ExcelSheet } from "@/lib/excel";
 import type { Product, ProductGroup } from "@/lib/products";
-import { billStatusLabel, shopToday, type InvoiceItem, type InvoiceSummary } from "@/lib/sales";
+import { billStatusLabel, paymentModeLabel, shopToday, type InvoiceItem, type InvoiceSummary } from "@/lib/sales";
 import type { StitchingGarment, StitchingProcess } from "@/lib/settings";
 import type { StitchingOrder } from "@/lib/stitching";
 
@@ -22,10 +22,7 @@ type PaymentRow = {
 };
 
 function paymentMode(mode: string | null): string {
-  if (mode === "CASH") return "Cash";
-  if (mode === "UPI") return "UPI";
-  if (mode === "CARD") return "Card";
-  return "Not recorded";
+  return paymentModeLabel(mode);
 }
 
 function receiptBlank(value: string): string {

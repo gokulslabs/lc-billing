@@ -6,11 +6,11 @@ import { apiFetch } from "@/lib/api";
 import { isUnrecordedName, type Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
-import { billStatusLabel, lineAmount, PAYMENT_MODES, shopToday, type BillPay, type BillSort } from "@/lib/sales";
+import { billStatusLabel, lineAmount, PAYMENT_MODES, paymentModeLabel, shopToday, type BillPay, type BillSort } from "@/lib/sales";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
-import { escapePrint, legacyDate, openLegacyPrint, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
+import { escapePrint, legacyDate, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/admin/sales")({
   head: () => ({
@@ -455,6 +456,8 @@ function SalesHome({
 
 function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
   const queryClient = useQueryClient();
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const receiptFrame = useRef<HTMLIFrameElement>(null);
   const bill = useQuery({
     queryKey: ["invoice", id],
     queryFn: () => apiFetch<{ invoice: InvoiceDetail }>(`/api/invoices/${id}`),
@@ -527,9 +530,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               <Button
                 variant="outline"
                 className="rounded-full"
-                onClick={() => {
-                  if (!openLegacyPrint(salesBillHtml(invoice))) toast.error("Allow pop-ups to print the bill.");
-                }}
+                onClick={() => setReceiptOpen(true)}
               >
                 Print
               </Button>
@@ -615,6 +616,26 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           </section>
           {invoice.status !== "cancelled" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
         </div>
+      ) : null}
+      {invoice ? (
+        <Dialog open={receiptOpen} onOpenChange={setReceiptOpen}>
+          <DialogContent className="flex max-h-[92vh] w-[min(96vw,38rem)] flex-col">
+            <DialogHeader>
+              <DialogTitle>Bill {invoice.billNo} preview</DialogTitle>
+              <DialogDescription>Review the receipt, then choose Print to send it to your printer.</DialogDescription>
+            </DialogHeader>
+            <iframe
+              ref={receiptFrame}
+              title={`Bill ${invoice.billNo} receipt preview`}
+              className="min-h-[55vh] w-full flex-1 rounded-md border bg-white"
+              srcDoc={salesBillDocument(invoice)}
+            />
+            <DialogFooter>
+              <Button variant="outline" className="rounded-full" onClick={() => setReceiptOpen(false)}>Close</Button>
+              <Button className="rounded-full" onClick={() => receiptFrame.current?.contentWindow?.print()}>Print bill</Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
     </div>
   );
@@ -932,10 +953,7 @@ function customerMatchLabel(customer: Customer): string {
 }
 
 function paymentLabel(mode: string | null): string {
-  if (mode === "CASH") return "Cash";
-  if (mode === "UPI") return "UPI";
-  if (mode === "CARD") return "Card";
-  return "Not recorded";
+  return paymentModeLabel(mode);
 }
 
 function ReturnLine({
@@ -1070,7 +1088,7 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
       </Field>
       <div className="space-y-2">
         <Label>How the customer is paying</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {PAYMENT_MODES.map((item) => (
             <Button
               key={item}
@@ -1284,13 +1302,25 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
 }
 
 function salesBillHtml(invoice: InvoiceDetail): string {
+  const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
+  const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
+  const collected = invoice.payments.reduce((sum, payment) => sum + payment.amount, 0);
   const lines = invoice.lines
     .map(
       (line, index) =>
         `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(line.productName)}</h4></td><td><h4>${plainAmount(line.amount)}</h4></td></tr>`,
     )
     .join("");
-  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>SALES BILL</h4></th></tr>${slipRow("BILL NO.", invoice.billNo)}${slipRow("DATE", legacyDate(invoice.billedOn))}${slipRow("NAME", invoice.customerName)}${slipRow("MOBILE NO.", invoice.customerPhone)}</tbody></table><table><thead><tr><th><h4>SL.NO.</h4></th><th><h4>PARTICULARS</h4></th><th><h4>AMOUNT</h4></th></tr></thead><tbody>${lines}</tbody></table><table><tbody>${slipRow("TOTAL AMOUNT", plainAmount(invoice.total))}</tbody></table><table><tbody><tr><th><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.</h4></th></tr></tbody></table>`;
+  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>SALES BILL</h4></th></tr>${slipRow("BILL NO.", invoice.billNo)}${slipRow("DATE", legacyDate(invoice.billedOn))}${slipRow("NAME", invoice.customerName)}${slipRow("MOBILE NO.", invoice.customerPhone)}</tbody></table><table><thead><tr><th><h4>SL.NO.</h4></th><th><h4>PARTICULARS</h4></th><th><h4>AMOUNT</h4></th></tr></thead><tbody>${lines}</tbody></table><table><tbody>${slipRow("GROSS", plainAmount(gross))}${slipRow("DISCOUNT", plainAmount(discount))}${slipRow("NET TOTAL", plainAmount(invoice.total))}${slipRow("PAID", plainAmount(collected))}${slipRow("BALANCE", plainAmount(invoice.balance))}</tbody></table><table><tbody><tr><th><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.</h4></th></tr></tbody></table>`;
+}
+
+function salesBillDocument(invoice: InvoiceDetail): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapePrint(invoice.billNo)}</title><style>
+    * { box-sizing: border-box; } body { width: 400px; max-width: 100%; margin: 0 auto; padding: 12px; color: #333; font-family: Arial, sans-serif; }
+    table { width: 100%; border-collapse: collapse; margin-top: 10px; } th, td { border: 1px solid #ddd; padding: 5px; text-align: left; vertical-align: top; }
+    .center { text-align: center; } h3 { margin: 12px 0 8px; font-size: 20px; } h4 { margin: 7px 0; font-size: 14px; font-weight: 500; }
+    @media print { body { width: 100%; padding: 0; } @page { margin: 8mm; } }
+  </style></head><body>${salesBillHtml(invoice)}</body></html>`;
 }
 
 function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
@@ -1546,8 +1576,8 @@ function DayClose() {
             load={async () => [
               {
                 name: "Day close",
-                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", "Cash", "UPI", "Card"],
-                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, day.modes.find((mode) => mode.mode === "CASH")?.amount ?? 0, day.modes.find((mode) => mode.mode === "UPI")?.amount ?? 0, day.modes.find((mode) => mode.mode === "CARD")?.amount ?? 0]],
+                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", ...PAYMENT_MODES.map(paymentModeLabel)],
+                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, ...PAYMENT_MODES.map((mode) => day.modes.find((item) => item.mode === mode)?.amount ?? 0)]],
               },
             ]}
           />
@@ -1561,7 +1591,7 @@ function DayClose() {
           <CloseCard label="Collected today" value={formatRupees(day.collected)} note="Money that came in, including older bills" />
           <CloseCard label="Still due on these bills" value={formatRupees(day.due)} note={`${day.unpaid} unpaid`} />
           {day.modes.map((mode) => (
-            <CloseCard key={mode.mode} label={mode.mode === "CASH" ? "Cash" : mode.mode === "UPI" ? "UPI" : "Card"} value={formatRupees(mode.amount)} note="Collected today" />
+            <CloseCard key={mode.mode} label={paymentModeLabel(mode.mode)} value={formatRupees(mode.amount)} note="Collected today" />
           ))}
         </div>
       ) : null}

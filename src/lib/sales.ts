@@ -7,8 +7,24 @@ export function billBook(billedOn: string): "new" | "old" {
   return billedOn < NEW_COUNTER_FROM ? "old" : "new";
 }
 
-export const PAYMENT_MODES = ["CASH", "UPI", "CARD"] as const;
+export const PAYMENT_MODES = ["CASH", "UPI", "CHEQUE", "IMPS/NEFT", "SALES RETURN", "CARD", "MAINTENANCE", "GIFT"] as const;
 export type PaymentMode = (typeof PAYMENT_MODES)[number];
+
+const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
+  CASH: "Cash",
+  UPI: "UPI",
+  CHEQUE: "Cheque",
+  "IMPS/NEFT": "IMPS/NEFT",
+  "SALES RETURN": "Sales return",
+  CARD: "Card",
+  MAINTENANCE: "Maintenance",
+  GIFT: "Gift",
+};
+
+export function paymentModeLabel(mode: string | null): string {
+  if (!mode) return "Not recorded";
+  return PAYMENT_MODE_LABELS[mode as PaymentMode] ?? "Not recorded";
+}
 
 export type InvoiceLine = {
   id: string;
@@ -153,7 +169,7 @@ export const cancelInvoiceSchema = z.object({
 export const paymentSchema = z.object({
   amount: z.number().positive("Enter an amount.").max(9_999_999, "Amount is too large."),
   paidOn: day,
-  mode: z.enum(PAYMENT_MODES, { message: "Choose cash, UPI, or card." }),
+  mode: z.enum(PAYMENT_MODES, { message: "Choose a payment method." }),
   showroom: z.string().trim().max(80, "Showroom is too long."),
 });
 
