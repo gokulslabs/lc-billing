@@ -37,7 +37,7 @@ type OrderRow = {
 const stitching = new Hono<Env>();
 stitching.use("*", requireShop);
 
-stitching.get("/admin/products", async (c) => {
+stitching.get("/products", async (c) => {
   const products = await loadProducts();
   if (!products) return c.json({ error: "Could not load garments." }, 500);
   return c.json({ products });
