@@ -3,7 +3,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { expenseColumns, LEDGER_COLUMNS, TARGET_COLUMNS, type ExpenseRecord } from "@/lib/expenses";
+import { expenseColumns, type ExpenseRecord } from "@/lib/expenses";
+import { expenseExportSheets } from "@/lib/expenses-export";
 import { shopToday } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,8 @@ export const Route = createFileRoute("/_authenticated/admin/expenses")({
 
 function ExpensesPage() {
   const [month, setMonth] = useState(shopToday().slice(0, 7));
+  const [exportFrom, setExportFrom] = useState(`${month}-01`);
+  const [exportTo, setExportTo] = useState(lastDay(month));
   const query = useQuery({ queryKey: ["expenses", month], queryFn: () => apiFetch<{ records: ExpenseRecord[] }>(`/api/expenses?month=${month}`) });
   const records = query.data?.records ?? [];
   const rows = (sheet: "ledger" | "target") => records.filter((r) => r.sheet === sheet);
@@ -24,11 +27,14 @@ function ExpensesPage() {
     <main className="mx-auto max-w-[110rem] space-y-6 p-4 md:p-10">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h1 className="text-3xl font-semibold md:text-4xl">Expenses</h1><p className="mt-2 text-sm text-muted-foreground">Monthly expenses, receipts, pending bills, and target payments.</p></div>
-        <div className="flex flex-wrap items-end gap-3"><label className="text-sm">Month<Input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="mt-1" /></label>
-          <ExportExcelButton filename={`${month}-expenses`} load={async () => [
-            { name: "Expenses", columns: ["DATE", ...LEDGER_COLUMNS], rows: rows("ledger").map((r) => [r.entryDate, ...r.details.map((v, i) => numericCell(v, [1, 2, 6, 7, 8, 9, 10].includes(i)))]) },
-            { name: "Target wise payment", columns: [...TARGET_COLUMNS], rows: rows("target").map((r, i) => [i + 1, r.entryDate, ...r.details.map((v, n) => numericCell(v, n >= 2))]) },
-          ]} />
+        <div className="flex flex-wrap items-end gap-3"><label className="text-sm">View month<Input type="month" value={month} onChange={(e) => { const next = e.target.value; setMonth(next); if (next) { setExportFrom(`${next}-01`); setExportTo(lastDay(next)); } }} className="mt-1" /></label>
+          <label className="text-sm">Export from<Input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)} className="mt-1" /></label>
+          <label className="text-sm">Export to<Input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)} className="mt-1" /></label>
+          <ExportExcelButton filename={`expenses-${exportFrom}-to-${exportTo}`} load={async () => {
+            if (!exportFrom || !exportTo || exportFrom > exportTo) throw new Error("Choose a valid export date range.");
+            const { records: selected } = await apiFetch<{ records: ExpenseRecord[] }>(`/api/expenses?from=${encodeURIComponent(exportFrom)}&to=${encodeURIComponent(exportTo)}`);
+            return expenseExportSheets(selected, exportFrom, exportTo);
+          }} />
         </div>
       </div>
       {query.isLoading ? <p>Loading expenses…</p> : null}
@@ -41,9 +47,7 @@ function ExpensesPage() {
   );
 }
 
-function numericCell(value: string, numeric: boolean): string | number {
-  return numeric && /^-?\d+(?:\.\d+)?$/.test(value.trim()) ? Number(value) : value;
-}
+function lastDay(month: string): string { const [year, number] = month.split("-").map(Number); return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10); }
 
 function ExpenseTable({ sheet, month, records }: { sheet: "ledger" | "target"; month: string; records: ExpenseRecord[] }) {
   const client = useQueryClient();

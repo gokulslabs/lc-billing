@@ -4,6 +4,7 @@ export type ExcelSheet = {
   name: string;
   columns: string[];
   rows: ExcelCell[][];
+  layout?: { startColumn: number; headerRow: number; title?: string; titleColumn?: number; titleEndColumn?: number };
 };
 
 const encoder = new TextEncoder();
@@ -44,26 +45,32 @@ export function downloadExcel(filename: string, sheets: ExcelSheet[]) {
 }
 
 function worksheet(sheet: ExcelSheet): string {
+  const start = sheet.layout?.startColumn ?? 0;
+  const headerRow = sheet.layout?.headerRow ?? 1;
   const width = Math.max(sheet.columns.length, ...sheet.rows.map((row) => row.length), 1);
   const columns = Array.from({ length: width }, (_, index) => sheet.columns[index] ?? "");
-  const header = columns.map((column, index) => stringCell(1, index, column, true)).join("");
+  const header = columns.map((column, index) => stringCell(headerRow, start + index, column, true)).join("");
   const body = sheet.rows
     .map((row, rowIndex) => {
-      const cells = columns.map((_, index) => cell(rowIndex + 2, index, row[index] ?? null)).join("");
-      return `<row r="${rowIndex + 2}">${cells}</row>`;
+      const rowNumber = headerRow + rowIndex + 1;
+      const cells = columns.map((_, index) => cell(rowNumber, start + index, row[index] ?? null)).join("");
+      return `<row r="${rowNumber}">${cells}</row>`;
     })
     .join("");
   const cols = columns
     .map((column, index) => {
-      const width = Math.min(40, Math.max(12, column.length + 2));
-      return `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`;
+      const columnWidth = Math.min(40, Math.max(12, column.length + 2));
+      return `<col min="${start + index + 1}" max="${start + index + 1}" width="${columnWidth}" customWidth="1"/>`;
     })
     .join("");
+  const titleColumn = sheet.layout?.titleColumn ?? start;
+  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === headerRow - 2 && sheet.layout?.title ? `<row r="${row}">${stringCell(row, titleColumn, sheet.layout.title, true)}</row>` : `<row r="${row}"/>`).join("");
+  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(headerRow - 2, titleColumn)}:${address(headerRow - 2, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+<sheetViews><sheetView workbookViewId="0"><pane ySplit="${headerRow}" topLeftCell="${address(headerRow + 1, start)}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
 <cols>${cols}</cols>
-<sheetData><row r="1">${header}</row>${body}</sheetData>
+<sheetData>${preHeader}<row r="${headerRow}">${header}</row>${body}</sheetData>${titleMerge}
 </worksheet>`;
 }
 
