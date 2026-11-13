@@ -13,7 +13,12 @@ import {
 import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/products";
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
-import { LabelSheet, type BarcodeLabel } from "@/components/app/BarcodeLabel";
+import {
+  LabelSheet,
+  openBarcodePrintWindow,
+  printBarcodeLabels,
+  type BarcodeLabel,
+} from "@/components/app/BarcodeLabel";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
@@ -62,6 +67,15 @@ export const Route = createFileRoute("/_authenticated/admin/inventory")({
   component: InventoryPage,
 });
 
+function printBarcodeSheet(labels: BarcodeLabel[]) {
+  const popup = openBarcodePrintWindow();
+  if (!popup) {
+    toast.error("Allow pop-ups to print barcode labels.");
+    return;
+  }
+  printBarcodeLabels(popup, labels);
+}
+
 function InventoryPage() {
   return (
     <div className="mx-auto max-w-[100rem] space-y-8 p-4 md:p-10">
@@ -107,6 +121,7 @@ function StockPanel() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
   const [stickers, setStickers] = useState<BarcodeLabel[]>([]);
+  const printWindowRef = useRef<Window | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stickers.length === 0) return;
@@ -120,9 +135,26 @@ function StockPanel() {
       apiFetch<{ labels: BarcodeLabel[] }>(
         `/api/inventory/barcodes?${new URLSearchParams({ starting: item.inventoryNo })}`,
       ),
-    onSuccess: (result) => setStickers(result.labels),
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (result) => {
+      const popup = printWindowRef.current;
+      printWindowRef.current = null;
+      if (popup && !popup.closed) printBarcodeLabels(popup, result.labels);
+    },
+    onError: (error: Error) => {
+      printWindowRef.current?.close();
+      printWindowRef.current = null;
+      toast.error(error.message);
+    },
   });
+  const printInventoryItem = (item: InventoryItem) => {
+    const popup = openBarcodePrintWindow();
+    if (!popup) {
+      toast.error("Allow pop-ups to print barcode labels.");
+      return;
+    }
+    printWindowRef.current = popup;
+    labelPreview.mutate(item);
+  };
   const groups = useQuery({
     queryKey: ["product-groups"],
     queryFn: () => apiFetch<{ groups: ProductGroup[] }>("/api/product-groups"),
@@ -269,7 +301,7 @@ function StockPanel() {
               type="button"
               variant="outline"
               className="rounded-full"
-              onClick={() => window.print()}
+              onClick={() => printBarcodeSheet(stickers)}
             >
               Print
             </Button>
@@ -298,10 +330,7 @@ function StockPanel() {
                   size="sm"
                   className="rounded-full"
                   disabled={labelPreview.isPending}
-                  onClick={() => {
-                    setStickers([]);
-                    labelPreview.mutate(item);
-                  }}
+                  onClick={() => printInventoryItem(item)}
                 >
                   Print
                 </Button>
@@ -381,10 +410,7 @@ function StockPanel() {
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
                             disabled={labelPreview.isPending}
-                            onSelect={() => {
-                              setStickers([]);
-                              labelPreview.mutate(item);
-                            }}
+                            onSelect={() => printInventoryItem(item)}
                           >
                             Print
                           </DropdownMenuItem>
@@ -670,7 +696,7 @@ function BarcodePanel() {
               print.mutate();
               return;
             }
-            window.print();
+            printBarcodeSheet(labels);
           }}
         >
           Print
