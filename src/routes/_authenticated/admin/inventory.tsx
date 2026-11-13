@@ -587,16 +587,10 @@ function StockDialog({
 
 function BarcodePanel() {
   const [starting, setStarting] = useState("");
-  const [quantity, setQuantity] = useState("1");
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
   const print = useMutation({
     mutationFn: () => {
-      const count = Number(quantity);
-      if (!Number.isFinite(count)) throw new Error("Enter how many labels.");
-      const params = new URLSearchParams({
-        starting: starting.trim(),
-        quantity: String(count),
-      });
+      const params = new URLSearchParams({ starting: starting.trim() });
       return apiFetch<{ numbers: string[]; labels: BarcodeLabel[] }>(
         `/api/inventory/barcodes?${params.toString()}`,
       );
@@ -608,9 +602,9 @@ function BarcodePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Enter an inventory number (for example, IN0021288) for consecutive labels, or enter a
-        product code to print labels for that product's inventory. Review the inventory numbers
-        and prices below, then click Print. Showing labels does not add or change stock.
+        Enter a product code to show a label for every available inventory number for that product,
+        or an inventory number to show that single label. Review the inventory numbers and prices
+        below, then click Print. Showing labels does not add or change stock.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
@@ -620,7 +614,7 @@ function BarcodePanel() {
           print.mutate();
         }}
       >
-        <Field label="Starting inventory no. or product code" id="barcode-start">
+        <Field label="Product code or inventory no." id="barcode-start">
           <Input
             id="barcode-start"
             value={starting}
@@ -629,23 +623,7 @@ function BarcodePanel() {
               setLabels([]);
             }}
             className="w-48"
-            placeholder="IN0021288 or SR-0002"
-            required
-          />
-        </Field>
-        <Field label="Quantity" id="barcode-count">
-          <Input
-            id="barcode-count"
-            value={quantity}
-            onChange={(event) => {
-              setQuantity(event.target.value);
-              setLabels([]);
-            }}
-            className="w-28"
-            type="number"
-            min={1}
-            max={200}
-            step={1}
+            placeholder="SR-0002 or IN0021288"
             required
           />
         </Field>

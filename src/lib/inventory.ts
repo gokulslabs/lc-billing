@@ -58,18 +58,23 @@ export const inventoryUpdateSchema = inventorySchema.extend({
   cost: cost.optional(),
 });
 
-export const barcodeSchema = z.object({
+export const barcodeStartingSchema = z.object({
   starting: z
     .string()
     .trim()
     .min(1, "Enter a starting number.")
     .max(40, "Starting number or product code is too long."),
+});
+
+export const barcodeQuantitySchema = z.object({
   quantity: z
     .number()
     .int("Label count must be a whole number.")
     .min(1, "Print at least one label.")
     .max(200, "Print at most 200 labels."),
 });
+
+export const barcodeSchema = barcodeStartingSchema.extend(barcodeQuantitySchema.shape);
 
 export type InventoryInput = z.infer<typeof inventorySchema>;
 
