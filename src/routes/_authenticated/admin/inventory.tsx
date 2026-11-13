@@ -492,7 +492,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "Choose the product and enter the quantity. If you have a receipt, enter the supplier, bill number and cost together. Pieces with a blank inventory number get one sticker each. Metres stay on one number."}
+              : "Choose an existing product and enter the quantity. The product code is shown for confirmation, and inventory numbers are assigned automatically. Pieces get one number each; metres stay on one number."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -537,28 +537,32 @@ function StockDialog({
           <p className="text-xs text-muted-foreground">
             Inventory numbers are assigned automatically when stock is added.
           </p>
-          <Field label="Supplier" id="stock-supplier">
-            <Input
-              id="stock-supplier"
-              value={supplierName}
-              onChange={(event) => setSupplierName(event.target.value)}
-            />
-          </Field>
-          <Field label="Supplier bill no." id="stock-supplier-bill">
-            <Input
-              id="stock-supplier-bill"
-              value={supplierBillNo}
-              onChange={(event) => setSupplierBillNo(event.target.value)}
-            />
-          </Field>
-          <Field label="Cost each" id="stock-cost">
-            <Input
-              id="stock-cost"
-              value={cost}
-              onChange={(event) => setCost(event.target.value)}
-              inputMode="decimal"
-            />
-          </Field>
+          {item ? (
+            <>
+              <Field label="Supplier" id="stock-supplier">
+                <Input
+                  id="stock-supplier"
+                  value={supplierName}
+                  onChange={(event) => setSupplierName(event.target.value)}
+                />
+              </Field>
+              <Field label="Supplier bill no." id="stock-supplier-bill">
+                <Input
+                  id="stock-supplier-bill"
+                  value={supplierBillNo}
+                  onChange={(event) => setSupplierBillNo(event.target.value)}
+                />
+              </Field>
+              <Field label="Cost each" id="stock-cost">
+                <Input
+                  id="stock-cost"
+                  value={cost}
+                  onChange={(event) => setCost(event.target.value)}
+                  inputMode="decimal"
+                />
+              </Field>
+            </>
+          ) : null}
           <Field label="Quantity" id="stock-qty">
             <Input
               id="stock-qty"
