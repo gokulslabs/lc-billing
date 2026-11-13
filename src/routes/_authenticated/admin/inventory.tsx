@@ -553,16 +553,16 @@ function StockDialog({
                   onChange={(event) => setSupplierBillNo(event.target.value)}
                 />
               </Field>
-              <Field label="Cost each" id="stock-cost">
-                <Input
-                  id="stock-cost"
-                  value={cost}
-                  onChange={(event) => setCost(event.target.value)}
-                  inputMode="decimal"
-                />
-              </Field>
             </>
           ) : null}
+          <Field label="Cost each (optional)" id="stock-cost">
+            <Input
+              id="stock-cost"
+              value={cost}
+              onChange={(event) => setCost(event.target.value)}
+              inputMode="decimal"
+            />
+          </Field>
           <Field label="Quantity" id="stock-qty">
             <Input
               id="stock-qty"

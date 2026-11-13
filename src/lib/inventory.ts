@@ -44,9 +44,8 @@ export const stockReceiptSchema = inventorySchema.extend({
   supplierBillNo: supplierBillNo.default(""),
   cost: cost.optional(),
 }).refine(
-  (receipt) => (!receipt.supplierName && !receipt.supplierBillNo && receipt.cost === undefined)
-    || Boolean(receipt.supplierName && receipt.supplierBillNo && receipt.cost !== undefined),
-  "Enter all three receipt details or leave them blank.",
+  (receipt) => Boolean(receipt.supplierName) === Boolean(receipt.supplierBillNo),
+  "Enter both supplier and supplier bill number, or leave both blank.",
 );
 
 export const inventoryUpdateSchema = inventorySchema.extend({
