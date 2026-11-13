@@ -71,19 +71,39 @@ inventory.get("/barcodes", async (c) => {
     quantity = parsedQuantity.data.quantity;
   }
   const starting = parsedStarting.data.starting;
+  const catalogue = await loadCatalogue();
+  if (!catalogue) return c.json({ error: "Could not load product prices." }, 500);
   let numbers: string[] = [];
   let items = new Map<string, string>();
   if (quantity === undefined) {
     const normalizedStarting = starting.toUpperCase();
     const exact = await supabaseAdmin
       .from("inventory_items")
-      .select("inventory_no, product_id")
+      .select("inventory_no, product_id, quantity")
       .eq("inventory_no", normalizedStarting)
       .maybeSingle();
     if (exact.error) return c.json({ error: "Could not look up that inventory number." }, 500);
-    if (exact.data) {
-      numbers = [exact.data.inventory_no];
-      items.set(exact.data.inventory_no, exact.data.product_id);
+    const matchedInventory = exact.data;
+    if (matchedInventory) {
+      const product = catalogue.get(matchedInventory.product_id);
+      const stockQuantity = Number(matchedInventory.quantity);
+      const labelCount = product?.unit === "NO" && Number.isInteger(stockQuantity)
+        ? Math.max(1, stockQuantity)
+        : 1;
+      if (labelCount > 200) {
+        return c.json({ error: `This inventory number has ${labelCount} pieces. Preview is limited to 200 labels at a time.` }, 400);
+      }
+      const sequence = barcodeNumbers(matchedInventory.inventory_no, labelCount);
+      numbers = sequence.length > 0 ? sequence : [matchedInventory.inventory_no];
+      const { data: existing, error } = await supabaseAdmin
+        .from("inventory_items")
+        .select("inventory_no, product_id")
+        .in("inventory_no", numbers);
+      if (error) return c.json({ error: "Could not verify these inventory labels." }, 500);
+      if ((existing ?? []).some((row) => row.product_id !== matchedInventory.product_id)) {
+        return c.json({ error: "The consecutive inventory numbers include another product." }, 409);
+      }
+      items = new Map(numbers.map((number) => [number, matchedInventory.product_id]));
     } else {
       const code = normalizedStarting;
       const { data: product, error: productError } = await supabaseAdmin
@@ -165,7 +185,6 @@ inventory.get("/barcodes", async (c) => {
     }
   }
 
-  const catalogue = await loadCatalogue();
   const labels = numbers.flatMap((number) => {
     const product = catalogue?.get(items.get(number) ?? "");
     return product ? [{ number, price: product.price }] : [];

@@ -603,8 +603,8 @@ function BarcodePanel() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Enter a product code to show a label for every available inventory number for that product,
-        or an inventory number to show that single label. Review the inventory numbers and prices
-        below, then click Print. Showing labels does not add or change stock.
+        or an inventory number to show labels based on that stock's quantity. Review the inventory
+        numbers and prices below, then click Print. Showing labels does not add or change stock.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
