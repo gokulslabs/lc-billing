@@ -458,6 +458,7 @@ function StockDialog({
       if (!productId) throw new Error("Choose a product.");
       if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
       const paid = cost.trim() === "" ? undefined : Number(cost);
+      if (!item && paid === undefined) throw new Error("Enter the cost.");
       if (paid !== undefined && !Number.isFinite(paid)) throw new Error("Enter the cost.");
       const body = JSON.stringify({
         productId,
@@ -492,7 +493,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "Choose an existing product and enter the quantity. The product code is shown for confirmation, and inventory numbers are assigned automatically. Pieces get one number each; metres stay on one number."}
+              : "Choose an existing product, then enter its cost and quantity. The product code is shown for confirmation, and inventory numbers are assigned automatically. Pieces get one number each; metres stay on one number."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -555,12 +556,13 @@ function StockDialog({
               </Field>
             </>
           ) : null}
-          <Field label="Cost each (optional)" id="stock-cost">
+          <Field label="Cost each" id="stock-cost">
             <Input
               id="stock-cost"
               value={cost}
               onChange={(event) => setCost(event.target.value)}
               inputMode="decimal"
+              required={!item}
             />
           </Field>
           <Field label="Quantity" id="stock-qty">

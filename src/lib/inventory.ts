@@ -42,7 +42,7 @@ const cost = z.number().min(0, "Cost cannot be negative.").max(9_999_999, "Cost 
 export const stockReceiptSchema = inventorySchema.extend({
   supplierName: supplierName.default(""),
   supplierBillNo: supplierBillNo.default(""),
-  cost: cost.optional(),
+  cost,
 }).refine(
   (receipt) => Boolean(receipt.supplierName) === Boolean(receipt.supplierBillNo),
   "Enter both supplier and supplier bill number, or leave both blank.",
