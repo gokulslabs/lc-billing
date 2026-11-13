@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { paymentStatus } from "@/lib/sales";
+import { isPendingPayment, paymentStatus } from "@/lib/sales";
 import {
   blankToNull,
   customerSchema,
@@ -271,14 +271,14 @@ async function customerTotals(customerId: string): Promise<{ billed: number; col
     readIn<{ amount: number | string }>(ids, (chunk, from, to) =>
       supabaseAdmin.from("invoice_lines").select("amount").in("invoice_id", chunk).order("id").range(from, to),
     ),
-    readIn<{ amount: number | string }>(ids, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("amount").in("invoice_id", chunk).order("id").range(from, to),
+    readIn<{ amount: number | string; mode: string | null }>(ids, (chunk, from, to) =>
+      supabaseAdmin.from("payments").select("amount, mode").in("invoice_id", chunk).order("id").range(from, to),
     ),
   ]);
   if (!lines || !payments) return null;
   return {
     billed: round2(lines.reduce((sum, row) => sum + Number(row.amount), 0)),
-    collected: round2(payments.reduce((sum, row) => sum + Number(row.amount), 0)),
+    collected: round2(payments.filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0)),
   };
 }
 
@@ -320,7 +320,7 @@ async function billDetails(rows: BillRow[]): Promise<Map<string, CustomerBill> |
     if (!bill) continue;
     const amount = round2(Number(payment.amount));
     bill.payments.push({ paidOn: payment.paid_on, amount, mode: payment.mode ?? null });
-    bill.collected = round2(bill.collected + amount);
+    if (!isPendingPayment(payment.mode)) bill.collected = round2(bill.collected + amount);
   }
   for (const bill of bills.values()) {
     bill.balance = round2(bill.total - bill.collected);

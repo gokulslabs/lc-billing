@@ -7,8 +7,8 @@ export function billBook(billedOn: string): "new" | "old" {
   return billedOn < NEW_COUNTER_FROM ? "old" : "new";
 }
 
-export const PAYMENT_MODES = ["CASH", "UPI", "CHEQUE", "IMPS/NEFT", "SALES RETURN", "CARD", "MAINTENANCE", "GIFT"] as const;
-export type PaymentMode = (typeof PAYMENT_MODES)[number];
+export const PAYMENT_MODES = ["CASH", "UPI", "CHEQUE", "IMPS/NEFT", "SALES RETURN", "CARD", "PENDING", "GIFT"] as const;
+export type PaymentMode = (typeof PAYMENT_MODES)[number] | "MAINTENANCE";
 
 const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
   CASH: "Cash",
@@ -17,6 +17,8 @@ const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
   "IMPS/NEFT": "IMPS/NEFT",
   "SALES RETURN": "Sales return",
   CARD: "Card",
+  PENDING: "Pending",
+  // Keep old entries readable after the option is removed from new collections.
   MAINTENANCE: "Maintenance",
   GIFT: "Gift",
 };
@@ -24,6 +26,10 @@ const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
 export function paymentModeLabel(mode: string | null): string {
   if (!mode) return "Not recorded";
   return PAYMENT_MODE_LABELS[mode as PaymentMode] ?? "Not recorded";
+}
+
+export function isPendingPayment(mode: string | null | undefined): boolean {
+  return mode === "PENDING";
 }
 
 export type InvoiceLine = {

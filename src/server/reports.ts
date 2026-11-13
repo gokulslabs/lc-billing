@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
 import { billTotals, moneyBalance, monthStart, pendingTotals, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
-import { billBook, paymentStatus, shopToday } from "@/lib/sales";
+import { billBook, isPendingPayment, paymentStatus, shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -88,7 +88,7 @@ reports.get("/collections", async (c) => {
       .range(from, to),
   );
   if (!payments) return c.json({ error: "Could not load collections." }, 500);
-  const rows = payments.rows;
+  const rows = payments.rows.filter((row) => !isPendingPayment(row.mode));
   const invoices = await loadInvoiceMap(rows.map((row) => row.invoice_id));
   if (!invoices) return c.json({ error: "Could not load bills." }, 500);
   return c.json({
@@ -117,12 +117,13 @@ reports.get("/showrooms", async (c) => {
       .range(from, to),
   );
   if (!payments) return c.json({ error: "Could not load collections." }, 500);
-  const invoices = await loadInvoiceMap(payments.rows.map((row) => row.invoice_id));
+  const rows = payments.rows.filter((row) => !isPendingPayment(row.mode));
+  const invoices = await loadInvoiceMap(rows.map((row) => row.invoice_id));
   if (!invoices) return c.json({ error: "Could not load bills." }, 500);
   const customers = await loadCustomers([...invoices.values()].map((row) => row.customer_id));
   if (!customers) return c.json({ error: "Could not load customers." }, 500);
   return c.json({
-    payments: payments.rows.map((row) => {
+    payments: rows.map((row) => {
       const invoice = invoices.get(row.invoice_id);
       return {
         paidOn: row.paid_on,
@@ -154,7 +155,7 @@ reports.get("/pending", async (c) => {
   if (!lines || !payments) return c.json({ error: "Could not load pending bills." }, 500);
   const pending = invoices.flatMap((invoice) => {
     const invoiced = billTotals(lines.filter((line) => line.invoice_id === invoice.id).map((line) => Number(line.amount))).net;
-    const paidRows = payments.filter((row) => row.invoice_id === invoice.id);
+    const paidRows = payments.filter((row) => row.invoice_id === invoice.id && !isPendingPayment(row.mode));
     const paid = paidRows.reduce((total, row) => total + Math.round(Number(row.amount) * 100), 0) / 100;
     const balance = moneyBalance(invoiced, paid);
     if (balance <= 0) return [];
@@ -353,7 +354,7 @@ async function loadPayments(ids: string[]): Promise<PaymentRow[] | null> {
   return readIn<PaymentRow>(ids, (chunk, from, to) =>
     supabaseAdmin
       .from("payments")
-      .select("invoice_id, amount, paid_on, showroom")
+      .select("invoice_id, amount, paid_on, showroom, mode")
       .in("invoice_id", chunk)
       .order("id")
       .range(from, to),

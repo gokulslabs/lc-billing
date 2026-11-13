@@ -68,7 +68,7 @@ function SalesPage() {
     <SalesHome
       onOpen={setBillId}
       onNew={() => setList(false)}
-      startTab={opening === "due" ? "due" : opening === "close" ? "close" : "bills"}
+      startTab={opening === "due" ? "due" : opening === "pending" ? "pending" : opening === "close" ? "close" : "bills"}
       books={books}
     />
   );
@@ -319,6 +319,7 @@ function SalesHome({
           <TabsTrigger value="bills">Bills</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="due">Who owes</TabsTrigger>
+          <TabsTrigger value="pending">Pending</TabsTrigger>
           <TabsTrigger value="unrecorded">Not recorded</TabsTrigger>
           <TabsTrigger value="close">Day close</TabsTrigger>
         </TabsList>
@@ -446,6 +447,9 @@ function SalesHome({
         <TabsContent value="unrecorded">
           <UnrecordedBills onOpen={onOpen} />
         </TabsContent>
+        <TabsContent value="pending">
+          <PendingPromises onOpen={onOpen} />
+        </TabsContent>
         <TabsContent value="close">
           <DayClose />
         </TabsContent>
@@ -468,11 +472,12 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
     void queryClient.invalidateQueries({ queryKey: ["invoices"] });
     void queryClient.invalidateQueries({ queryKey: ["invoice-items"] });
     void queryClient.invalidateQueries({ queryKey: ["inventory"] });
+    void queryClient.invalidateQueries({ queryKey: ["invoice-pending-promises"] });
   };
 
   return (
     <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <Button
             variant="outline"
@@ -596,7 +601,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
       {invoice ? (
         <div className="grid gap-6 md:grid-cols-2">
           <section className="space-y-3">
-            <h2 className="text-lg font-semibold">Collection</h2>
+            <h2 className="text-lg font-semibold">Payment history</h2>
             <p className="text-sm text-muted-foreground">
               Gross {formatRupees(invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0))} · Discount{" "}
               {formatRupees(invoice.lines.reduce((sum, line) => sum + line.discount, 0))} · Balance {formatRupees(invoice.balance)}
@@ -604,15 +609,15 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             {invoice.payments.map((payment) => (
               <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
                 <p>
-                  {payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
+                  {payment.mode === "PENDING" ? `Pending until ${slashDate(payment.paidOn)}` : payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
                   {payment.showroom ? ` · ${payment.showroom}` : ""}
                 </p>
-                {invoice.status !== "cancelled" && payment.paidOn === shopToday() ? (
+                {invoice.status !== "cancelled" && (payment.mode === "PENDING" || payment.paidOn === shopToday()) ? (
                   <RemovePayment invoiceId={invoice.id} paymentId={payment.id} onSaved={refresh} />
                 ) : null}
               </div>
             ))}
-            {invoice.payments.length === 0 ? <p className="text-sm text-muted-foreground">No collection yet.</p> : null}
+            {invoice.payments.length === 0 ? <p className="text-sm text-muted-foreground">No payments or pending promises yet.</p> : null}
           </section>
           {invoice.status !== "cancelled" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
         </div>
@@ -956,6 +961,11 @@ function paymentLabel(mode: string | null): string {
   return paymentModeLabel(mode);
 }
 
+function monthEndDate(value: string): string {
+  const [year, month] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+}
+
 function ReturnLine({
   line,
   invoiceId,
@@ -1064,7 +1074,7 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
     },
     onSuccess: () => {
       setAmount("");
-      toast.success("Collection saved.");
+      toast.success(mode === "PENDING" ? "Pending payment recorded." : "Collection saved.");
       onSaved();
     },
     onError: (error: Error) => toast.error(error.message),
@@ -1076,18 +1086,21 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
       onSubmit={(event) => {
         event.preventDefault();
         const value = Number(amount);
-        if (!window.confirm(`Collect ${formatRupees(Number.isFinite(value) ? value : 0)} on bill ${billNo}?`)) return;
+        const prompt = mode === "PENDING"
+          ? `Record ${formatRupees(Number.isFinite(value) ? value : 0)} as pending until ${slashDate(paidOn)} on bill ${billNo}?`
+          : `Collect ${formatRupees(Number.isFinite(value) ? value : 0)} on bill ${billNo}?`;
+        if (!window.confirm(prompt)) return;
         save.mutate();
       }}
     >
       <Field label="Amount" id="collect-amount">
         <Input id="collect-amount" value={amount} onChange={(event) => setAmount(event.target.value)} required />
       </Field>
-      <Field label="Date" id="collect-date">
+      <Field label={mode === "PENDING" ? "Expected payment date" : "Date"} id="collect-date">
         <Input id="collect-date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} required />
       </Field>
       <div className="space-y-2">
-        <Label>How the customer is paying</Label>
+        <Label>Payment method or pay later</Label>
         <div className="flex flex-wrap gap-2">
           {PAYMENT_MODES.map((item) => (
             <Button
@@ -1095,18 +1108,23 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
               type="button"
               variant={mode === item ? "default" : "outline"}
               className="rounded-full"
-              onClick={() => setMode(item)}
+              onClick={() => {
+                setMode(item);
+                if (item === "PENDING") setPaidOn(monthEndDate(shopToday()));
+                else if (mode === "PENDING") setPaidOn(shopToday());
+              }}
             >
               {paymentLabel(item)}
             </Button>
           ))}
         </div>
       </div>
-      <Field label="Note" id="collect-showroom">
+      <Field label={mode === "PENDING" ? "Note (optional)" : "Note"} id="collect-showroom">
         <Input id="collect-showroom" value={showroom} onChange={(event) => setShowroom(event.target.value)} maxLength={80} />
       </Field>
+      {mode === "PENDING" ? <p className="text-xs text-muted-foreground">This records a due date only. It does not count as money collected or reduce the bill balance.</p> : null}
       <Button type="submit" className="rounded-full" disabled={save.isPending}>
-        {save.isPending ? "Saving…" : "Collect"}
+        {save.isPending ? "Saving…" : mode === "PENDING" ? "Record pending" : "Collect"}
       </Button>
     </form>
   );
@@ -1304,7 +1322,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
 function salesBillHtml(invoice: InvoiceDetail): string {
   const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
   const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
-  const collected = invoice.payments.reduce((sum, payment) => sum + payment.amount, 0);
+  const collected = invoice.payments.filter((payment) => payment.mode !== "PENDING").reduce((sum, payment) => sum + payment.amount, 0);
   const lines = invoice.lines
     .map(
       (line, index) =>
@@ -1554,12 +1572,71 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
   );
 }
 
+function PendingPromises({ onOpen }: { onOpen: (id: string) => void }) {
+  const pending = useQuery({
+    queryKey: ["invoice-pending-promises"],
+    queryFn: () => apiFetch<{ promises: { id: string; invoiceId: string; billNo: string; customerId: string; customerName: string; dueOn: string; amount: number; balance: number; note: string | null }[] }>("/api/invoices/pending"),
+  });
+  const rows = pending.data?.promises ?? [];
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-muted-foreground">Amounts customers have promised to pay later. These remain outstanding until an actual collection is recorded.</p>
+      <ExportExcelButton
+        filename="pending-payments"
+        load={async () => {
+          const data = await apiFetch<{ promises: typeof rows }>("/api/invoices/pending");
+          return [{
+            name: "Pending payments",
+            columns: ["Due date", "Bill no.", "Customer", "Pending amount", "Bill balance", "Note"],
+            rows: data.promises.map((row) => [row.dueOn, row.billNo, row.customerName, row.amount, row.balance, row.note ?? ""]),
+          }];
+        }}
+      />
+      {pending.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {pending.error instanceof Error ? <p className="text-sm text-destructive">{pending.error.message}</p> : null}
+      {!pending.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No pending payment promises.</p> : null}
+      {rows.length > 0 ? (
+        <div className="rounded-2xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Due date</TableHead>
+                <TableHead>Bill no.</TableHead>
+                <TableHead>Customer</TableHead>
+                <TableHead>Pending amount</TableHead>
+                <TableHead>Bill balance</TableHead>
+                <TableHead>Note</TableHead>
+                <TableHead />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {rows.map((row) => (
+                <TableRow key={row.id}>
+                  <TableCell className="whitespace-nowrap">{slashDate(row.dueOn)}</TableCell>
+                  <TableCell>{row.billNo}</TableCell>
+                  <TableCell>
+                    <Link to="/admin/customers/$customerId" params={{ customerId: row.customerId }} className="hover:underline">{row.customerName}</Link>
+                  </TableCell>
+                  <TableCell>{formatRupees(row.amount)}</TableCell>
+                  <TableCell>{formatRupees(row.balance)}</TableCell>
+                  <TableCell>{row.note || "—"}</TableCell>
+                  <TableCell className="text-right"><Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(row.invoiceId)}>Open bill</Button></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function DayClose() {
   const [date, setDate] = useState(shopToday());
   const close = useQuery({
     queryKey: ["day-close", date],
     queryFn: () =>
-      apiFetch<{ date: string; bills: number; billed: number; collected: number; due: number; unpaid: number; modes: { mode: string; amount: number }[] }>(
+      apiFetch<{ date: string; bills: number; billed: number; collected: number; due: number; pending: number; unpaid: number; modes: { mode: string; amount: number }[] }>(
         `/api/invoices/close?date=${date}`,
       ),
   });
@@ -1576,8 +1653,8 @@ function DayClose() {
             load={async () => [
               {
                 name: "Day close",
-                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", ...PAYMENT_MODES.map(paymentModeLabel)],
-                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, ...PAYMENT_MODES.map((mode) => day.modes.find((item) => item.mode === mode)?.amount ?? 0)]],
+                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", "Pending promised", ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map(paymentModeLabel)],
+                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, day.pending, ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map((mode) => day.modes.find((item) => item.mode === mode)?.amount ?? 0)]],
               },
             ]}
           />
@@ -1590,6 +1667,7 @@ function DayClose() {
           <CloseCard label="Billed" value={formatRupees(day.billed)} note={`${day.bills} bills`} />
           <CloseCard label="Collected today" value={formatRupees(day.collected)} note="Money that came in, including older bills" />
           <CloseCard label="Still due on these bills" value={formatRupees(day.due)} note={`${day.unpaid} unpaid`} />
+          <CloseCard label="Pending promises due" value={formatRupees(day.pending)} note="Due on the selected date; not counted as collected" />
           {day.modes.map((mode) => (
             <CloseCard key={mode.mode} label={paymentModeLabel(mode.mode)} value={formatRupees(mode.amount)} note="Collected today" />
           ))}

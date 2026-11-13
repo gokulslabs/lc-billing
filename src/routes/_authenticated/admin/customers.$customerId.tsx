@@ -159,7 +159,7 @@ function CustomerHistoryPage() {
                 )}
                 {bill.payments.map((payment, index) => (
                   <p key={`${payment.paidOn}-${index}`} className="mt-2 text-sm text-muted-foreground">
-                    Paid {payment.paidOn} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
+                    {payment.mode === "PENDING" ? `Pending until ${slashDate(payment.paidOn)}` : `Paid ${payment.paidOn}`} · {payment.mode ?? "Not recorded"} · {formatRupees(payment.amount)}
                   </p>
                 ))}
               </article>
@@ -229,4 +229,9 @@ function Summary({ label, value }: { label: string; value: string }) {
 
 function formatQty(value: number): string {
   return new Intl.NumberFormat("en-IN", { maximumFractionDigits: 3 }).format(value);
+}
+
+function slashDate(value: string): string {
+  const [year, month, date] = value.split("-");
+  return `${date}/${month}/${year}`;
 }

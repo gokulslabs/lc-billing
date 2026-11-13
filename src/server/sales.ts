@@ -17,6 +17,7 @@ import {
   nextBillNo,
   selectBills,
   PAYMENT_MODES,
+  isPendingPayment,
   paymentSchema,
   paymentStatus,
   priceLine,
@@ -198,6 +199,40 @@ sales.get("/due", async (c) => {
   return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books, balance });
 });
 
+sales.get("/pending", async (c) => {
+  const entries = await readAll<{ id: string; invoice_id: string; amount: number | string; paid_on: string; showroom: string | null }>((from, to) =>
+    supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, showroom").eq("mode", "PENDING").order("paid_on").range(from, to),
+  );
+  if (!entries) return c.json({ error: "Could not load pending promises." }, 500);
+  const invoiceIds = [...new Set(entries.rows.map((row) => row.invoice_id))];
+  if (invoiceIds.length === 0) return c.json({ promises: [] });
+  const invoices = await readIn<InvoiceRow>(invoiceIds, (chunk, from, to) =>
+    supabaseAdmin.from("invoices").select("id, bill_no, customer_id, billed_on, status, remarks").in("id", chunk).neq("status", "cancelled").range(from, to),
+  );
+  if (!invoices) return c.json({ error: "Could not load pending bills." }, 500);
+  const summaries = await summarize(invoices);
+  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+  const byInvoice = new Map(summaries.invoices.map((row) => [row.id, row]));
+  const names = await customerNames(invoices.map((row) => row.customer_id));
+  if (!names) return c.json({ error: "Could not load pending customers." }, 500);
+  const promises = entries.rows.flatMap((row) => {
+    const bill = byInvoice.get(row.invoice_id);
+    if (!bill) return [];
+    return [{
+      id: row.id,
+      invoiceId: bill.id,
+      billNo: bill.billNo,
+      customerId: bill.customerId,
+      customerName: names.get(bill.customerId) ?? "",
+      dueOn: row.paid_on,
+      amount: round2(Number(row.amount)),
+      balance: bill.balance,
+      note: row.showroom,
+    }];
+  }).sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+  return c.json({ promises });
+});
+
 sales.get("/close", async (c) => {
   const date = (c.req.query("date") ?? shopToday()).trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: "Enter a valid date." }, 400);
@@ -221,17 +256,19 @@ sales.get("/close", async (c) => {
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
   const billed = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.total, 0));
   const stillDue = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.balance, 0));
-  const modes = PAYMENT_MODES.map((mode) => ({
+  const modes = PAYMENT_MODES.filter((mode) => !isPendingPayment(mode)).map((mode) => ({
     mode,
     amount: round2(payments.rows.filter((row) => row.mode === mode).reduce((sum, row) => sum + Number(row.amount), 0)),
   }));
-  const collected = round2(payments.rows.reduce((sum, row) => sum + Number(row.amount), 0));
+  const pending = round2(payments.rows.filter((row) => isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
+  const collected = round2(payments.rows.filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
   return c.json({
     date,
     bills: summaries.invoices.length,
     billed,
     collected,
     due: stillDue,
+    pending,
     unpaid: summaries.invoices.filter((invoice) => invoice.balance > 0.001).length,
     modes,
   });
@@ -475,9 +512,9 @@ sales.post("/:id/discount", async (c) => {
   const discountCents = Math.round(parsed.data.discount * 100);
   if (discountCents > grossTotalCents) return c.json({ error: "Discount cannot be more than the gross amount." }, 400);
 
-  const payments = await supabaseAdmin.from("payments").select("amount").eq("invoice_id", invoice.id);
+  const payments = await supabaseAdmin.from("payments").select("amount, mode").eq("invoice_id", invoice.id);
   if (payments.error) return c.json({ error: "Could not check bill payments." }, 500);
-  const collectedCents = Math.round((payments.data ?? []).reduce((sum, payment) => sum + Number(payment.amount), 0) * 100);
+  const collectedCents = Math.round((payments.data ?? []).filter((payment) => !isPendingPayment(payment.mode)).reduce((sum, payment) => sum + Number(payment.amount), 0) * 100);
   const netCents = grossTotalCents - discountCents;
   if (collectedCents > netCents) return c.json({ error: "The new total cannot be less than the amount already collected." }, 400);
 
@@ -655,8 +692,8 @@ async function summarize(rows: InvoiceRow[]): Promise<{ invoices: InvoiceSummary
     readIn<{ invoice_id: string; quantity: number | string; rate: number | string; amount: number | string }>(ids, (chunk, start, end) =>
       supabaseAdmin.from("invoice_lines").select("invoice_id, quantity, rate, amount").in("invoice_id", chunk).order("id").range(start, end),
     ),
-    readIn<{ invoice_id: string; amount: number | string }>(ids, (chunk, start, end) =>
-      supabaseAdmin.from("payments").select("invoice_id, amount").in("invoice_id", chunk).order("id").range(start, end),
+    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(ids, (chunk, start, end) =>
+      supabaseAdmin.from("payments").select("invoice_id, amount, mode").in("invoice_id", chunk).order("id").range(start, end),
     ),
     customerNames(rows.map((row) => row.customer_id)),
   ]);
@@ -697,7 +734,7 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
   });
   const paymentRows = ((payments.data ?? []) as PaymentRow[]).map(toPayment);
   const total = round2(mapped.reduce((sum, line) => sum + line.amount, 0));
-  const collected = round2(paymentRows.reduce((sum, payment) => sum + payment.amount, 0));
+  const collected = round2(paymentRows.filter((payment) => !isPendingPayment(payment.mode)).reduce((sum, payment) => sum + payment.amount, 0));
   return {
     invoice: {
       ...toSummary(invoice, customer.data?.name ?? "", total, collected),
@@ -713,12 +750,12 @@ async function syncInvoiceStatus(id: string): Promise<void> {
   if (!invoice || invoice.status === "cancelled") return;
   const [lines, payments] = await Promise.all([
     supabaseAdmin.from("invoice_lines").select("amount").eq("invoice_id", id),
-    supabaseAdmin.from("payments").select("amount").eq("invoice_id", id),
+    supabaseAdmin.from("payments").select("amount, mode").eq("invoice_id", id),
   ]);
   if (lines.error || payments.error) return;
   const lineCount = (lines.data ?? []).length;
   const net = round2((lines.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
-  const collected = round2((payments.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
+  const collected = round2((payments.data ?? []).filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
   const next = lineCount === 0 && collected <= 0.001 ? "draft" : paymentStatus(net, collected, "open");
   if (next === invoice.status) return;
   await supabaseAdmin.from("invoices").update({ status: next }).eq("id", id).neq("status", "cancelled");
@@ -846,9 +883,10 @@ function sumFigures(rows: { invoice_id: string; quantity: number | string; rate:
   return totals;
 }
 
-function sumAmounts(rows: { invoice_id: string; amount: number | string }[]): Map<string, number> {
+function sumAmounts(rows: { invoice_id: string; amount: number | string; mode: string | null }[]): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
+    if (isPendingPayment(row.mode)) continue;
     totals.set(row.invoice_id, round2((totals.get(row.invoice_id) ?? 0) + Number(row.amount)));
   }
   return totals;
@@ -893,7 +931,7 @@ function toLine(row: LineRow, product: ProductInfo, status: string): InvoiceLine
 }
 
 function toPayment(row: PaymentRow): InvoicePayment {
-  const mode = PAYMENT_MODES.find((item) => item === row.mode) ?? null;
+  const mode = PAYMENT_MODES.find((item) => item === row.mode) ?? (row.mode === "MAINTENANCE" ? "MAINTENANCE" : null);
   return {
     id: row.id,
     amount: Number(row.amount),
