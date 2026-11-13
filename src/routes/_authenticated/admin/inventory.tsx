@@ -424,7 +424,6 @@ function StockDialog({
 }) {
   const [productQuery, setProductQuery] = useState("");
   const [productId, setProductId] = useState(item?.productId ?? "");
-  const [inventoryNo, setInventoryNo] = useState(item?.inventoryNo ?? "");
   const [quantity, setQuantity] = useState(item ? String(item.quantity) : "");
   const [supplierName, setSupplierName] = useState("");
   const [supplierBillNo, setSupplierBillNo] = useState("");
@@ -435,7 +434,6 @@ function StockDialog({
     setSeen(mode);
     setProductQuery("");
     setProductId(item?.productId ?? "");
-    setInventoryNo(item?.inventoryNo ?? "");
     setQuantity(item ? String(item.quantity) : "");
     setSupplierName("");
     setSupplierBillNo("");
@@ -463,7 +461,7 @@ function StockDialog({
       if (paid !== undefined && !Number.isFinite(paid)) throw new Error("Enter the cost.");
       const body = JSON.stringify({
         productId,
-        inventoryNo,
+        inventoryNo: item?.inventoryNo ?? "",
         quantity: amount,
         supplierName: supplierName.trim(),
         supplierBillNo: supplierBillNo.trim(),
@@ -536,15 +534,9 @@ function StockDialog({
               {selected.groupName} · {unitLabel(selected.unit)} · {formatRupees(selected.price)}
             </p>
           ) : null}
-          <Field label="Inventory no." id="stock-number">
-            <Input
-              id="stock-number"
-              value={inventoryNo}
-              onChange={(event) => setInventoryNo(event.target.value)}
-              maxLength={40}
-              required={item !== null}
-            />
-          </Field>
+          <p className="text-xs text-muted-foreground">
+            Inventory numbers are assigned automatically when stock is added.
+          </p>
           <Field label="Supplier" id="stock-supplier">
             <Input
               id="stock-supplier"
