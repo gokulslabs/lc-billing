@@ -34,8 +34,8 @@ function ExpensesPage() {
       {query.isLoading ? <p>Loading expenses…</p> : null}
       {query.error instanceof Error ? <p className="text-destructive">{query.error.message}</p> : null}
       <Tabs defaultValue="ledger"><TabsList><TabsTrigger value="ledger">Expenses and income</TabsTrigger><TabsTrigger value="target">Target wise payment</TabsTrigger></TabsList>
-        <TabsContent value="ledger" className="mt-5"><ExpenseTable sheet="ledger" month={month} records={rows("ledger")} /></TabsContent>
-        <TabsContent value="target" className="mt-5"><ExpenseTable sheet="target" month={month} records={rows("target")} /></TabsContent>
+        <TabsContent value="ledger" className="mt-5"><ExpenseTable key={`ledger-${month}`} sheet="ledger" month={month} records={rows("ledger")} /></TabsContent>
+        <TabsContent value="target" className="mt-5"><ExpenseTable key={`target-${month}`} sheet="target" month={month} records={rows("target")} /></TabsContent>
       </Tabs>
     </main>
   );
