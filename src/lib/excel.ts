@@ -1,10 +1,22 @@
-export type ExcelCell = string | number | null;
+export type ExcelCell = string | number | null | { date: string };
 
 export type ExcelSheet = {
   name: string;
   columns: string[];
   rows: ExcelCell[][];
-  layout?: { startColumn: number; headerRow: number; title?: string; titleRow?: number; titleColumn?: number; titleEndColumn?: number };
+  layout?: {
+    startColumn: number;
+    headerRow: number;
+    title?: ExcelCell;
+    titleRow?: number;
+    titleColumn?: number;
+    titleEndColumn?: number;
+    titleEndRow?: number;
+    columnWidths?: number[];
+    headerStyles?: ("red" | "green" | "default")[];
+    rowStyles?: Record<number, "total" | "handCash">;
+    grid?: boolean;
+  };
 };
 
 const encoder = new TextEncoder();
@@ -49,24 +61,26 @@ function worksheet(sheet: ExcelSheet): string {
   const headerRow = sheet.layout?.headerRow ?? 1;
   const width = Math.max(sheet.columns.length, ...sheet.rows.map((row) => row.length), 1);
   const columns = Array.from({ length: width }, (_, index) => sheet.columns[index] ?? "");
-  const header = columns.map((column, index) => stringCell(headerRow, start + index, column, true)).join("");
+  const header = columns.map((column, index) => stringCell(headerRow, start + index, column, sheet.layout?.headerStyles?.[index] === "red" ? 4 : sheet.layout?.headerStyles?.[index] === "green" ? 5 : 1)).join("");
   const body = sheet.rows
     .map((row, rowIndex) => {
       const rowNumber = headerRow + rowIndex + 1;
-      const cells = columns.map((_, index) => cell(rowNumber, start + index, row[index] ?? null)).join("");
+      const rowStyle = sheet.layout?.rowStyles?.[rowIndex];
+      const style = rowStyle === "total" ? 2 : rowStyle === "handCash" ? 3 : sheet.layout?.grid ? 6 : 0;
+      const cells = columns.map((_, index) => cell(rowNumber, start + index, row[index] ?? null, style)).join("");
       return `<row r="${rowNumber}">${cells}</row>`;
     })
     .join("");
   const cols = columns
     .map((column, index) => {
-      const columnWidth = Math.min(40, Math.max(12, column.length + 2));
+      const columnWidth = sheet.layout?.columnWidths?.[index] ?? Math.min(40, Math.max(12, column.length + 2));
       return `<col min="${start + index + 1}" max="${start + index + 1}" width="${columnWidth}" customWidth="1"/>`;
     })
     .join("");
   const titleColumn = sheet.layout?.titleColumn ?? start;
   const titleRow = sheet.layout?.titleRow ?? headerRow - 2;
-  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === titleRow && sheet.layout?.title ? `<row r="${row}">${stringCell(row, titleColumn, sheet.layout.title, true)}</row>` : `<row r="${row}"/>`).join("");
-  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(titleRow, titleColumn)}:${address(titleRow, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
+  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === titleRow && sheet.layout?.title ? `<row r="${row}">${cell(row, titleColumn, sheet.layout.title, 7)}</row>` : `<row r="${row}"/>`).join("");
+  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(titleRow, titleColumn)}:${address(sheet.layout.titleEndRow ?? titleRow, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="${headerRow}" topLeftCell="${address(headerRow + 1, start)}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
@@ -75,16 +89,19 @@ function worksheet(sheet: ExcelSheet): string {
 </worksheet>`;
 }
 
-function cell(row: number, index: number, value: ExcelCell): string {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return `<c r="${address(row, index)}"><v>${value}</v></c>`;
+function cell(row: number, index: number, value: ExcelCell, style = 0): string {
+  if (value && typeof value === "object") {
+    const serial = Math.round((Date.parse(`${value.date}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000);
+    return Number.isFinite(serial) ? `<c r="${address(row, index)}" s="8"><v>${serial}</v></c>` : stringCell(row, index, value.date, style);
   }
-  return stringCell(row, index, value == null ? "" : String(value), false);
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<c r="${address(row, index)}"${style ? ` s="${style}"` : ""}><v>${value}</v></c>`;
+  }
+  return stringCell(row, index, value == null ? "" : String(value), style);
 }
 
-function stringCell(row: number, index: number, value: string, header: boolean): string {
-  const style = header ? ` s="1"` : "";
-  return `<c r="${address(row, index)}" t="inlineStr"${style}><is><t xml:space="preserve">${xml(clean(value))}</t></is></c>`;
+function stringCell(row: number, index: number, value: string, style = 0): string {
+  return `<c r="${address(row, index)}" t="inlineStr"${style ? ` s="${style}"` : ""}><is><t xml:space="preserve">${xml(clean(value))}</t></is></c>`;
 }
 
 function address(row: number, index: number): string {
@@ -158,11 +175,12 @@ ${sheets}${styles}
 function styles(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts>
-<fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>
-<borders count="1"><border/></borders>
+<numFmts count="1"><numFmt numFmtId="164" formatCode="dd-mmm-yy"/></numFmts>
+<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FFFF0000"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FF00B050"/><name val="Calibri"/></font><font><b/><sz val="20"/><name val="Calibri"/></font></fonts>
+<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="2"><border/><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs>
+<cellXfs count="9"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1"/><xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1"/><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1"/></cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 }
