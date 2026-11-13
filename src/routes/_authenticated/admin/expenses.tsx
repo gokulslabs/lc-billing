@@ -51,7 +51,7 @@ function ExpensesPage() {
       {query.isLoading ? <p>Loading expenses…</p> : null}
       {query.error instanceof Error ? <p className="text-destructive">{query.error.message}</p> : null}
       <Tabs defaultValue="ledger"><TabsList><TabsTrigger value="ledger">Expenses and income</TabsTrigger><TabsTrigger value="target">Target wise payment</TabsTrigger></TabsList>
-        <TabsContent value="ledger" className="mt-5"><ExpenseTable key={`ledger-${viewDate}-${viewMode}`} sheet="ledger" month={month} entryDate={viewDate} periodLabel={viewMode === "day" ? viewDate : month} emptyLabel={viewMode === "day" ? "No rows for this day." : "No rows for this month."} records={rows("ledger")} /></TabsContent>
+        <TabsContent value="ledger" className="mt-5"><ExpenseTable key={`ledger-${viewDate}-${viewMode}`} sheet="ledger" month={month} entryDate={viewDate} emptyLabel={viewMode === "day" ? "No rows for this day." : "No rows for this month."} records={rows("ledger")} /></TabsContent>
         <TabsContent value="target" className="mt-5"><ExpenseTable key={`target-${viewDate}-${viewMode}`} sheet="target" month={month} entryDate={viewDate} emptyLabel={viewMode === "day" ? "No rows for this day." : "No rows for this month."} records={rows("target")} /></TabsContent>
       </Tabs>
     </main>
@@ -61,9 +61,9 @@ function ExpensesPage() {
 function lastDay(month: string): string { const [year, number] = month.split("-").map(Number); return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10); }
 function shiftDay(date: string, days: number): string { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
 
-const money = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR" });
+const amountFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 
-function ExpenseTable({ sheet, month, entryDate, periodLabel, emptyLabel, records }: { sheet: "ledger" | "target"; month: string; entryDate: string; periodLabel?: string; emptyLabel: string; records: ExpenseRecord[] }) {
+function ExpenseTable({ sheet, month, entryDate, emptyLabel, records }: { sheet: "ledger" | "target"; month: string; entryDate: string; emptyLabel: string; records: ExpenseRecord[] }) {
   const client = useQueryClient();
   const columns = expenseColumns(sheet);
   const [editing, setEditing] = useState<string | null>(null);
@@ -80,24 +80,25 @@ function ExpenseTable({ sheet, month, entryDate, periodLabel, emptyLabel, record
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{inputColumns.map((label, i) => <label key={`${label}-${i}`} className="text-sm">{label}<Input className="mt-1" value={cells[i] ?? ""} onChange={(e) => setCells((prev) => prev.map((v, n) => n === i ? e.target.value : v))} /></label>)}</div>
       <div className="mt-4 flex gap-2"><Button type="submit" disabled={save.isPending}>{save.isPending ? "Saving…" : editing ? "Save changes" : "Add row"}</Button>{editing ? <Button type="button" variant="outline" onClick={() => { setEditing(null); setCells(Array(inputColumns.length).fill("")); }}>Cancel</Button> : null}</div>
     </form>
-    <div className="overflow-x-auto rounded-2xl border bg-card"><table className="w-full min-w-max text-sm"><thead className="bg-muted/50"><tr>{sheet === "ledger" ? <th className="p-3 text-left">Date</th> : null}{columns.map((c, i) => <th key={`${c}-${i}`} className="p-3 text-left font-semibold">{c}</th>)}<th className="p-3 text-left">Actions</th></tr></thead><tbody>{records.map((r, index) => <tr key={r.id} className="border-t">{sheet === "ledger" ? <td className="p-3">{r.entryDate}</td> : null}{(sheet === "target" ? [String(index + 1), r.entryDate, ...r.details] : r.details).map((v, i) => <td key={i} className="p-3">{v || "—"}</td>)}<td className="whitespace-nowrap p-3"><Button size="sm" variant="outline" onClick={() => edit(r)}>Edit</Button> <Button size="sm" variant="outline" onClick={() => remove.mutate(r.id)} disabled={remove.isPending}>Remove</Button></td></tr>)}</tbody></table>{!records.length ? <p className="p-6 text-sm text-muted-foreground">{emptyLabel}</p> : null}</div>
-    {totals ? <div className="rounded-2xl border bg-card p-5" aria-label={`Expense totals for ${periodLabel}`}>
-      <h2 className="text-lg font-semibold">Net result · {periodLabel}</h2>
-      <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Total label="GPay / cheque expenses" value={totals.gpayCheque} />
-        <Total label="Cash expenses" value={totals.cashExpenses} />
-        <Total label="Cash receipts" value={totals.cashReceipts} />
-        <Total label="Hand cash" value={totals.handCash} highlight />
-        <Total label="Card" value={totals.card} />
-        <Total label="S/A.C" value={totals.savingsAccount} />
-        <Total label="C/AC" value={totals.currentAccount} />
-        <Total label="Bill pending" value={totals.billPending} />
-      </div>
-      <p className="mt-4 text-xs text-muted-foreground">Hand cash = cash receipts − cash expenses, as in the Excel daily footer.</p>
-    </div> : null}
+    <div className="overflow-x-auto rounded-2xl border bg-card">
+      <table className="w-full min-w-max text-sm">
+        <thead className="bg-muted/50"><tr>{sheet === "ledger" ? <th className="p-3 text-left">Date</th> : null}{columns.map((c, i) => <th key={`${c}-${i}`} className="p-3 text-left font-semibold">{c}</th>)}<th className="p-3 text-left">Actions</th></tr></thead>
+        <tbody>{records.map((r, index) => <tr key={r.id} className="border-t">{sheet === "ledger" ? <td className="p-3">{r.entryDate}</td> : null}{(sheet === "target" ? [String(index + 1), r.entryDate, ...r.details] : r.details).map((v, i) => <td key={i} className="p-3">{v || "—"}</td>)}<td className="whitespace-nowrap p-3"><Button size="sm" variant="outline" onClick={() => edit(r)}>Edit</Button> <Button size="sm" variant="outline" onClick={() => remove.mutate(r.id)} disabled={remove.isPending}>Remove</Button></td></tr>)}</tbody>
+        {totals ? <tfoot className="border-t-2 border-foreground/20 bg-muted/40 font-semibold">
+          <LedgerFooterRow cells={["TOT EXPENSES", totals.gpayCheque, totals.cashExpenses, "", "", "CASH RECIPETS", totals.cashReceipts, "", totals.savingsAccount, totals.currentAccount, totals.billPending, ""]} />
+          <LedgerFooterRow cells={["SHREEDEVI MAM", "", "", "", "", "CASH EXPENSES", totals.cashExpenses, "", "", "", "", ""]} />
+          <LedgerFooterRow cells={["", "", "", "", "", "HAND CASH", totals.handCash, "", "", "", "", ""]} highlight />
+        </tfoot> : null}
+      </table>
+      {!records.length ? <p className="border-t p-6 text-sm text-muted-foreground">{emptyLabel}</p> : null}
+    </div>
   </section>;
 }
 
-function Total({ label, value, highlight = false }: { label: string; value: number; highlight?: boolean }) {
-  return <div className={highlight ? "rounded-xl bg-primary/10 p-3" : "p-3"}><p className="text-sm text-muted-foreground">{label}</p><p className="mt-1 text-xl font-semibold tabular-nums">{money.format(value)}</p></div>;
+function LedgerFooterRow({ cells, highlight = false }: { cells: (string | number)[]; highlight?: boolean }) {
+  return <tr className={highlight ? "border-t bg-primary/10" : "border-t"}>
+    <td className="p-3" />
+    {cells.map((value, index) => <td key={index} className="whitespace-nowrap p-3 tabular-nums">{typeof value === "number" ? amountFormat.format(value) : value}</td>)}
+    <td className="p-3" />
+  </tr>;
 }
