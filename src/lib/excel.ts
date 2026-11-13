@@ -4,7 +4,7 @@ export type ExcelSheet = {
   name: string;
   columns: string[];
   rows: ExcelCell[][];
-  layout?: { startColumn: number; headerRow: number; title?: string; titleColumn?: number; titleEndColumn?: number };
+  layout?: { startColumn: number; headerRow: number; title?: string; titleRow?: number; titleColumn?: number; titleEndColumn?: number };
 };
 
 const encoder = new TextEncoder();
@@ -64,8 +64,9 @@ function worksheet(sheet: ExcelSheet): string {
     })
     .join("");
   const titleColumn = sheet.layout?.titleColumn ?? start;
-  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === headerRow - 2 && sheet.layout?.title ? `<row r="${row}">${stringCell(row, titleColumn, sheet.layout.title, true)}</row>` : `<row r="${row}"/>`).join("");
-  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(headerRow - 2, titleColumn)}:${address(headerRow - 2, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
+  const titleRow = sheet.layout?.titleRow ?? headerRow - 2;
+  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === titleRow && sheet.layout?.title ? `<row r="${row}">${stringCell(row, titleColumn, sheet.layout.title, true)}</row>` : `<row r="${row}"/>`).join("");
+  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(titleRow, titleColumn)}:${address(titleRow, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="${headerRow}" topLeftCell="${address(headerRow + 1, start)}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>

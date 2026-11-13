@@ -25,7 +25,7 @@ export function expenseExportSheets(records: ExpenseRecord[], from: string, to: 
     ...record.details.slice(2).map((value) => numberOrText(value, true)),
   ]);
   return [
-    { name: "EXPENSES", columns: [...LEDGER_COLUMNS], rows: ledger, layout: { startColumn: 1, headerRow: 4, title: records.find((row) => row.sheet === "ledger")?.entryDate ?? from, titleColumn: 4 } },
+    { name: "EXPENSES", columns: [...LEDGER_COLUMNS], rows: ledger, layout: { startColumn: 1, headerRow: 4, title: records.find((row) => row.sheet === "ledger")?.entryDate ?? from, titleRow: 3, titleColumn: 4 } },
     { name: "TARGET WISE PAYMENT", columns: [...TARGET_COLUMNS], rows: target, layout: { startColumn: 4, headerRow: 5, title: `TARGET WISE PAYMENT DETAILS - ${from === to ? from : `${from} TO ${to}`}`, titleEndColumn: 11 } },
   ];
 }
