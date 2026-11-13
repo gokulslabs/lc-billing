@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useState, type ReactNode } from "react";
+import { useDeferredValue, useEffect, useRef, useState, type ReactNode } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -107,11 +107,22 @@ function StockPanel() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
   const [stickers, setStickers] = useState<BarcodeLabel[]>([]);
+  const previewRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stickers.length === 0) return;
-    const frame = requestAnimationFrame(() => window.print());
+    const frame = requestAnimationFrame(() =>
+      previewRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }),
+    );
     return () => cancelAnimationFrame(frame);
   }, [stickers]);
+  const labelPreview = useMutation({
+    mutationFn: (item: InventoryItem) =>
+      apiFetch<{ labels: BarcodeLabel[] }>(
+        `/api/inventory/barcodes?${new URLSearchParams({ starting: item.inventoryNo })}`,
+      ),
+    onSuccess: (result) => setStickers(result.labels),
+    onError: (error: Error) => toast.error(error.message),
+  });
   const groups = useQuery({
     queryKey: ["product-groups"],
     queryFn: () => apiFetch<{ groups: ProductGroup[] }>("/api/product-groups"),
@@ -249,12 +260,10 @@ function StockPanel() {
         </Button>
       </div>
       {stickers.length > 0 ? (
-        <div className="space-y-3">
+        <div ref={previewRef} className="scroll-mt-4 space-y-3">
           <div className="flex items-center justify-between gap-3 print:hidden">
             <p className="text-sm text-muted-foreground">
-              {stickers.length === 1
-                ? `Label for ${stickers[0]?.number}. Stick it on that piece.`
-                : `${stickers.length} labels. One sticker on each piece.`}
+              Preview · {stickers.length} barcode label{stickers.length === 1 ? "" : "s"}
             </p>
             <Button
               type="button"
@@ -284,6 +293,18 @@ function StockPanel() {
                 title={item.inventoryNo}
                 detail={`${item.productCode} · ${item.groupName} · ${item.productName} · ${unitLabel(item.unit)} · ${formatRupees(item.price)} · qty ${formatQty(item.quantity)} · ${item.status}`}
               >
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={labelPreview.isPending}
+                  onClick={() => {
+                    setStickers([]);
+                    labelPreview.mutate(item);
+                  }}
+                >
+                  Print
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -358,6 +379,15 @@ function StockPanel() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            disabled={labelPreview.isPending}
+                            onSelect={() => {
+                              setStickers([]);
+                              labelPreview.mutate(item);
+                            }}
+                          >
+                            Print
+                          </DropdownMenuItem>
                           <DropdownMenuItem onSelect={() => setEditor(item)}>Edit</DropdownMenuItem>
                           <DropdownMenuItem
                             onSelect={() => {
