@@ -2,6 +2,7 @@ import {
   Boxes,
   ClipboardCheck,
   FileBarChart,
+  Receipt,
   LayoutDashboard,
   Scissors,
   Settings,
@@ -27,7 +28,8 @@ export type AppModule = {
     | "/admin/stitching"
     | "/admin/settings"
     | "/admin/stock-verification"
-    | "/admin/reports";
+    | "/admin/reports"
+    | "/admin/expenses";
 };
 
 // `to` is set only for modules that are built. Others show as "Soon".
@@ -38,6 +40,7 @@ export const MODULES: AppModule[] = [
   { key: "customers", label: "Customers", blurb: "Contacts and history", icon: Users, to: "/admin/customers" },
   { key: "inventory", label: "Inventory", blurb: "Stock and barcodes", icon: Boxes, to: "/admin/inventory" },
   { key: "sales", label: "Sales & billing", blurb: "Invoices and payments", icon: ShoppingBag, to: "/admin/sales" },
+  { key: "expenses", label: "Expenses", blurb: "Daily expenses and income", icon: Receipt, to: "/admin/expenses" },
   { key: "stitching", label: "Stitching", blurb: "Tailoring orders", icon: Scissors, to: "/admin/stitching" },
   { key: "settings", label: "Settings", blurb: "Garments, measurements, and processes", icon: Settings, to: "/admin/settings" },
   { key: "stock-verification", label: "Stock verification", blurb: "Scan the shelf and see what is short", icon: ClipboardCheck, to: "/admin/stock-verification" },

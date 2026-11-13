@@ -3,6 +3,7 @@ import type { User } from "@supabase/supabase-js";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { passwordProblem } from "@/lib/password";
 import { customerRoutes } from "@/server/customers";
+import { expenseRoutes } from "@/server/expenses";
 import { dashboardRoutes } from "@/server/dashboard";
 import { inventoryRoutes } from "@/server/inventory";
 import { salesRoutes } from "@/server/sales";
@@ -198,6 +199,7 @@ api.route("/api/invoices", salesRoutes);
 api.route("/api/reports", reportRoutes);
 api.route("/api/stitching-orders", stitchingRoutes);
 api.route("/api/settings", settingsRoutes);
+api.route("/api/expenses", expenseRoutes);
 
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
   try {

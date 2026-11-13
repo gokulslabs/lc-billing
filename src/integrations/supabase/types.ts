@@ -14,6 +14,12 @@ export type Database = {
   }
   public: {
     Tables: {
+      expense_records: {
+        Row: { id: string; sheet: string; entry_date: string; sort_order: number; details: Json; created_at: string }
+        Insert: { id?: string; sheet: string; entry_date: string; sort_order?: number; details?: Json; created_at?: string }
+        Update: { id?: string; sheet?: string; entry_date?: string; sort_order?: number; details?: Json; created_at?: string }
+        Relationships: []
+      }
       stock_count_rounds: {
         Row: { started_at: string; started_by: string; previous_scans: Json }
         Insert: { started_at: string; started_by: string; previous_scans: Json }
