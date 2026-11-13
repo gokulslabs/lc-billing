@@ -7,7 +7,7 @@ export function Logo({ size = "md" }: { size?: "md" | "lg" }) {
           big ? "h-14 w-14" : "h-10 w-10"
         }`}
       >
-        <img src="/lc-logo.png" alt="" className="h-full w-full rounded-full object-contain" />
+        <img src="/lc-logo.png?v=20261113-admin" alt="" className="h-full w-full rounded-full object-contain" />
       </div>
       <div className="leading-none">
         <div className={`font-display font-semibold text-foreground ${big ? "text-3xl" : "text-xl"}`}>
