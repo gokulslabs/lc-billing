@@ -4,8 +4,8 @@ export type ExpenseRecord = { id: string; sheet: "ledger" | "target"; entryDate:
 export const expenseColumns = (sheet: "ledger" | "target") => sheet === "ledger" ? LEDGER_COLUMNS : TARGET_COLUMNS;
 
 function amount(value: string): number {
-  const cleaned = value.trim().replace(/[₹,\s]/g, "");
-  return /^-?\d+(?:\.\d+)?$/.test(cleaned) ? Number(cleaned) : 0;
+  const match = value.trim().replace(/^₹\s*/, "").match(/^-?\d[\d,]*(?:\.\d+)?/);
+  return match ? Number(match[0].replace(/,/g, "")) : 0;
 }
 
 export function expenseLedgerTotals(records: ExpenseRecord[]) {
