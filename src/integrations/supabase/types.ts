@@ -476,6 +476,10 @@ export type Database = {
       };
     };
     Functions: {
+      shop_save_stitching_order: {
+        Args: { p_id: string | null; p_order: Json; p_measurements: Json };
+        Returns: string | null;
+      };
       shop_cancel_invoice: {
         Args: { p_invoice_id: string; p_remarks: string };
         Returns: "ok" | "not_found" | "cancelled" | "has_payment";

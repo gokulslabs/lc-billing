@@ -145,33 +145,15 @@ stitching.get("/", async (c) => {
 stitching.post("/", async (c) => {
   const parsed = await readOrder(c);
   if ("error" in parsed) return c.json({ error: parsed.error }, parsed.status);
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const { data, error } = await supabaseAdmin
-      .from("stitching_orders")
-      .insert({
-        customer_id: parsed.input.customerId,
-        stitching_product_id: parsed.input.productId,
-        bag_no: blankToNull(parsed.input.bagNo),
-        ordered_on: parsed.input.orderedOn,
-        delivery_on: parsed.deliveryOn,
-        status: parsed.input.status,
-        amount: parsed.input.amount,
-        description: parsed.input.description ?? null,
-        processes: parsed.input.processes ?? [],
-      })
-      .select(
-        "id, order_no, customer_id, stitching_product_id, bag_no, ordered_on, delivery_on, status, amount, description, processes",
-      )
-      .single();
-    if (isDuplicate(error) && attempt === 0) continue;
-    if (error || !data) return c.json({ error: "Could not save the order." }, 500);
-    const saved = await replaceMeasurements(data.id, parsed.measurements);
-    if (!saved) return c.json({ error: "Could not save the measurements." }, 500);
-    const order = await loadOrder(data.id);
-    if (!order) return c.json({ error: "Could not load the order." }, 500);
-    return c.json({ order }, 201);
+  const request = stitchingSaveArgs(null, parsed);
+  let saved = await supabaseAdmin.rpc("shop_save_stitching_order", request);
+  if (saved.error?.code === "23505") {
+    saved = await supabaseAdmin.rpc("shop_save_stitching_order", request);
   }
-  return c.json({ error: "Could not save the order." }, 500);
+  if (saved.error || !saved.data) return c.json({ error: "Could not save the order." }, 500);
+  const order = await loadOrder(saved.data);
+  if (!order) return c.json({ error: "Order was saved but could not be loaded." }, 500);
+  return c.json({ order }, 201);
 });
 
 stitching.get("/:id", async (c) => {
@@ -198,32 +180,14 @@ stitching.patch("/:id/status", async (c) => {
 
 stitching.patch("/:id", async (c) => {
   const id = c.req.param("id");
-  const existing = await supabaseAdmin
-    .from("stitching_orders")
-    .select("id")
-    .eq("id", id)
-    .maybeSingle();
-  if (existing.error) return c.json({ error: "Could not check the order." }, 500);
-  if (!existing.data) return c.json({ error: "Order not found." }, 404);
   const parsed = await readOrder(c);
   if ("error" in parsed) return c.json({ error: parsed.error }, parsed.status);
-  const { error } = await supabaseAdmin
-    .from("stitching_orders")
-    .update({
-      customer_id: parsed.input.customerId,
-      stitching_product_id: parsed.input.productId,
-      bag_no: blankToNull(parsed.input.bagNo),
-      ordered_on: parsed.input.orderedOn,
-      delivery_on: parsed.deliveryOn,
-      status: parsed.input.status,
-      amount: parsed.input.amount,
-      ...(parsed.input.description !== undefined ? { description: parsed.input.description } : {}),
-      ...(parsed.input.processes !== undefined ? { processes: parsed.input.processes } : {}),
-    })
-    .eq("id", id);
+  const { data, error } = await supabaseAdmin.rpc(
+    "shop_save_stitching_order",
+    stitchingSaveArgs(id, parsed),
+  );
   if (error) return c.json({ error: "Could not update the order." }, 500);
-  const saved = await replaceMeasurements(id, parsed.measurements);
-  if (!saved) return c.json({ error: "Could not save the measurements." }, 500);
+  if (!data) return c.json({ error: "Order not found." }, 404);
   const order = await loadOrder(id);
   if (!order) return c.json({ error: "Could not load the order." }, 500);
   return c.json({ order });
@@ -381,25 +345,26 @@ async function loadMeasurements(
   return grouped;
 }
 
-async function replaceMeasurements(
-  orderId: string,
-  measurements: StitchingMeasurement[],
-): Promise<boolean> {
-  const removed = await supabaseAdmin
-    .from("stitching_order_measurements")
-    .delete()
-    .eq("order_id", orderId);
-  if (removed.error) return false;
-  if (measurements.length === 0) return true;
-  const { error } = await supabaseAdmin.from("stitching_order_measurements").insert(
-    measurements.map((row, index) => ({
-      order_id: orderId,
-      label: row.label,
-      value: row.value,
-      sort_order: index + 1,
-    })),
-  );
-  return !error;
+function stitchingSaveArgs(
+  id: string | null,
+  parsed: Exclude<Awaited<ReturnType<typeof readOrder>>, { error: string }>,
+) {
+  const { input, measurements, deliveryOn } = parsed;
+  return {
+    p_id: id,
+    p_order: {
+      customer_id: input.customerId,
+      stitching_product_id: input.productId,
+      bag_no: blankToNull(input.bagNo),
+      ordered_on: input.orderedOn,
+      delivery_on: deliveryOn,
+      status: input.status,
+      amount: input.amount,
+      ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.processes !== undefined ? { processes: input.processes } : {}),
+    },
+    p_measurements: measurements.map(({ label, value }) => ({ label, value })),
+  };
 }
 
 function toOrder(
@@ -429,10 +394,6 @@ function toOrder(
 
 function isStatus(value: string): value is StitchingStatus {
   return (STITCHING_STATUSES as readonly string[]).includes(value);
-}
-
-function isDuplicate(error: { code?: string } | null): boolean {
-  return error?.code === "23505";
 }
 
 async function readJson(c: { req: { json: () => Promise<unknown> } }): Promise<unknown> {
