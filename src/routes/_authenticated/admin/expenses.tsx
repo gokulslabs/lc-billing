@@ -29,18 +29,18 @@ function ExpensesPage() {
   function showMonth() { setViewMode("month"); setExportFrom(`${month}-01`); setExportTo(lastDay(month)); }
   return (
     <main className="mx-auto max-w-[110rem] space-y-6 p-4 md:p-10">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div><h1 className="text-3xl font-semibold md:text-4xl">Expenses</h1><p className="mt-2 text-sm text-muted-foreground">{viewMode === "day" ? `Entries for ${viewDate}` : `All entries for ${month}`}</p></div>
-        <div className="flex flex-wrap items-end gap-2">
+      <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)] xl:items-end">
+        <div className="min-w-0"><h1 className="text-3xl font-semibold md:text-4xl">Expenses</h1><p className="mt-2 text-sm text-muted-foreground">{viewMode === "day" ? `Entries for ${viewDate}` : `All entries for ${month}`}</p></div>
+        <div className="flex min-w-0 flex-wrap items-end gap-2 xl:justify-end">
           <Button variant="outline" onClick={() => showDay(shiftDay(viewDate, -1))}>Previous day</Button>
-          <label className="text-sm">View date<Input type="date" value={viewDate} onChange={(e) => showDay(e.target.value)} className="mt-1" /></label>
+          <label className="w-40 text-sm">View date<Input type="date" value={viewDate} onChange={(e) => showDay(e.target.value)} className="mt-1 w-full" /></label>
           <Button variant="outline" onClick={() => showDay(shiftDay(viewDate, 1))}>Next day</Button>
           <Button variant={viewMode === "day" && viewDate === shopToday() ? "default" : "outline"} onClick={() => showDay(shopToday())}>Today</Button>
           <Button variant={viewMode === "month" ? "default" : "outline"} onClick={showMonth}>All month</Button>
         </div>
-        <div className="flex flex-wrap items-end gap-3">
-          <label className="text-sm">Export from<Input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)} className="mt-1" /></label>
-          <label className="text-sm">Export to<Input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)} className="mt-1" /></label>
+        <div className="col-span-full flex min-w-0 flex-wrap items-end gap-3 rounded-2xl border border-border bg-card p-3 sm:p-4 xl:col-span-2">
+          <label className="w-40 text-sm">Export from<Input type="date" value={exportFrom} onChange={(e) => setExportFrom(e.target.value)} className="mt-1 w-full" /></label>
+          <label className="w-40 text-sm">Export to<Input type="date" value={exportTo} onChange={(e) => setExportTo(e.target.value)} className="mt-1 w-full" /></label>
           <ExportExcelButton filename={`expenses-${exportFrom}-to-${exportTo}`} load={async () => {
             if (!exportFrom || !exportTo || exportFrom > exportTo) throw new Error("Choose a valid export date range.");
             const { records: selected } = await apiFetch<{ records: ExpenseRecord[] }>(`/api/expenses?from=${encodeURIComponent(exportFrom)}&to=${encodeURIComponent(exportTo)}`);

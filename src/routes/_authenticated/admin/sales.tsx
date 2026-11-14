@@ -868,7 +868,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
 
   return (
     <form
-      className="flex flex-wrap items-end gap-3"
+      className="grid w-full min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-3 xl:grid-cols-[minmax(12rem,1.5fr)_repeat(4,minmax(6rem,1fr))_auto]"
       onSubmit={(event) => {
         event.preventDefault();
         void addRef.current(valueRef.current);
@@ -885,20 +885,20 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           }}
           autoFocus
           autoComplete="off"
-          className="w-44 font-mono"
+          className="w-full min-w-0 font-mono"
           placeholder="Scan or type"
           required
         />
       </Field>
       <Field label="Quantity" id="line-qty">
-        <Input id="line-qty" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-28" required />
+        <Input id="line-qty" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-full min-w-0" required />
       </Field>
       <Field label="Rate" id="line-rate">
         <Input
           id="line-rate"
           value={rate}
           onChange={(event) => setRate(event.target.value)}
-          className="w-28"
+          className="w-full min-w-0"
           placeholder={preview.data ? String(preview.data.preview.rate) : "Catalogue"}
         />
       </Field>
@@ -907,18 +907,18 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           id="line-discount"
           value={discountPercent}
           onChange={(event) => setDiscountPercent(event.target.value)}
-          className="w-28"
+          className="w-full min-w-0"
           placeholder={preview.data ? String(preview.data.preview.discountPercent) : "Group"}
         />
       </Field>
       <Field label="Extra off" id="line-extra">
-        <Input id="line-extra" value={extraOff} onChange={(event) => setExtraOff(event.target.value)} className="w-28" placeholder="₹" />
+        <Input id="line-extra" value={extraOff} onChange={(event) => setExtraOff(event.target.value)} className="w-full min-w-0" placeholder="₹" />
       </Field>
-      <Button type="submit" className="rounded-full" disabled={busy}>
+      <Button type="submit" className="w-fit rounded-full" disabled={busy}>
         {busy ? "Adding…" : "Add"}
       </Button>
       {preview.data ? (
-        <p className="pb-2 text-sm text-muted-foreground">
+        <p className="col-span-full pb-2 text-sm text-muted-foreground">
           {preview.data.preview.productCode} · {preview.data.preview.groupName} · {preview.data.preview.productName} ·{" "}
           {formatRupees(preview.data.preview.rate)}
           {preview.data.preview.discountPercent ? ` · ${preview.data.preview.discountPercent}% off` : ""} · {preview.data.preview.status} ·{" "}
@@ -926,9 +926,9 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         </p>
       ) : null}
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
-        <p className="pb-2 text-sm text-destructive">{preview.error.message}</p>
+        <p className="col-span-full pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
-      <p className="w-full text-sm text-muted-foreground">
+      <p className="col-span-full w-full text-sm text-muted-foreground">
         Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the group percent. Extra off comes off after that.
       </p>
     </form>
