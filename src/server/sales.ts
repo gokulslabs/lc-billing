@@ -18,7 +18,6 @@ import {
   invoiceLineSchema,
   invoiceDiscountSchema,
   billBook,
-  nextBillNo,
   selectBills,
   PAYMENT_MODES,
   isPendingPayment,
@@ -374,12 +373,9 @@ sales.post("/", async (c) => {
     return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const billNo = await allocateBillNo();
-    if (!billNo) return c.json({ error: "Could not choose a bill number." }, 500);
     const { data, error } = await supabaseAdmin
       .from("invoices")
       .insert({
-        bill_no: billNo,
         customer_id: customer.data.id,
         billed_on: shopToday(),
         status: "draft",
@@ -1064,14 +1060,6 @@ async function customerNames(ids: string[]): Promise<Map<string, string> | null>
   );
   if (!rows) return null;
   return new Map(rows.map((row) => [row.id, row.name]));
-}
-
-async function allocateBillNo(): Promise<string | null> {
-  const loaded = await readAll<{ bill_no: string }>((start, end) =>
-    supabaseAdmin.from("invoices").select("bill_no").order("id").range(start, end),
-  );
-  if (!loaded) return null;
-  return nextBillNo(loaded.rows.map((row) => row.bill_no));
 }
 
 function sumFigures(

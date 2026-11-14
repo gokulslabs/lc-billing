@@ -211,7 +211,7 @@ export type Database = {
           status: string;
         };
         Insert: {
-          bill_no: string;
+          bill_no?: string;
           billed_on?: string;
           created_at?: string;
           customer_id: string;
