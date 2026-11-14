@@ -22,6 +22,7 @@ import {
   escapePrint,
   legacyDate,
   plainAmount,
+  printHtmlInSameTab,
   shopHeading,
   slipRow,
 } from "@/components/app/ShopSlip";
@@ -881,7 +882,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               </Button>
               <Button
                 className="rounded-full"
-                onClick={() => receiptFrame.current?.contentWindow?.print()}
+                onClick={() => printHtmlInSameTab(salesBillDocument(invoice))}
               >
                 Print bill
               </Button>
@@ -1762,15 +1763,20 @@ function salesBillHtml(invoice: InvoiceDetail): string {
         `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(line.productName)}</h4></td><td><h4>${plainAmount(line.amount)}</h4></td></tr>`,
     )
     .join("");
-  return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>SALES BILL</h4></th></tr>${slipRow("BILL NO.", invoice.billNo)}${slipRow("DATE", legacyDate(invoice.billedOn))}${slipRow("NAME", invoice.customerName)}${slipRow("MOBILE NO.", invoice.customerPhone)}</tbody></table><table><thead><tr><th><h4>SL.NO.</h4></th><th><h4>PARTICULARS</h4></th><th><h4>AMOUNT</h4></th></tr></thead><tbody>${lines}</tbody></table><table><tbody>${slipRow("GROSS", plainAmount(gross))}${slipRow("DISCOUNT", plainAmount(discount))}${slipRow("NET TOTAL", plainAmount(invoice.total))}${slipRow("PAID", plainAmount(collected))}${slipRow("BALANCE", plainAmount(invoice.balance))}</tbody></table><table><tbody><tr><th><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.</h4></th></tr></tbody></table>`;
+  return `<table class="receipt-header"><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>SALES BILL</h4></th></tr>${slipRow("BILL NO.", invoice.billNo)}${slipRow("DATE", legacyDate(invoice.billedOn))}${slipRow("NAME", invoice.customerName)}${slipRow("MOBILE NO.", invoice.customerPhone)}</tbody></table><table class="receipt-items"><thead><tr><th><h4>SL.NO.</h4></th><th><h4>PARTICULARS</h4></th><th><h4>AMOUNT</h4></th></tr></thead><tbody>${lines}</tbody></table><table class="receipt-totals"><tbody>${slipRow("GROSS", plainAmount(gross))}${slipRow("DISCOUNT", plainAmount(discount))}${slipRow("NET TOTAL", plainAmount(invoice.total))}${slipRow("PAID", plainAmount(collected))}${slipRow("BALANCE", plainAmount(invoice.balance))}</tbody></table><table class="receipt-footer"><tbody><tr><th><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.</h4></th></tr></tbody></table>`;
 }
 
 function salesBillDocument(invoice: InvoiceDetail): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapePrint(invoice.billNo)}</title><style>
-    * { box-sizing: border-box; } body { width: 400px; max-width: 100%; margin: 0 auto; padding: 12px; color: #333; font-family: Arial, sans-serif; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; } th, td { border: 1px solid #ddd; padding: 5px; text-align: left; vertical-align: top; }
-    .center { text-align: center; } h3 { margin: 12px 0 8px; font-size: 20px; } h4 { margin: 7px 0; font-size: 14px; font-weight: 500; }
-    @media print { body { width: 100%; padding: 0; } @page { margin: 8mm; } }
+    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; color: #222; font-family: Arial, sans-serif; }
+    body { width: 100%; max-width: 190mm; margin: 0 auto; padding: 5mm; font-size: 10pt; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 3mm; table-layout: fixed; }
+    th, td { border: 1px solid #bbb; padding: 2mm 2.5mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+    .center { text-align: center; } h3 { margin: 2mm 0; font-size: 15pt; } h4 { margin: 1mm 0; font-size: 9pt; line-height: 1.2; font-weight: 500; }
+    .receipt-header, .receipt-totals, .receipt-footer, .receipt-items tr { break-inside: avoid; page-break-inside: avoid; }
+    .receipt-items thead { display: table-header-group; }
+    @page { size: A4 portrait; margin: 8mm; }
+    @media print { body { width: 100%; max-width: none; padding: 0; } table { margin-bottom: 2mm; } th, td { padding: 1.5mm 2mm; } }
   </style></head><body>${salesBillHtml(invoice)}</body></html>`;
 }
 
