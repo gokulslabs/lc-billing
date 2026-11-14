@@ -479,23 +479,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
     <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
       <div className="flex flex-wrap items-start justify-start gap-8">
         <div className="min-w-0">
-          <Button
-            variant="outline"
-            className="rounded-full"
-            onClick={() => {
-              if (invoice && invoice.status === "draft" && invoice.lines.length === 0 && invoice.payments.length === 0) {
-                void apiFetch(`/api/invoices/${invoice.id}/cancel`, {
-                  method: "POST",
-                  body: JSON.stringify({ remarks: "Empty draft discarded." }),
-                }).finally(onBack);
-                return;
-              }
-              onBack();
-            }}
-          >
-            Back
-          </Button>
-          <div className="mt-4 flex flex-wrap items-center gap-3">
+          <div className="flex flex-wrap items-center gap-3">
             <h1 className="text-4xl font-semibold">{invoice ? `Bill ${invoice.billNo}` : "Bill"}</h1>
             {invoice ? (
               <ExportExcelButton
