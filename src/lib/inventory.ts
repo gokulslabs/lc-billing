@@ -17,7 +17,7 @@ export type InventoryItem = {
 };
 
 export const stockStatusSchema = z.enum(["available", "sold"], {
-  errorMap: () => ({ message: "Choose available or sold." }),
+  error: "Choose available or sold.",
 });
 
 export const stockQuantitySchema = z.object({

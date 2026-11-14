@@ -209,7 +209,7 @@ function AuthenticatedLayout() {
         </SidebarFooter>
         <SidebarRail />
       </Sidebar>
-      <SidebarInset className="pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
+      <SidebarInset className="min-w-0 pb-[calc(4.25rem+env(safe-area-inset-bottom))] md:pb-0">
         <header className="flex h-14 items-center justify-between gap-3 border-b border-border px-4 print:hidden md:px-10">
           <span className="font-display text-lg font-semibold md:hidden">Ladies Collections</span>
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">

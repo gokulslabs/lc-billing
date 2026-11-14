@@ -290,7 +290,7 @@ function SalesHome({
         </div>
       </div>
       <form
-        className="flex max-w-xl flex-wrap items-center gap-2 sm:flex-nowrap"
+        className="flex min-w-0 max-w-xl flex-col items-stretch gap-2 sm:flex-row sm:items-center"
         onSubmit={(event) => {
           event.preventDefault();
           if (q.trim() && !openExact.isPending) openExact.mutate(q.trim());
@@ -419,7 +419,7 @@ function SalesHome({
         </Select>
       </div>
       <Tabs defaultValue={startTab}>
-        <TabsList>
+        <TabsList className="h-auto w-full justify-start overflow-x-auto sm:w-auto sm:max-w-full">
           <TabsTrigger value="bills">Bills</TabsTrigger>
           <TabsTrigger value="items">Items</TabsTrigger>
           <TabsTrigger value="due">Who owes</TabsTrigger>

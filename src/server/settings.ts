@@ -9,7 +9,7 @@ import {
   type StitchingProcess,
 } from "@/lib/settings";
 import { zodMessage } from "@/lib/stitching";
-import { requireShop } from "@/server/guard";
+import { denyUnlessAdmin, requireShop } from "@/server/guard";
 
 type Env = { Variables: { userId: string } };
 
@@ -32,6 +32,11 @@ const headSchema = z.object({
 
 const settings = new Hono<Env>();
 settings.use("*", requireShop);
+settings.use("*", async (c, next) => {
+  if (c.req.method === "GET" || c.req.method === "HEAD") return next();
+  const denied = await denyUnlessAdmin(c, "Only an admin can change stitching settings.");
+  return denied ?? next();
+});
 
 settings.get("/", async (c) => {
   const loaded = await loadSettings();

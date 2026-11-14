@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { useIsAdmin } from "@/hooks/use-is-admin";
 import { appIsInstalled, installHelp, installShopApp, subscribeInstall } from "@/lib/pwa";
 import type { StitchingGarment, StitchingProcess } from "@/lib/settings";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
@@ -40,8 +41,10 @@ export const Route = createFileRoute("/_authenticated/admin/settings")({
 });
 
 function SettingsPage() {
+  const admin = useIsAdmin();
   const settings = useQuery({
     queryKey: ["settings"],
+    enabled: admin,
     queryFn: () =>
       apiFetch<{ garments: StitchingGarment[]; processes: StitchingProcess[] }>("/api/settings"),
   });
@@ -77,8 +80,14 @@ function SettingsPage() {
           />
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          Stitching garments, the measurement heads for each garment, and the process list. Names
-          can be added or removed.
+          {admin ? (
+            <>
+              Stitching garments, the measurement heads for each garment, and the process list.
+              Names can be added or removed.
+            </>
+          ) : (
+            "Only an admin can change stitching settings."
+          )}
         </p>
       </div>
       <InstallApp />
@@ -86,9 +95,9 @@ function SettingsPage() {
       {settings.error instanceof Error ? (
         <p className="text-sm text-destructive">{settings.error.message}</p>
       ) : null}
-      {settings.data ? (
+      {admin && settings.data ? (
         <Tabs defaultValue="products">
-          <TabsList>
+          <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
             <TabsTrigger value="products">Stitching products</TabsTrigger>
             <TabsTrigger value="measurements">Measurements</TabsTrigger>
             <TabsTrigger value="processes">Processes</TabsTrigger>
