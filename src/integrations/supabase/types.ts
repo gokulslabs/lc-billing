@@ -329,7 +329,7 @@ export type Database = {
           customer_id: string;
           delivery_on?: string | null;
           id?: string;
-          order_no: string;
+          order_no?: string;
           ordered_on?: string;
           status?: string;
           stitching_product_id?: string | null;

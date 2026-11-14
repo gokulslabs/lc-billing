@@ -3,7 +3,6 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { blankToNull } from "@/lib/customers";
 import {
   cleanMeasurements,
-  nextOrderNo,
   STITCHING_STATUSES,
   stitchingOrderSchema,
   stitchingStatusSchema,
@@ -147,12 +146,9 @@ stitching.post("/", async (c) => {
   const parsed = await readOrder(c);
   if ("error" in parsed) return c.json({ error: parsed.error }, parsed.status);
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const orderNo = await allocateOrderNo();
-    if (!orderNo) return c.json({ error: "Could not choose an order number." }, 500);
     const { data, error } = await supabaseAdmin
       .from("stitching_orders")
       .insert({
-        order_no: orderNo,
         customer_id: parsed.input.customerId,
         stitching_product_id: parsed.input.productId,
         bag_no: blankToNull(parsed.input.bagNo),
@@ -404,14 +400,6 @@ async function replaceMeasurements(
     })),
   );
   return !error;
-}
-
-async function allocateOrderNo(): Promise<string | null> {
-  const loaded = await readAll<{ order_no: string }>((from, to) =>
-    supabaseAdmin.from("stitching_orders").select("order_no").order("id").range(from, to),
-  );
-  if (!loaded) return null;
-  return nextOrderNo(loaded.rows.map((row) => row.order_no));
 }
 
 function toOrder(
