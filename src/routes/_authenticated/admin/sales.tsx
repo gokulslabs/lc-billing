@@ -477,8 +477,8 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
 
   return (
     <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
+      <div className="flex flex-wrap items-start justify-start gap-8">
+        <div className="min-w-0">
           <Button
             variant="outline"
             className="rounded-full"
@@ -526,7 +526,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           {invoice && invoice.status !== "cancelled" ? <ChangeBillCustomer invoice={invoice} onSaved={refresh} /> : null}
         </div>
         {invoice ? (
-          <div className="flex w-full max-w-sm flex-col items-stretch gap-3 print:hidden">
+          <div className="flex w-full max-w-sm shrink-0 flex-col items-stretch gap-3 print:hidden">
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-sm text-muted-foreground">Balance</p>
