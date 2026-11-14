@@ -15,9 +15,11 @@ import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
 import {
+  barcodeLabelsDocument,
   LabelSheet,
   type BarcodeLabel,
 } from "@/components/app/BarcodeLabel";
+import { printHtmlInSameTab } from "@/components/app/ShopSlip";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";
 import { DeskTable, PhoneCard, PhoneCards } from "@/components/app/PhoneList";
@@ -68,11 +70,7 @@ export const Route = createFileRoute("/_authenticated/admin/inventory")({
 
 function printBarcodeSheet(labels: BarcodeLabel[]) {
   if (labels.length === 0) return;
-  const printMode = document.documentElement;
-  const finishPrint = () => printMode.classList.remove("barcode-print-mode");
-  printMode.classList.add("barcode-print-mode");
-  window.addEventListener("afterprint", finishPrint, { once: true });
-  window.requestAnimationFrame(() => window.print());
+  printHtmlInSameTab(barcodeLabelsDocument(labels));
 }
 
 function InventoryPage() {
@@ -744,7 +742,8 @@ function CurrentStockPanel() {
   });
   const groups = summary.data?.groups ?? [];
   const totalQuantity = summary.data?.quantity ?? 0;
-  const totalValue = groups.reduce((paise, group) => paise + Math.round(group.amount * 100), 0) / 100;
+  const totalValue =
+    groups.reduce((paise, group) => paise + Math.round(group.amount * 100), 0) / 100;
   const selected = groups.find((group) => group.id === groupId);
 
   if (groupId) {

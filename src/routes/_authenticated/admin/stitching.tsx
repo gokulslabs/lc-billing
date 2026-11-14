@@ -1,5 +1,4 @@
 import { useDeferredValue, useState, type ReactNode } from "react";
-import { flushSync } from "react-dom";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -18,7 +17,15 @@ import {
   type StitchingStatus,
 } from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
-import { escapePrint, legacyDate, openLegacyPrint, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
+import {
+  escapePrint,
+  legacyDate,
+  openLegacyPrint,
+  plainAmount,
+  printHtmlInSameTab,
+  shopHeading,
+  slipRow,
+} from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { PAGE_SIZE } from "@/lib/paging";
 import { Button } from "@/components/ui/button";
@@ -98,7 +105,8 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
           onClick={() => {
             setSort({
               column,
-              direction: activeSort?.column === column && activeSort.direction === "asc" ? "desc" : "asc",
+              direction:
+                activeSort?.column === column && activeSort.direction === "asc" ? "desc" : "asc",
             });
             setPage(1);
           }}
@@ -246,9 +254,15 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
         </Select>
         {status !== "board" ? (
           <Select
-            value={activeSort?.column === "ordered_on" ? activeSort.direction : sort ? "column" : "due"}
+            value={
+              activeSort?.column === "ordered_on" ? activeSort.direction : sort ? "column" : "due"
+            }
             onValueChange={(value) => {
-              setSort(value === "due" ? null : { column: "ordered_on", direction: value === "asc" ? "asc" : "desc" });
+              setSort(
+                value === "due"
+                  ? null
+                  : { column: "ordered_on", direction: value === "asc" ? "asc" : "desc" },
+              );
               setPage(1);
             }}
           >
@@ -259,7 +273,11 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
               <SelectItem value="desc">Newest first</SelectItem>
               <SelectItem value="asc">Oldest first</SelectItem>
               {dueFilter ? <SelectItem value="due">Due date first</SelectItem> : null}
-              {sort && sort.column !== "ordered_on" ? <SelectItem value="column" disabled>Column sort</SelectItem> : null}
+              {sort && sort.column !== "ordered_on" ? (
+                <SelectItem value="column" disabled>
+                  Column sort
+                </SelectItem>
+              ) : null}
             </SelectContent>
           </Select>
         ) : null}
@@ -472,10 +490,9 @@ function OrderScreen({
     queryFn: () => apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`),
   });
   const order = existing.data?.order;
-  const [printSheetCopy, setPrintSheetCopy] = useState<"customer" | "office">("office");
   function printOrder(copy: "customer" | "office") {
-    flushSync(() => setPrintSheetCopy(copy));
-    window.print();
+    if (!order) return;
+    printHtmlInSameTab(stitchingMeasurementDocument(order, copy));
   }
   const processOptions = useQuery({
     queryKey: ["settings"],
@@ -604,13 +621,18 @@ function OrderScreen({
     if (nextId === productId) return;
     if (
       measurements.some((row) => row.value.trim()) &&
-      !window.confirm("Changing the garment will clear the measurements entered for this order. Continue?")
-    ) return;
+      !window.confirm(
+        "Changing the garment will clear the measurements entered for this order. Continue?",
+      )
+    )
+      return;
     setProductId(nextId);
     const product = products.data?.products.find((item) => item.id === nextId);
-    setMeasurements(product?.measurements.length
-      ? product.measurements.map((field) => ({ label: field.label, value: "" }))
-      : [{ label: "", value: "" }]);
+    setMeasurements(
+      product?.measurements.length
+        ? product.measurements.map((field) => ({ label: field.label, value: "" }))
+        : [{ label: "", value: "" }],
+    );
   }
 
   return (
@@ -629,7 +651,7 @@ function OrderScreen({
                 type="button"
                 variant="outline"
                 className="rounded-full"
-onClick={() => printCopy("customer")}
+                onClick={() => printCopy("customer")}
               >
                 Customer copy
               </Button>
@@ -637,7 +659,7 @@ onClick={() => printCopy("customer")}
                 type="button"
                 variant="outline"
                 className="rounded-full"
-onClick={() => printCopy("office")}
+                onClick={() => printCopy("office")}
               >
                 Office copy
               </Button>
@@ -645,7 +667,7 @@ onClick={() => printCopy("office")}
                 type="button"
                 variant="outline"
                 className="rounded-full"
-                onClick={() => printOrder(printSheetCopy)}
+                onClick={() => printOrder("office")}
               >
                 Print order sheet
               </Button>
@@ -883,7 +905,7 @@ onClick={() => printCopy("office")}
           ) : null}
         </div>
       </form>
-{order ? <MeasurementSheet order={order} copy={printSheetCopy} /> : null}
+      {order ? <MeasurementSheet order={order} copy="office" /> : null}
     </div>
   );
 }
@@ -1009,7 +1031,10 @@ function customerCopyHtml(order: StitchingOrder): string {
 
 function officeCopyHtml(order: StitchingOrder): string {
   const processes = (order.processes ?? [])
-    .map((process, index) => `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(process)}</h4></td></tr>`)
+    .map(
+      (process, index) =>
+        `<tr><td><h4>${index + 1}</h4></td><td><h4>${escapePrint(process)}</h4></td></tr>`,
+    )
     .join("");
   const measurements = order.measurements
     .filter((row) => row.label.trim() || row.value.trim())
@@ -1019,6 +1044,38 @@ function officeCopyHtml(order: StitchingOrder): string {
     )
     .join("");
   return `<table><tbody>${shopHeading(false)}<tr><th class="center" colspan="2"><h4>STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("EXPECTED DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("NAME", order.customerName)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("DESCRIPTION", order.description ?? "")}</tbody></table><table><thead><tr><th colspan="2"><h4>PROCESS DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>PROCESS</h4></th></tr></thead><tbody>${processes}</tbody></table><table><thead><tr><th colspan="3"><h4>MEASUREMENT DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>TITLE</h4></th><th><h4>MEASUREMENT</h4></th></tr></thead><tbody>${measurements}</tbody></table>`;
+}
+
+function stitchingMeasurementDocument(order: StitchingOrder, copy: "customer" | "office"): string {
+  const office = copy === "office";
+  const row = (label: string, value: string) =>
+    `<tr><td class="label">${escapePrint(label)}</td><td>${escapePrint(value || "—")}</td></tr>`;
+  const measurements = order.measurements.length
+    ? order.measurements
+        .map(
+          (measurement) =>
+            `<tr><td>${escapePrint(measurement.label)}</td><td>${escapePrint(measurement.value)}</td></tr>`,
+        )
+        .join("")
+    : `<tr><td colspan="2" class="empty">No measurements saved for this order.</td></tr>`;
+  const measurementTable = office
+    ? `<table class="measurements"><thead><tr><th>Measurement</th><th>Value</th></tr></thead><tbody>${measurements}</tbody></table>`
+    : "";
+  const description =
+    office && order.description
+      ? `<p><b>Description:</b> ${escapePrint(order.description)}</p>`
+      : "";
+  const process =
+    office && order.processes?.length
+      ? `<p><b>Process:</b> ${escapePrint(order.processes.join(", "))}</p>`
+      : "";
+  const amount = office ? "" : row("Amount", formatRupees(order.amount));
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Stitching order ${escapePrint(String(order.orderNo))}</title><style>
+    *{box-sizing:border-box} @page{size:A5;margin:8mm} html,body{margin:0;padding:0;background:#fff;color:#202020;font-family:Arial,sans-serif}
+    body{font-size:11pt}.header{border-bottom:2px solid #202020;padding-bottom:8px}.title{margin:0;font:24pt Georgia,serif}.subtitle{margin:3px 0 0;font-size:9pt;letter-spacing:.06em;text-transform:uppercase}
+    table{width:100%;border-collapse:collapse;margin-top:12px}.meta td{padding:3px 0;vertical-align:top}.label{width:30%;color:#555;font-size:8pt;text-transform:uppercase}.measurements{margin-top:16px}.measurements th,.measurements td{padding:6px 8px;border:1px solid #aaa;text-align:left}.measurements th{background:#eee;font-size:8pt;text-transform:uppercase}.measurements td:last-child{font-weight:600}.empty{text-align:center;color:#555;padding:18px 8px}.footer{margin-top:18px;border-top:1px solid #aaa;padding-top:7px;color:#555;font-size:8pt}
+  </style></head><body><header class="header"><h1 class="title">Ladies Collections</h1><p class="subtitle">${office ? "Stitching order copy · Office" : "Customer stitching order copy"}</p></header>
+    <table class="meta"><tbody>${row("Customer", order.customerName)}${order.customerPhone ? row("Phone", order.customerPhone) : ""}${row("Garment", garmentName(order.productName))}${row("Order / bag", `${order.orderNo}${order.bagNo ? ` / ${order.bagNo}` : ""}`)}${row("Order date", slashDate(order.orderedOn))}${row("Expected delivery", order.deliveryOn ? slashDate(order.deliveryOn) : "")}${amount}</tbody></table>${description}${process}${measurementTable}<p class="footer">Order status: ${escapePrint(order.status)}</p></body></html>`;
 }
 
 function updateRow(

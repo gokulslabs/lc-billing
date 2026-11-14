@@ -23,18 +23,69 @@ export function plainAmount(value: number): string {
 }
 
 export function openLegacyPrint(body: string): boolean {
-  const popup = window.open("", "_blank");
-  if (!popup) return false;
-  popup.document.open();
-  popup.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${LEGACY_PRINT_TITLE}</title><style>
+  return printHtmlInSameTab(`<!doctype html><html><head><meta charset="utf-8"><title>${LEGACY_PRINT_TITLE}</title><style>
     body { width: 400px; margin: 0; color: #333; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }
     th, td { border: 1px solid #ddd; padding: 5px; text-align: left; vertical-align: top; }
     .center { text-align: center; }
     h3 { margin: 20px 0 10px; font-size: 24px; font-weight: 500; line-height: 1.1; }
     h4 { margin: 10px 0; font-size: 18px; font-weight: 500; line-height: 1.1; }
-  </style></head><body onload="window.print()">${body}</body></html>`);
-  popup.document.close();
+    @media print { body { width: 100%; } @page { margin: 8mm; } }
+  </style></head><body>${body}</body></html>`);
+}
+
+/** Print a standalone document through an invisible frame in this tab. */
+export function printHtmlInSameTab(html: string): boolean {
+  const frame = document.createElement("iframe");
+  frame.title = "Print document";
+  frame.tabIndex = -1;
+  frame.setAttribute("aria-hidden", "true");
+  Object.assign(frame.style, {
+    position: "fixed",
+    left: "0",
+    top: "0",
+    width: "100vw",
+    height: "100vh",
+    border: "0",
+    opacity: "0",
+    pointerEvents: "none",
+    zIndex: "-1",
+  });
+
+  let removed = false;
+  const removeFrame = () => {
+    if (removed) return;
+    removed = true;
+    window.clearTimeout(fallback);
+    frame.remove();
+  };
+  const fallback = window.setTimeout(removeFrame, 120_000);
+  document.body.appendChild(frame);
+
+  frame.addEventListener(
+    "load",
+    () => {
+      const printWindow = frame.contentWindow;
+      if (!printWindow) {
+        removeFrame();
+        return;
+      }
+      const finish = () => window.setTimeout(removeFrame, 0);
+      printWindow.addEventListener("afterprint", finish, { once: true });
+      window.addEventListener("afterprint", finish, { once: true });
+      const fontsReady = printWindow.document.fonts?.ready ?? Promise.resolve();
+      void fontsReady
+        .catch(() => undefined)
+        .then(() => {
+          window.requestAnimationFrame(() => {
+            printWindow.focus();
+            printWindow.print();
+          });
+        });
+    },
+    { once: true },
+  );
+  frame.srcdoc = html;
   return true;
 }
 
