@@ -22,7 +22,7 @@ export function plainAmount(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(2);
 }
 
-export function openLegacyPrint(body: string): boolean {
+export function printLegacySlipInSameTab(body: string): boolean {
   return printHtmlInSameTab(`<!doctype html><html><head><meta charset="utf-8"><title>${LEGACY_PRINT_TITLE}</title><style>
     body { width: 400px; margin: 0; color: #333; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
     table { width: 100%; border-collapse: collapse; margin-top: 10px; }

@@ -20,9 +20,9 @@ import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import {
   escapePrint,
   legacyDate,
-  openLegacyPrint,
   plainAmount,
   printHtmlInSameTab,
+  printLegacySlipInSameTab,
   shopHeading,
   slipRow,
 } from "@/components/app/ShopSlip";
@@ -521,7 +521,7 @@ function OrderScreen({
   function printCopy(next: "customer" | "office") {
     if (!order) return;
     const body = next === "customer" ? customerCopyHtml(order) : officeCopyHtml(order);
-    if (!openLegacyPrint(body)) toast.error("Allow pop-ups to print the order.");
+    if (!printLegacySlipInSameTab(body)) toast.error("Could not prepare the printout.");
   }
   const [seen, setSeen] = useState<string | null>(null);
   const savedMeasurements = order?.measurements.length
