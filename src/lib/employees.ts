@@ -84,7 +84,11 @@ export function blankToNull(value: string): string | null {
   return trimmed.length ? trimmed : null;
 }
 
-export function wouldRemoveLastAdmin(adminIds: readonly string[], userId: string, nextRole: AppRole): boolean {
+export function wouldRemoveLastAdmin(
+  adminIds: readonly string[],
+  userId: string,
+  nextRole: AppRole,
+): boolean {
   return nextRole !== "admin" && adminIds.length === 1 && adminIds.includes(userId);
 }
 

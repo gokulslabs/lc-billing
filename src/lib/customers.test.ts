@@ -20,8 +20,18 @@ describe("customerSchema", () => {
   it("rejects the placeholder and allows a named walk-in", () => {
     expect(isUnrecordedName(" NOT RECORDED ")).toBe(true);
     expect(isUnrecordedName("Walk-in")).toBe(false);
-    const blocked = customerSchema.safeParse({ name: "NOT RECORDED", address: "", phone: "", bookNo: "" });
-    const walkIn = customerSchema.safeParse({ name: "Walk-in", address: "", phone: "", bookNo: "" });
+    const blocked = customerSchema.safeParse({
+      name: "NOT RECORDED",
+      address: "",
+      phone: "",
+      bookNo: "",
+    });
+    const walkIn = customerSchema.safeParse({
+      name: "Walk-in",
+      address: "",
+      phone: "",
+      bookNo: "",
+    });
     expect(blocked.success).toBe(false);
     expect(walkIn.success).toBe(true);
   });

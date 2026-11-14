@@ -3,7 +3,12 @@ import { sumMoney, sumSales } from "./dashboard";
 
 describe("sumSales", () => {
   it("adds today's bill lines in paise and thousandths", () => {
-    expect(sumSales([{ quantity: 1.5, amount: 149.99 }, { quantity: 2, amount: 10 }])).toEqual({
+    expect(
+      sumSales([
+        { quantity: 1.5, amount: 149.99 },
+        { quantity: 2, amount: 10 },
+      ]),
+    ).toEqual({
       amount: 159.99,
       quantity: 3.5,
     });

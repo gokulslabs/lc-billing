@@ -29,8 +29,21 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Textarea } from "@/components/ui/textarea";
 
 export const Route = createFileRoute("/_authenticated/admin/employees")({
@@ -69,7 +82,10 @@ function EmployeesPage() {
   const queryClient = useQueryClient();
   const [editor, setEditor] = useState<Employee | "new" | null>(null);
   const [passwordFor, setPasswordFor] = useState<Employee | null>(null);
-  const [sort, setSort] = useState<{ key: "fullName" | "department" | "mobile"; ascending: boolean }>({
+  const [sort, setSort] = useState<{
+    key: "fullName" | "department" | "mobile";
+    ascending: boolean;
+  }>({
     key: "fullName",
     ascending: true,
   });
@@ -82,8 +98,10 @@ function EmployeesPage() {
   });
 
   const denied = employees.error instanceof Error && employees.error.message.includes("admin");
-  const rows = [...(employees.data?.employees ?? [])].sort((a, b) =>
-    (sort.ascending ? 1 : -1) * (a[sort.key] ?? "").localeCompare(b[sort.key] ?? "", "en-IN", { numeric: true }),
+  const rows = [...(employees.data?.employees ?? [])].sort(
+    (a, b) =>
+      (sort.ascending ? 1 : -1) *
+      (a[sort.key] ?? "").localeCompare(b[sort.key] ?? "", "en-IN", { numeric: true }),
   );
   const currentPage = Math.min(page, Math.max(1, Math.ceil(rows.length / PAGE_SIZE)));
   const offset = (currentPage - 1) * PAGE_SIZE;
@@ -94,7 +112,9 @@ function EmployeesPage() {
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-4xl font-semibold">Employees</h1>
-          <p className="mt-2 text-sm text-muted-foreground">Add staff and choose who can manage the shop.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Add staff and choose who can manage the shop.
+          </p>
         </div>
         {!denied && (
           <div className="flex flex-wrap gap-2">
@@ -128,7 +148,9 @@ function EmployeesPage() {
       ) : denied ? (
         <div className="rounded-2xl border border-border bg-card p-8 text-center">
           <h2 className="text-2xl font-semibold">Admins only</h2>
-          <p className="mt-2 text-sm text-muted-foreground">Ask the shop owner to grant access changes.</p>
+          <p className="mt-2 text-sm text-muted-foreground">
+            Ask the shop owner to grant access changes.
+          </p>
         </div>
       ) : employees.error ? (
         <p className="text-sm text-destructive">{employees.error.message}</p>
@@ -145,15 +167,31 @@ function EmployeesPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Sl. no.</TableHead>
-                {([
-                  ["fullName", "Name"], ["department", "Department"], ["mobile", "Mobile"],
-                ] as const).map(([key, label]) => (
-                  <TableHead key={key} aria-sort={sort.key === key ? (sort.ascending ? "ascending" : "descending") : undefined}>
-                    <button type="button" className="cursor-pointer hover:underline" onClick={() => {
-                      setSort({ key, ascending: sort.key !== key || !sort.ascending });
-                      setPage(1);
-                    }}>
-                      {label} <span aria-hidden="true">{sort.key === key ? (sort.ascending ? "↑" : "↓") : "↕"}</span>
+                {(
+                  [
+                    ["fullName", "Name"],
+                    ["department", "Department"],
+                    ["mobile", "Mobile"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <TableHead
+                    key={key}
+                    aria-sort={
+                      sort.key === key ? (sort.ascending ? "ascending" : "descending") : undefined
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="cursor-pointer hover:underline"
+                      onClick={() => {
+                        setSort({ key, ascending: sort.key !== key || !sort.ascending });
+                        setPage(1);
+                      }}
+                    >
+                      {label}{" "}
+                      <span aria-hidden="true">
+                        {sort.key === key ? (sort.ascending ? "↑" : "↓") : "↕"}
+                      </span>
                     </button>
                   </TableHead>
                 ))}
@@ -172,13 +210,25 @@ function EmployeesPage() {
                   <TableCell>{departmentLabel(employee.department)}</TableCell>
                   <TableCell>{employee.mobile || "—"}</TableCell>
                   <TableCell>
-                    <Badge variant={employee.role === "admin" ? "default" : "secondary"}>{roleLabel(employee.role)}</Badge>
+                    <Badge variant={employee.role === "admin" ? "default" : "secondary"}>
+                      {roleLabel(employee.role)}
+                    </Badge>
                   </TableCell>
                   <TableCell className="space-x-2 text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setEditor(employee)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setEditor(employee)}
+                    >
                       Edit
                     </Button>
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => setPasswordFor(employee)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => setPasswordFor(employee)}
+                    >
                       Password
                     </Button>
                   </TableCell>
@@ -234,7 +284,8 @@ function EmployeeDialog({
             password: "",
             mobile: employee.mobile ?? "",
             department: employee.department,
-            gender: employee.gender === "MALE" || employee.gender === "FEMALE" ? employee.gender : "",
+            gender:
+              employee.gender === "MALE" || employee.gender === "FEMALE" ? employee.gender : "",
             address: employee.address ?? "",
             role: employee.role,
           }
@@ -324,7 +375,9 @@ function EmployeeDialog({
                 onChange={(event) => setDraft({ ...draft, password: event.target.value })}
                 required
               />
-              <p className="text-xs text-muted-foreground">At least 10 characters with letters and numbers. Never a phone number.</p>
+              <p className="text-xs text-muted-foreground">
+                At least 10 characters with letters and numbers. Never a phone number.
+              </p>
             </Field>
           )}
           <Field label="Mobile" id="mobile">
@@ -355,7 +408,9 @@ function EmployeeDialog({
           <Field label="Gender" id="gender">
             <Select
               value={draft.gender || "unset"}
-              onValueChange={(value) => setDraft({ ...draft, gender: value === "unset" ? "" : (value as Gender) })}
+              onValueChange={(value) =>
+                setDraft({ ...draft, gender: value === "unset" ? "" : (value as Gender) })
+              }
             >
               <SelectTrigger id="gender">
                 <SelectValue />
@@ -379,7 +434,10 @@ function EmployeeDialog({
             />
           </Field>
           <Field label="Access" id="role">
-            <Select value={draft.role} onValueChange={(value) => setDraft({ ...draft, role: value as AppRole })}>
+            <Select
+              value={draft.role}
+              onValueChange={(value) => setDraft({ ...draft, role: value as AppRole })}
+            >
               <SelectTrigger id="role">
                 <SelectValue />
               </SelectTrigger>
@@ -403,7 +461,13 @@ function EmployeeDialog({
   );
 }
 
-function PasswordDialog({ employee, onOpenChange }: { employee: Employee | null; onOpenChange: (open: boolean) => void }) {
+function PasswordDialog({
+  employee,
+  onOpenChange,
+}: {
+  employee: Employee | null;
+  onOpenChange: (open: boolean) => void;
+}) {
   const [password, setPassword] = useState("");
   const save = useMutation({
     mutationFn: async () => {
@@ -450,7 +514,9 @@ function PasswordDialog({ employee, onOpenChange }: { employee: Employee | null;
               onChange={(event) => setPassword(event.target.value)}
               required
             />
-            <p className="text-xs text-muted-foreground">At least 10 characters with letters and numbers. Never a phone number.</p>
+            <p className="text-xs text-muted-foreground">
+              At least 10 characters with letters and numbers. Never a phone number.
+            </p>
           </Field>
           <DialogFooter>
             <Button type="submit" className="rounded-full" disabled={save.isPending}>

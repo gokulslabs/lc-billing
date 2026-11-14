@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { blankToNull, isUnrecordedName, UNRECORDED_BILL_ERROR, UNRECORDED_NAME } from "@/lib/customers";
+import {
+  blankToNull,
+  isUnrecordedName,
+  UNRECORDED_BILL_ERROR,
+  UNRECORDED_NAME,
+} from "@/lib/customers";
 import { quantityAfterReturn, quantityAfterSale, quantityForUnit } from "@/lib/inventory";
 import type { Unit } from "@/lib/products";
 import {
@@ -110,7 +115,13 @@ sales.get("/items", async (c) => {
     const denied = await denyUnlessAdmin(c);
     if (denied) return denied;
   }
-  const invoices = await loadInvoices(range.from, range.to, q, readPage(c.req.query("page")), exporting);
+  const invoices = await loadInvoices(
+    range.from,
+    range.to,
+    q,
+    readPage(c.req.query("page")),
+    exporting,
+  );
   if ("error" in invoices) return c.json({ error: invoices.error }, 500);
   if (invoices.rows.length === 0) return c.json({ items: [], total: 0 });
   const byId = new Map(invoices.rows.map((row) => [row.id, row]));
@@ -187,27 +198,57 @@ sales.get("/due", async (c) => {
   if (!loaded) return c.json({ error: "Could not load unpaid bills." }, 500);
   const summaries = await summarize(loaded.rows);
   if ("error" in summaries) return c.json({ error: summaries.error }, 500);
-  const due = summaries.invoices.filter((invoice) => invoice.balance > 0.001 && billBook(invoice.billedOn) === books);
+  const due = summaries.invoices.filter(
+    (invoice) => invoice.balance > 0.001 && billBook(invoice.billedOn) === books,
+  );
   if (c.req.query("export") === "1") {
     const denied = await denyUnlessAdmin(c);
     if (denied) return denied;
-    const balance = due.reduce((sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100, 0);
+    const balance = due.reduce(
+      (sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100,
+      0,
+    );
     return c.json({ invoices: due, total: due.length, page: 1, books, balance });
   }
   const start = (page - 1) * 50;
-  const balance = due.reduce((sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100, 0);
-  return c.json({ invoices: due.slice(start, start + 50), total: due.length, page, books, balance });
+  const balance = due.reduce(
+    (sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100,
+    0,
+  );
+  return c.json({
+    invoices: due.slice(start, start + 50),
+    total: due.length,
+    page,
+    books,
+    balance,
+  });
 });
 
 sales.get("/pending", async (c) => {
-  const entries = await readAll<{ id: string; invoice_id: string; amount: number | string; paid_on: string; showroom: string | null }>((from, to) =>
-    supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, showroom").eq("mode", "PENDING").order("paid_on").range(from, to),
+  const entries = await readAll<{
+    id: string;
+    invoice_id: string;
+    amount: number | string;
+    paid_on: string;
+    showroom: string | null;
+  }>((from, to) =>
+    supabaseAdmin
+      .from("payments")
+      .select("id, invoice_id, amount, paid_on, showroom")
+      .eq("mode", "PENDING")
+      .order("paid_on")
+      .range(from, to),
   );
   if (!entries) return c.json({ error: "Could not load pending promises." }, 500);
   const invoiceIds = [...new Set(entries.rows.map((row) => row.invoice_id))];
   if (invoiceIds.length === 0) return c.json({ promises: [] });
   const invoices = await readIn<InvoiceRow>(invoiceIds, (chunk, from, to) =>
-    supabaseAdmin.from("invoices").select("id, bill_no, customer_id, billed_on, status, remarks").in("id", chunk).neq("status", "cancelled").range(from, to),
+    supabaseAdmin
+      .from("invoices")
+      .select("id, bill_no, customer_id, billed_on, status, remarks")
+      .in("id", chunk)
+      .neq("status", "cancelled")
+      .range(from, to),
   );
   if (!invoices) return c.json({ error: "Could not load pending bills." }, 500);
   const summaries = await summarize(invoices);
@@ -215,21 +256,29 @@ sales.get("/pending", async (c) => {
   const byInvoice = new Map(summaries.invoices.map((row) => [row.id, row]));
   const names = await customerNames(invoices.map((row) => row.customer_id));
   if (!names) return c.json({ error: "Could not load pending customers." }, 500);
-  const promises = entries.rows.flatMap((row) => {
-    const bill = byInvoice.get(row.invoice_id);
-    if (!bill) return [];
-    return [{
-      id: row.id,
-      invoiceId: bill.id,
-      billNo: bill.billNo,
-      customerId: bill.customerId,
-      customerName: names.get(bill.customerId) ?? "",
-      dueOn: row.paid_on,
-      amount: round2(Number(row.amount)),
-      balance: bill.balance,
-      note: row.showroom,
-    }];
-  }).sort((a, b) => a.dueOn.localeCompare(b.dueOn) || a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+  const promises = entries.rows
+    .flatMap((row) => {
+      const bill = byInvoice.get(row.invoice_id);
+      if (!bill) return [];
+      return [
+        {
+          id: row.id,
+          invoiceId: bill.id,
+          billNo: bill.billNo,
+          customerId: bill.customerId,
+          customerName: names.get(bill.customerId) ?? "",
+          dueOn: row.paid_on,
+          amount: round2(Number(row.amount)),
+          balance: bill.balance,
+          note: row.showroom,
+        },
+      ];
+    })
+    .sort(
+      (a, b) =>
+        a.dueOn.localeCompare(b.dueOn) ||
+        a.billNo.localeCompare(b.billNo, undefined, { numeric: true }),
+    );
   return c.json({ promises });
 });
 
@@ -248,7 +297,12 @@ sales.get("/close", async (c) => {
         .range(start, end),
     ),
     readAll<{ amount: number | string; mode: string | null; invoice_id: string }>((start, end) =>
-      supabaseAdmin.from("payments").select("amount, mode, invoice_id").eq("paid_on", date).order("id").range(start, end),
+      supabaseAdmin
+        .from("payments")
+        .select("amount, mode, invoice_id")
+        .eq("paid_on", date)
+        .order("id")
+        .range(start, end),
     ),
   ]);
   if (!invoices || !payments) return c.json({ error: "Could not close the day." }, 500);
@@ -258,10 +312,22 @@ sales.get("/close", async (c) => {
   const stillDue = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.balance, 0));
   const modes = PAYMENT_MODES.filter((mode) => !isPendingPayment(mode)).map((mode) => ({
     mode,
-    amount: round2(payments.rows.filter((row) => row.mode === mode).reduce((sum, row) => sum + Number(row.amount), 0)),
+    amount: round2(
+      payments.rows
+        .filter((row) => row.mode === mode)
+        .reduce((sum, row) => sum + Number(row.amount), 0),
+    ),
   }));
-  const pending = round2(payments.rows.filter((row) => isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
-  const collected = round2(payments.rows.filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
+  const pending = round2(
+    payments.rows
+      .filter((row) => isPendingPayment(row.mode))
+      .reduce((sum, row) => sum + Number(row.amount), 0),
+  );
+  const collected = round2(
+    payments.rows
+      .filter((row) => !isPendingPayment(row.mode))
+      .reduce((sum, row) => sum + Number(row.amount), 0),
+  );
   return c.json({
     date,
     bills: summaries.invoices.length,
@@ -299,9 +365,14 @@ sales.get("/", async (c) => {
 sales.post("/", async (c) => {
   const parsed = createInvoiceSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const customer = await supabaseAdmin.from("customers").select("id, name, phone").eq("id", parsed.data.customerId).maybeSingle();
+  const customer = await supabaseAdmin
+    .from("customers")
+    .select("id, name, phone")
+    .eq("id", parsed.data.customerId)
+    .maybeSingle();
   if (customer.error) return c.json({ error: "Could not check the customer." }, 500);
-  if (!customer.data || isUnrecordedName(customer.data.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
+  if (!customer.data || isUnrecordedName(customer.data.name))
+    return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
     const billNo = await allocateBillNo();
@@ -318,7 +389,10 @@ sales.post("/", async (c) => {
       .single();
     if (isDuplicate(error) && attempt === 0) continue;
     if (error || !data) return c.json({ error: "Could not open the bill." }, 500);
-    return c.json({ invoice: emptyDetail(data as InvoiceRow, customer.data.name, customer.data.phone ?? "") }, 201);
+    return c.json(
+      { invoice: emptyDetail(data as InvoiceRow, customer.data.name, customer.data.phone ?? "") },
+      201,
+    );
   }
   return c.json({ error: "Could not open the bill." }, 500);
 });
@@ -326,7 +400,12 @@ sales.post("/", async (c) => {
 sales.get("/unrecorded", async (c) => {
   const page = readPage(c.req.query("page"));
   const people = await readAll<{ id: string; name: string }>((from, to) =>
-    supabaseAdmin.from("customers").select("id, name").ilike("name", `%${UNRECORDED_NAME}%`).order("id").range(from, to),
+    supabaseAdmin
+      .from("customers")
+      .select("id, name")
+      .ilike("name", `%${UNRECORDED_NAME}%`)
+      .order("id")
+      .range(from, to),
   );
   if (!people) return c.json({ error: "Could not load these bills." }, 500);
   const ids = people.rows.filter((row) => isUnrecordedName(row.name)).map((row) => row.id);
@@ -349,7 +428,11 @@ sales.get("/unrecorded", async (c) => {
     return c.json({ invoices: summaries.invoices, total: summaries.invoices.length, page: 1 });
   }
   const start = (page - 1) * PAGE_SIZE;
-  return c.json({ invoices: summaries.invoices.slice(start, start + PAGE_SIZE), total: summaries.invoices.length, page });
+  return c.json({
+    invoices: summaries.invoices.slice(start, start + PAGE_SIZE),
+    total: summaries.invoices.length,
+    page,
+  });
 });
 
 sales.get("/:id", async (c) => {
@@ -365,8 +448,12 @@ sales.post("/:id/customer", async (c) => {
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
   const customer = await customerRecord(parsed.data.customerId);
   if (customer === "error") return c.json({ error: "Could not check the customer." }, 500);
-  if (!customer || isUnrecordedName(customer.name)) return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
-  const { error } = await supabaseAdmin.from("invoices").update({ customer_id: customer.id }).eq("id", invoice.id);
+  if (!customer || isUnrecordedName(customer.name))
+    return c.json({ error: UNRECORDED_BILL_ERROR }, 400);
+  const { error } = await supabaseAdmin
+    .from("invoices")
+    .update({ customer_id: customer.id })
+    .eq("id", invoice.id);
   if (error) return c.json({ error: "Could not attach the customer." }, 500);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
@@ -402,7 +489,8 @@ sales.post("/:id/lines", async (c) => {
     }
   }
   const available = Number(stock.quantity);
-  if (parsed.data.quantity > available + 0.0001) return c.json({ error: "Not enough stock on this inventory number." }, 400);
+  if (parsed.data.quantity > available + 0.0001)
+    return c.json({ error: "Not enough stock on this inventory number." }, 400);
 
   const left = quantityAfterSale(available, parsed.data.quantity);
   const moved = await supabaseAdmin
@@ -413,7 +501,8 @@ sales.post("/:id/lines", async (c) => {
     .eq("status", "available")
     .select("id")
     .maybeSingle();
-  if (moved.error || !moved.data) return c.json({ error: "Stock changed. Try the line again." }, 409);
+  if (moved.error || !moved.data)
+    return c.json({ error: "Stock changed. Try the line again." }, 409);
 
   const priced = priceLine(
     parsed.data.quantity,
@@ -447,7 +536,13 @@ sales.post("/:id/lines", async (c) => {
   await syncInvoiceStatus(invoice.id);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
-  return c.json({ invoice: detail.invoice, line: toLine(data as LineRow, product, left > 0 ? "available" : "sold") }, 201);
+  return c.json(
+    {
+      invoice: detail.invoice,
+      line: toLine(data as LineRow, product, left > 0 ? "available" : "sold"),
+    },
+    201,
+  );
 });
 
 sales.post("/:id/lines/:lineId/return", async (c) => {
@@ -505,36 +600,58 @@ sales.post("/:id/discount", async (c) => {
     .eq("invoice_id", invoice.id)
     .order("id");
   if (lines.error) return c.json({ error: "Could not load bill lines." }, 500);
-  if (!lines.data?.length) return c.json({ error: "Add an item before setting a bill discount." }, 400);
+  if (!lines.data?.length)
+    return c.json({ error: "Add an item before setting a bill discount." }, 400);
 
-  const grossCents = lines.data.map((line) => Math.round(lineAmount(Number(line.quantity), Number(line.rate)) * 100));
+  const grossCents = lines.data.map((line) =>
+    Math.round(lineAmount(Number(line.quantity), Number(line.rate)) * 100),
+  );
   const grossTotalCents = grossCents.reduce((sum, amount) => sum + amount, 0);
   const discountCents = Math.round(parsed.data.discount * 100);
-  if (discountCents > grossTotalCents) return c.json({ error: "Discount cannot be more than the gross amount." }, 400);
+  if (discountCents > grossTotalCents)
+    return c.json({ error: "Discount cannot be more than the gross amount." }, 400);
 
-  const payments = await supabaseAdmin.from("payments").select("amount, mode").eq("invoice_id", invoice.id);
+  const payments = await supabaseAdmin
+    .from("payments")
+    .select("amount, mode")
+    .eq("invoice_id", invoice.id);
   if (payments.error) return c.json({ error: "Could not check bill payments." }, 500);
-  const collectedCents = Math.round((payments.data ?? []).filter((payment) => !isPendingPayment(payment.mode)).reduce((sum, payment) => sum + Number(payment.amount), 0) * 100);
+  const collectedCents = Math.round(
+    (payments.data ?? [])
+      .filter((payment) => !isPendingPayment(payment.mode))
+      .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100,
+  );
   const netCents = grossTotalCents - discountCents;
-  if (collectedCents > netCents) return c.json({ error: "The new total cannot be less than the amount already collected." }, 400);
+  if (collectedCents > netCents)
+    return c.json(
+      { error: "The new total cannot be less than the amount already collected." },
+      400,
+    );
 
   let allocatedCents = 0;
   const updates = lines.data.map((line, index) => {
-    const amountCents = index === lines.data!.length - 1
-      ? netCents - allocatedCents
-      : grossTotalCents > 0
-        ? Math.round(netCents * (grossCents[index] ?? 0) / grossTotalCents)
-        : 0;
+    const amountCents =
+      index === lines.data!.length - 1
+        ? netCents - allocatedCents
+        : grossTotalCents > 0
+          ? Math.round((netCents * (grossCents[index] ?? 0)) / grossTotalCents)
+          : 0;
     allocatedCents += amountCents;
     return { id: line.id, previous: Number(line.amount), amount: amountCents / 100 };
   });
 
   const changed: typeof updates = [];
   for (const row of updates) {
-    const saved = await supabaseAdmin.from("invoice_lines").update({ amount: row.amount }).eq("id", row.id);
+    const saved = await supabaseAdmin
+      .from("invoice_lines")
+      .update({ amount: row.amount })
+      .eq("id", row.id);
     if (saved.error) {
       for (const prior of changed) {
-        await supabaseAdmin.from("invoice_lines").update({ amount: prior.previous }).eq("id", prior.id);
+        await supabaseAdmin
+          .from("invoice_lines")
+          .update({ amount: prior.previous })
+          .eq("id", prior.id);
       }
       return c.json({ error: "Could not save the bill discount. No change was kept." }, 500);
     }
@@ -552,13 +669,15 @@ sales.post("/:id/cancel", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status === "cancelled") return c.json({ error: "This bill is already cancelled." }, 400);
+  if (invoice.status === "cancelled")
+    return c.json({ error: "This bill is already cancelled." }, 400);
   const paid = await supabaseAdmin
     .from("payments")
     .select("id", { count: "exact", head: true })
     .eq("invoice_id", invoice.id);
   if (paid.error) return c.json({ error: "Could not check the payments." }, 500);
-  if ((paid.count ?? 0) > 0) return c.json({ error: "This bill has a payment. Remove it before cancelling." }, 400);
+  if ((paid.count ?? 0) > 0)
+    return c.json({ error: "This bill has a payment. Remove it before cancelling." }, 400);
   const lines = await supabaseAdmin
     .from("invoice_lines")
     .select("id, inventory_item_id, quantity")
@@ -585,7 +704,8 @@ sales.post("/:id/payments", async (c) => {
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const detail = await loadDetail(c.req.param("id"));
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
-  if (detail.invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
+  if (detail.invoice.status === "cancelled")
+    return c.json({ error: "This bill is cancelled." }, 400);
   const problem = collectionProblem(detail.invoice.balance, parsed.data.amount);
   if (problem) return c.json({ error: problem }, 400);
   const { error } = await supabaseAdmin.from("payments").insert({
@@ -616,7 +736,8 @@ sales.post("/:id/payments/:paymentId/remove", async (c) => {
     .maybeSingle();
   if (payment.error) return c.json({ error: "Could not check this payment." }, 500);
   if (!payment.data) return c.json({ error: "Payment not found." }, 404);
-  if (payment.data.paid_on !== shopToday()) return c.json({ error: "Only a payment taken today can be removed." }, 400);
+  if (payment.data.paid_on !== shopToday())
+    return c.json({ error: "Only a payment taken today can be removed." }, 400);
   const removed = await supabaseAdmin.from("payments").delete().eq("id", payment.data.id);
   if (removed.error) return c.json({ error: "Could not remove the payment." }, 500);
   const note = `Payment removed ${payment.data.paid_on} ${payment.data.amount} ${payment.data.mode ?? "Not recorded"}: ${parsed.data.reason}`;
@@ -631,10 +752,17 @@ sales.post("/:id/payments/:paymentId/remove", async (c) => {
 sales.delete("/:id", async (c) => {
   const invoice = await findInvoice(c.req.param("id"));
   if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status === "cancelled") return c.json({ error: "A cancelled bill stays on record." }, 400);
+  if (invoice.status === "cancelled")
+    return c.json({ error: "A cancelled bill stays on record." }, 400);
   const [lines, payments] = await Promise.all([
-    supabaseAdmin.from("invoice_lines").select("id", { count: "exact", head: true }).eq("invoice_id", invoice.id),
-    supabaseAdmin.from("payments").select("id", { count: "exact", head: true }).eq("invoice_id", invoice.id),
+    supabaseAdmin
+      .from("invoice_lines")
+      .select("id", { count: "exact", head: true })
+      .eq("invoice_id", invoice.id),
+    supabaseAdmin
+      .from("payments")
+      .select("id", { count: "exact", head: true })
+      .eq("invoice_id", invoice.id),
   ]);
   if (lines.error || payments.error) return c.json({ error: "Could not check this bill." }, 500);
   if ((lines.count ?? 0) > 0 || (payments.count ?? 0) > 0) {
@@ -671,7 +799,8 @@ async function loadInvoices(
     const after = from ? ranked.gte("billed_on", from) : ranked;
     const before = to ? after.lte("billed_on", to) : after;
     if (!safe) return before;
-    if (customerIds.length > 0) return before.or(`bill_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`);
+    if (customerIds.length > 0)
+      return before.or(`bill_no.ilike.%${safe}%,customer_id.in.(${customerIds.join(",")})`);
     return before.ilike("bill_no", `%${safe}%`);
   };
   if (all) {
@@ -685,15 +814,34 @@ async function loadInvoices(
   return { rows: (data ?? []) as InvoiceRow[], total: count ?? 0, page };
 }
 
-async function summarize(rows: InvoiceRow[]): Promise<{ invoices: InvoiceSummary[] } | { error: string }> {
+async function summarize(
+  rows: InvoiceRow[],
+): Promise<{ invoices: InvoiceSummary[] } | { error: string }> {
   if (rows.length === 0) return { invoices: [] };
   const ids = rows.map((row) => row.id);
   const [lines, payments, names] = await Promise.all([
-    readIn<{ invoice_id: string; quantity: number | string; rate: number | string; amount: number | string }>(ids, (chunk, start, end) =>
-      supabaseAdmin.from("invoice_lines").select("invoice_id, quantity, rate, amount").in("invoice_id", chunk).order("id").range(start, end),
+    readIn<{
+      invoice_id: string;
+      quantity: number | string;
+      rate: number | string;
+      amount: number | string;
+    }>(ids, (chunk, start, end) =>
+      supabaseAdmin
+        .from("invoice_lines")
+        .select("invoice_id, quantity, rate, amount")
+        .in("invoice_id", chunk)
+        .order("id")
+        .range(start, end),
     ),
-    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(ids, (chunk, start, end) =>
-      supabaseAdmin.from("payments").select("invoice_id, amount, mode").in("invoice_id", chunk).order("id").range(start, end),
+    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(
+      ids,
+      (chunk, start, end) =>
+        supabaseAdmin
+          .from("payments")
+          .select("invoice_id, amount, mode")
+          .in("invoice_id", chunk)
+          .order("id")
+          .range(start, end),
     ),
     customerNames(rows.map((row) => row.customer_id)),
   ]);
@@ -703,12 +851,20 @@ async function summarize(rows: InvoiceRow[]): Promise<{ invoices: InvoiceSummary
   return {
     invoices: rows.map((row) => {
       const money = totals.get(row.id) ?? { gross: 0, net: 0 };
-      return toSummary(row, names.get(row.customer_id) ?? "", money.net, collected.get(row.id) ?? 0, money.gross);
+      return toSummary(
+        row,
+        names.get(row.customer_id) ?? "",
+        money.net,
+        collected.get(row.id) ?? 0,
+        money.gross,
+      );
     }),
   };
 }
 
-async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { error: string; status: 404 | 500 }> {
+async function loadDetail(
+  id: string,
+): Promise<{ invoice: InvoiceDetail } | { error: string; status: 404 | 500 }> {
   const invoice = await findInvoice(id);
   if (!invoice) return { error: "Bill not found.", status: 404 };
   const [lines, payments, customer] = await Promise.all([
@@ -716,14 +872,25 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
       .from("invoice_lines")
       .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
       .eq("invoice_id", id),
-    supabaseAdmin.from("payments").select("id, invoice_id, amount, paid_on, mode, showroom").eq("invoice_id", id).order("paid_on"),
-    supabaseAdmin.from("customers").select("name, phone").eq("id", invoice.customer_id).maybeSingle(),
+    supabaseAdmin
+      .from("payments")
+      .select("id, invoice_id, amount, paid_on, mode, showroom")
+      .eq("invoice_id", id)
+      .order("paid_on"),
+    supabaseAdmin
+      .from("customers")
+      .select("name, phone")
+      .eq("id", invoice.customer_id)
+      .maybeSingle(),
   ]);
-  if (lines.error || payments.error || customer.error) return { error: "Could not load the bill.", status: 500 };
+  if (lines.error || payments.error || customer.error)
+    return { error: "Could not load the bill.", status: 500 };
   const lineRows = (lines.data ?? []) as LineRow[];
   const products = await loadProducts(lineRows.map((row) => row.product_id));
   if (!products) return { error: "Could not load products.", status: 500 };
-  const stockIds = lineRows.flatMap((row) => (row.inventory_item_id ? [row.inventory_item_id] : []));
+  const stockIds = lineRows.flatMap((row) =>
+    row.inventory_item_id ? [row.inventory_item_id] : [],
+  );
   const stock = await stockStatus(stockIds);
   if (!stock) return { error: "Could not load stock.", status: 500 };
   const mapped = lineRows.flatMap((row) => {
@@ -734,7 +901,11 @@ async function loadDetail(id: string): Promise<{ invoice: InvoiceDetail } | { er
   });
   const paymentRows = ((payments.data ?? []) as PaymentRow[]).map(toPayment);
   const total = round2(mapped.reduce((sum, line) => sum + line.amount, 0));
-  const collected = round2(paymentRows.filter((payment) => !isPendingPayment(payment.mode)).reduce((sum, payment) => sum + payment.amount, 0));
+  const collected = round2(
+    paymentRows
+      .filter((payment) => !isPendingPayment(payment.mode))
+      .reduce((sum, payment) => sum + payment.amount, 0),
+  );
   return {
     invoice: {
       ...toSummary(invoice, customer.data?.name ?? "", total, collected),
@@ -755,24 +926,43 @@ async function syncInvoiceStatus(id: string): Promise<void> {
   if (lines.error || payments.error) return;
   const lineCount = (lines.data ?? []).length;
   const net = round2((lines.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
-  const collected = round2((payments.data ?? []).filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0));
-  const next = lineCount === 0 && collected <= 0.001 ? "draft" : paymentStatus(net, collected, "open");
+  const collected = round2(
+    (payments.data ?? [])
+      .filter((row) => !isPendingPayment(row.mode))
+      .reduce((sum, row) => sum + Number(row.amount), 0),
+  );
+  const next =
+    lineCount === 0 && collected <= 0.001 ? "draft" : paymentStatus(net, collected, "open");
   if (next === invoice.status) return;
-  await supabaseAdmin.from("invoices").update({ status: next }).eq("id", id).neq("status", "cancelled");
+  await supabaseAdmin
+    .from("invoices")
+    .update({ status: next })
+    .eq("id", id)
+    .neq("status", "cancelled");
 }
 
 async function pieceAlreadyBilled(itemId: string): Promise<string[] | "error"> {
-  const { data, error } = await supabaseAdmin.from("invoice_lines").select("invoice_id").eq("inventory_item_id", itemId);
+  const { data, error } = await supabaseAdmin
+    .from("invoice_lines")
+    .select("invoice_id")
+    .eq("inventory_item_id", itemId);
   if (error || !data) return "error";
   if (data.length === 0) return [];
   const ids = [...new Set(data.map((row) => row.invoice_id))];
-  const { data: invoices, error: invoiceError } = await supabaseAdmin.from("invoices").select("bill_no, status").in("id", ids);
+  const { data: invoices, error: invoiceError } = await supabaseAdmin
+    .from("invoices")
+    .select("bill_no, status")
+    .in("id", ids);
   if (invoiceError || !invoices) return "error";
   return invoices.filter((row) => row.status !== "cancelled").map((row) => row.bill_no);
 }
 
 async function customerRecord(id: string): Promise<{ id: string; name: string } | null | "error"> {
-  const { data, error } = await supabaseAdmin.from("customers").select("id, name").eq("id", id).maybeSingle();
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id, name")
+    .eq("id", id)
+    .maybeSingle();
   if (error) return "error";
   if (!data) return null;
   return data;
@@ -800,7 +990,11 @@ async function findStock(inventoryNo: string): Promise<StockRow | null> {
 
 async function restoreStock(id: string, quantity: number): Promise<boolean> {
   for (let attempt = 0; attempt < 2; attempt += 1) {
-    const current = await supabaseAdmin.from("inventory_items").select("id, quantity").eq("id", id).maybeSingle();
+    const current = await supabaseAdmin
+      .from("inventory_items")
+      .select("id, quantity")
+      .eq("id", id)
+      .maybeSingle();
     if (current.error || !current.data) return false;
     const next = quantityAfterReturn(Number(current.data.quantity), quantity);
     const saved = await supabaseAdmin
@@ -820,16 +1014,33 @@ async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | n
   const unique = [...new Set(ids)];
   const catalogue = new Map<string, ProductInfo>();
   if (unique.length === 0) return catalogue;
-  const products = await readIn<{ id: string; group_id: string; code: string; name: string; unit: string; price: number | string }>(
-    unique,
-    (chunk, start, end) =>
-      supabaseAdmin.from("products").select("id, group_id, code, name, unit, price").in("id", chunk).order("id").range(start, end),
+  const products = await readIn<{
+    id: string;
+    group_id: string;
+    code: string;
+    name: string;
+    unit: string;
+    price: number | string;
+  }>(unique, (chunk, start, end) =>
+    supabaseAdmin
+      .from("products")
+      .select("id, group_id, code, name, unit, price")
+      .in("id", chunk)
+      .order("id")
+      .range(start, end),
   );
   if (!products) return null;
   const groupIds = [...new Set(products.map((row) => row.group_id))];
   if (groupIds.length === 0) return catalogue;
-  const groups = await readIn<{ id: string; name: string; discount_percent: number | string }>(groupIds, (chunk, start, end) =>
-    supabaseAdmin.from("product_groups").select("id, name, discount_percent").in("id", chunk).order("id").range(start, end),
+  const groups = await readIn<{ id: string; name: string; discount_percent: number | string }>(
+    groupIds,
+    (chunk, start, end) =>
+      supabaseAdmin
+        .from("product_groups")
+        .select("id, name, discount_percent")
+        .in("id", chunk)
+        .order("id")
+        .range(start, end),
   );
   if (!groups) return null;
   const named = new Map(groups.map((group) => [group.id, group]));
@@ -850,7 +1061,12 @@ async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | n
 
 async function stockStatus(ids: string[]): Promise<Map<string, string> | null> {
   const rows = await readIn<{ id: string; status: string }>(ids, (chunk, start, end) =>
-    supabaseAdmin.from("inventory_items").select("id, status").in("id", chunk).order("id").range(start, end),
+    supabaseAdmin
+      .from("inventory_items")
+      .select("id, status")
+      .in("id", chunk)
+      .order("id")
+      .range(start, end),
   );
   if (!rows) return null;
   return new Map(rows.map((row) => [row.id, row.status]));
@@ -858,7 +1074,12 @@ async function stockStatus(ids: string[]): Promise<Map<string, string> | null> {
 
 async function customerNames(ids: string[]): Promise<Map<string, string> | null> {
   const rows = await readIn<{ id: string; name: string }>(ids, (chunk, start, end) =>
-    supabaseAdmin.from("customers").select("id, name").in("id", chunk).order("id").range(start, end),
+    supabaseAdmin
+      .from("customers")
+      .select("id, name")
+      .in("id", chunk)
+      .order("id")
+      .range(start, end),
   );
   if (!rows) return null;
   return new Map(rows.map((row) => [row.id, row.name]));
@@ -872,7 +1093,14 @@ async function allocateBillNo(): Promise<string | null> {
   return nextBillNo(loaded.rows.map((row) => row.bill_no));
 }
 
-function sumFigures(rows: { invoice_id: string; quantity: number | string; rate: number | string; amount: number | string }[]): Map<string, { gross: number; net: number }> {
+function sumFigures(
+  rows: {
+    invoice_id: string;
+    quantity: number | string;
+    rate: number | string;
+    amount: number | string;
+  }[],
+): Map<string, { gross: number; net: number }> {
   const totals = new Map<string, { gross: number; net: number }>();
   for (const row of rows) {
     const current = totals.get(row.invoice_id) ?? { gross: 0, net: 0 };
@@ -883,7 +1111,9 @@ function sumFigures(rows: { invoice_id: string; quantity: number | string; rate:
   return totals;
 }
 
-function sumAmounts(rows: { invoice_id: string; amount: number | string; mode: string | null }[]): Map<string, number> {
+function sumAmounts(
+  rows: { invoice_id: string; amount: number | string; mode: string | null }[],
+): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
     if (isPendingPayment(row.mode)) continue;
@@ -892,7 +1122,13 @@ function sumAmounts(rows: { invoice_id: string; amount: number | string; mode: s
   return totals;
 }
 
-function toSummary(row: InvoiceRow, customerName: string, total: number, collected: number, gross = total): InvoiceSummary {
+function toSummary(
+  row: InvoiceRow,
+  customerName: string,
+  total: number,
+  collected: number,
+  gross = total,
+): InvoiceSummary {
   const net = round2(total);
   const full = round2(gross);
   return {
@@ -931,7 +1167,9 @@ function toLine(row: LineRow, product: ProductInfo, status: string): InvoiceLine
 }
 
 function toPayment(row: PaymentRow): InvoicePayment {
-  const mode = PAYMENT_MODES.find((item) => item === row.mode) ?? (row.mode === "MAINTENANCE" ? "MAINTENANCE" : null);
+  const mode =
+    PAYMENT_MODES.find((item) => item === row.mode) ??
+    (row.mode === "MAINTENANCE" ? "MAINTENANCE" : null);
   return {
     id: row.id,
     amount: Number(row.amount),
@@ -941,7 +1179,10 @@ function toPayment(row: PaymentRow): InvoicePayment {
   };
 }
 
-function readRange(from: string | undefined, to: string | undefined): { from: string | null; to: string | null } | { error: string } {
+function readRange(
+  from: string | undefined,
+  to: string | undefined,
+): { from: string | null; to: string | null } | { error: string } {
   const start = (from ?? "").trim();
   const end = (to ?? "").trim();
   if ((start && !/^\d{4}-\d{2}-\d{2}$/.test(start)) || (end && !/^\d{4}-\d{2}-\d{2}$/.test(end))) {

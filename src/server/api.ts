@@ -55,7 +55,10 @@ const employees = new Hono<{ Variables: Variables }>();
 
 employees.use("*", async (c, next) => {
   const userId = c.get("userId");
-  const { data, error } = await supabaseAdmin.from("user_roles").select("role").eq("user_id", userId);
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId);
   if (error) return c.json({ error: "Could not check access." }, 500);
   if (!data?.some((row) => row.role === "admin")) {
     return c.json({ error: "Only an admin can manage employees." }, 403);
@@ -184,7 +187,9 @@ employees.post("/:id/password", async (c) => {
   const problem = passwordProblem(parsed.data.password, existing.email);
   if (problem) return c.json({ error: problem }, 400);
 
-  const { error } = await supabaseAdmin.auth.admin.updateUserById(id, { password: parsed.data.password });
+  const { error } = await supabaseAdmin.auth.admin.updateUserById(id, {
+    password: parsed.data.password,
+  });
   if (error) return c.json({ error: "Could not update the password." }, 500);
   return c.json({ ok: true });
 });
@@ -221,7 +226,10 @@ async function loadRoles(): Promise<Map<string, AppRole> | null> {
 }
 
 async function adminIds(): Promise<string[] | null> {
-  const { data, error } = await supabaseAdmin.from("user_roles").select("user_id").eq("role", "admin");
+  const { data, error } = await supabaseAdmin
+    .from("user_roles")
+    .select("user_id")
+    .eq("role", "admin");
   if (error) return null;
   return (data ?? []).map((row) => row.user_id);
 }
@@ -231,7 +239,10 @@ async function setRole(userId: string, role: AppRole): Promise<string | null> {
   if (!admins) return "Could not check access.";
   if (wouldRemoveLastAdmin(admins, userId, role)) return "The shop needs at least one admin.";
 
-  const { error: deleteError } = await supabaseAdmin.from("user_roles").delete().eq("user_id", userId);
+  const { error: deleteError } = await supabaseAdmin
+    .from("user_roles")
+    .delete()
+    .eq("user_id", userId);
   if (deleteError) return "Could not update access.";
   const { error } = await supabaseAdmin.from("user_roles").insert({ user_id: userId, role });
   if (error) return "Could not update access.";

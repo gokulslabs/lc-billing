@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 
 type PdfTable = { columns: string[]; rows: (string | number)[][] };
 
-export async function createTablePdf(title: string, table: PdfTable) {
+async function createTablePdf(title: string, table: PdfTable) {
   const [{ jsPDF }, { autoTable }] = await Promise.all([
     import("jspdf"),
     import("jspdf-autotable"),

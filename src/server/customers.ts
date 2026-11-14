@@ -55,29 +55,51 @@ customers.get("/", async (c) => {
     const denied = await denyUnlessAdmin(c);
     if (denied) return denied;
     const loaded = await readAll<CustomerRow>((from, to) => {
-      const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no").order(column, { ascending, nullsFirst: false }).order("id");
+      const ranked = supabaseAdmin
+        .from("customers")
+        .select("id, name, address, phone, book_no")
+        .order(column, { ascending, nullsFirst: false })
+        .order("id");
       if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
-      const filtered = safe ? ranked.or(`name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%,address.ilike.%${safe}%`) : ranked;
+      const filtered = safe
+        ? ranked.or(
+            `name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%,address.ilike.%${safe}%`,
+          )
+        : ranked;
       return filtered.range(from, to);
     });
     if (!loaded) return c.json({ error: "Could not load customers." }, 500);
     return c.json({ customers: loaded.rows.map(toCustomer), total: loaded.rows.length, page: 1 });
   }
   const { from, to } = picker ? { from: 0, to: 199 } : pageRange(page);
-  const ranked = supabaseAdmin.from("customers").select("id, name, address, phone, book_no", { count: "exact" }).order(column, { ascending, nullsFirst: false }).order("id");
+  const ranked = supabaseAdmin
+    .from("customers")
+    .select("id, name, address, phone, book_no", { count: "exact" })
+    .order(column, { ascending, nullsFirst: false })
+    .order("id");
   if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
   const fields = picker ? ["name", "phone", "book_no"] : ["name", "phone", "book_no", "address"];
-  const filtered = safe ? ranked.or(fields.map((field) => `${field}.ilike.%${safe}%`).join(",")) : ranked;
+  const filtered = safe
+    ? ranked.or(fields.map((field) => `${field}.ilike.%${safe}%`).join(","))
+    : ranked;
   const { data, error, count } = await filtered.range(from, to);
   if (error) return c.json({ error: "Could not load customers." }, 500);
-  return c.json({ customers: ((data ?? []) as CustomerRow[]).map(toCustomer), total: count ?? 0, page });
+  return c.json({
+    customers: ((data ?? []) as CustomerRow[]).map(toCustomer),
+    total: count ?? 0,
+    page,
+  });
 });
 
 customers.get("/:id/history", async (c) => {
   const id = c.req.param("id");
   const billPage = readPage(c.req.query("billsPage"));
   const orderPage = readPage(c.req.query("ordersPage"));
-  const { data, error } = await supabaseAdmin.from("customers").select("id, name, address, phone, book_no").eq("id", id).maybeSingle();
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id, name, address, phone, book_no")
+    .eq("id", id)
+    .maybeSingle();
   if (error) return c.json({ error: "Could not load this customer." }, 500);
   if (!data) return c.json({ error: "Customer not found." }, 404);
 
@@ -97,7 +119,9 @@ customers.get("/:id/history", async (c) => {
       readAll<OrderRow>((from, to) =>
         supabaseAdmin
           .from("stitching_orders")
-          .select("id, order_no, bag_no, stitching_product_id, ordered_on, delivery_on, status, amount")
+          .select(
+            "id, order_no, bag_no, stitching_product_id, ordered_on, delivery_on, status, amount",
+          )
           .eq("customer_id", id)
           .order("ordered_on", { ascending: false })
           .order("id", { ascending: false })
@@ -105,10 +129,12 @@ customers.get("/:id/history", async (c) => {
       ),
       customerTotals(id),
     ]);
-    if (!billLoaded || !orderLoaded || !totals) return c.json({ error: "Could not load this customer's history." }, 500);
+    if (!billLoaded || !orderLoaded || !totals)
+      return c.json({ error: "Could not load this customer's history." }, 500);
     const detailed = await billDetails(billLoaded.rows);
     const garments = await garmentNames(orderLoaded.rows.map((row) => row.stitching_product_id));
-    if (!detailed || !garments) return c.json({ error: "Could not load this customer's history." }, 500);
+    if (!detailed || !garments)
+      return c.json({ error: "Could not load this customer's history." }, 500);
     return c.json({
       customer: toCustomer(data as CustomerRow),
       bills: billLoaded.rows.map((row) => detailed.get(row.id) ?? emptyBill(row)),
@@ -116,7 +142,9 @@ customers.get("/:id/history", async (c) => {
       billPage: 1,
       billed: totals.billed,
       collected: totals.collected,
-      orders: orderLoaded.rows.map((row) => toOrder(row, garments.get(row.stitching_product_id ?? "") ?? "")),
+      orders: orderLoaded.rows.map((row) =>
+        toOrder(row, garments.get(row.stitching_product_id ?? "") ?? ""),
+      ),
       orderTotal: orderLoaded.rows.length,
       orderPage: 1,
     });
@@ -134,20 +162,25 @@ customers.get("/:id/history", async (c) => {
       .range(billsRange.from, billsRange.to),
     supabaseAdmin
       .from("stitching_orders")
-      .select("id, order_no, bag_no, stitching_product_id, ordered_on, delivery_on, status, amount", { count: "exact" })
+      .select(
+        "id, order_no, bag_no, stitching_product_id, ordered_on, delivery_on, status, amount",
+        { count: "exact" },
+      )
       .eq("customer_id", id)
       .order("ordered_on", { ascending: false })
       .order("id", { ascending: false })
       .range(ordersRange.from, ordersRange.to),
     customerTotals(id),
   ]);
-  if (bills.error || orders.error || !totals) return c.json({ error: "Could not load this customer's history." }, 500);
+  if (bills.error || orders.error || !totals)
+    return c.json({ error: "Could not load this customer's history." }, 500);
 
   const billRows = (bills.data ?? []) as BillRow[];
   const orderRows = (orders.data ?? []) as OrderRow[];
   const detailed = await billDetails(billRows);
   const garments = await garmentNames(orderRows.map((row) => row.stitching_product_id));
-  if (!detailed || !garments) return c.json({ error: "Could not load this customer's history." }, 500);
+  if (!detailed || !garments)
+    return c.json({ error: "Could not load this customer's history." }, 500);
 
   return c.json({
     customer: toCustomer(data as CustomerRow),
@@ -156,7 +189,9 @@ customers.get("/:id/history", async (c) => {
     billPage,
     billed: totals.billed,
     collected: totals.collected,
-    orders: orderRows.map((row) => toOrder(row, garments.get(row.stitching_product_id ?? "") ?? "")),
+    orders: orderRows.map((row) =>
+      toOrder(row, garments.get(row.stitching_product_id ?? "") ?? ""),
+    ),
     orderTotal: orders.count ?? orderRows.length,
     orderPage,
   });
@@ -168,7 +203,10 @@ customers.post("/", async (c) => {
   const duplicate = await phoneInUse(parsed.data.phone, null);
   if (duplicate === "error") return c.json({ error: "Could not check the phone number." }, 500);
   if (duplicate && !parsed.data.confirmDuplicate) {
-    return c.json({ error: "This phone number is already on another customer. Save again to keep both." }, 409);
+    return c.json(
+      { error: "This phone number is already on another customer. Save again to keep both." },
+      409,
+    );
   }
   const { data, error } = await supabaseAdmin
     .from("customers")
@@ -185,7 +223,10 @@ customers.patch("/:id", async (c) => {
   const duplicate = await phoneInUse(parsed.data.phone, c.req.param("id"));
   if (duplicate === "error") return c.json({ error: "Could not check the phone number." }, 500);
   if (duplicate && !parsed.data.confirmDuplicate) {
-    return c.json({ error: "This phone number is already on another customer. Save again to keep both." }, 409);
+    return c.json(
+      { error: "This phone number is already on another customer. Save again to keep both." },
+      409,
+    );
   }
   const { data, error } = await supabaseAdmin
     .from("customers")
@@ -201,8 +242,14 @@ customers.patch("/:id", async (c) => {
 customers.delete("/:id", async (c) => {
   const id = c.req.param("id");
   const [bills, orders] = await Promise.all([
-    supabaseAdmin.from("invoices").select("id", { count: "exact", head: true }).eq("customer_id", id),
-    supabaseAdmin.from("stitching_orders").select("id", { count: "exact", head: true }).eq("customer_id", id),
+    supabaseAdmin
+      .from("invoices")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", id),
+    supabaseAdmin
+      .from("stitching_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("customer_id", id),
   ]);
   if (bills.error || orders.error) return c.json({ error: "Could not check this customer." }, 500);
   if ((bills.count ?? 0) > 0 || (orders.count ?? 0) > 0) {
@@ -216,7 +263,11 @@ customers.delete("/:id", async (c) => {
 async function phoneInUse(phone: string, exceptId: string | null): Promise<boolean | "error"> {
   const value = blankToNull(phone);
   if (!value) return false;
-  const { data, error } = await supabaseAdmin.from("customers").select("id").eq("phone", value).limit(5);
+  const { data, error } = await supabaseAdmin
+    .from("customers")
+    .select("id")
+    .eq("phone", value)
+    .limit(5);
   if (error) return "error";
   return (data ?? []).some((row) => row.id !== exceptId);
 }
@@ -248,7 +299,12 @@ type LineRow = {
   quantity: number | string;
   amount: number | string;
 };
-type PaymentRow = { invoice_id: string; paid_on: string; amount: number | string; mode: string | null };
+type PaymentRow = {
+  invoice_id: string;
+  paid_on: string;
+  amount: number | string;
+  mode: string | null;
+};
 
 function toCustomer(row: CustomerRow): Customer {
   return {
@@ -260,25 +316,46 @@ function toCustomer(row: CustomerRow): Customer {
   };
 }
 
-async function customerTotals(customerId: string): Promise<{ billed: number; collected: number } | null> {
+async function customerTotals(
+  customerId: string,
+): Promise<{ billed: number; collected: number } | null> {
   const loaded = await readAll<{ id: string }>((from, to) =>
-    supabaseAdmin.from("invoices").select("id").eq("customer_id", customerId).order("id").range(from, to),
+    supabaseAdmin
+      .from("invoices")
+      .select("id")
+      .eq("customer_id", customerId)
+      .order("id")
+      .range(from, to),
   );
   if (!loaded) return null;
   const ids = loaded.rows.map((row) => row.id);
   if (ids.length === 0) return { billed: 0, collected: 0 };
   const [lines, payments] = await Promise.all([
     readIn<{ amount: number | string }>(ids, (chunk, from, to) =>
-      supabaseAdmin.from("invoice_lines").select("amount").in("invoice_id", chunk).order("id").range(from, to),
+      supabaseAdmin
+        .from("invoice_lines")
+        .select("amount")
+        .in("invoice_id", chunk)
+        .order("id")
+        .range(from, to),
     ),
     readIn<{ amount: number | string; mode: string | null }>(ids, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("amount, mode").in("invoice_id", chunk).order("id").range(from, to),
+      supabaseAdmin
+        .from("payments")
+        .select("amount, mode")
+        .in("invoice_id", chunk)
+        .order("id")
+        .range(from, to),
     ),
   ]);
   if (!lines || !payments) return null;
   return {
     billed: round2(lines.reduce((sum, row) => sum + Number(row.amount), 0)),
-    collected: round2(payments.filter((row) => !isPendingPayment(row.mode)).reduce((sum, row) => sum + Number(row.amount), 0)),
+    collected: round2(
+      payments
+        .filter((row) => !isPendingPayment(row.mode))
+        .reduce((sum, row) => sum + Number(row.amount), 0),
+    ),
   };
 }
 
@@ -297,7 +374,12 @@ async function billDetails(rows: BillRow[]): Promise<Map<string, CustomerBill> |
         .range(from, to),
     ),
     readIn<PaymentRow>(ids, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("invoice_id, paid_on, amount, mode").in("invoice_id", chunk).order("paid_on").range(from, to),
+      supabaseAdmin
+        .from("payments")
+        .select("invoice_id, paid_on, amount, mode")
+        .in("invoice_id", chunk)
+        .order("paid_on")
+        .range(from, to),
     ),
   ]);
   if (!lines || !payments) return null;
@@ -343,7 +425,10 @@ async function garmentNames(ids: (string | null)[]): Promise<Map<string, string>
   const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
   const names = new Map<string, string>();
   if (unique.length === 0) return names;
-  const { data, error } = await supabaseAdmin.from("stitching_products").select("id, name").in("id", unique);
+  const { data, error } = await supabaseAdmin
+    .from("stitching_products")
+    .select("id, name")
+    .in("id", unique);
   if (error) return null;
   for (const row of (data ?? []) as { id: string; name: string }[]) names.set(row.id, row.name);
   return names;

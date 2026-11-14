@@ -21,13 +21,27 @@ export function ListFooter({
       </p>
       {pages > 1 ? (
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            disabled={page <= 1}
+            onClick={() => onPage(page - 1)}
+          >
             Previous
           </Button>
           <span>
             Page {page} of {pages.toLocaleString("en-IN")}
           </span>
-          <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="rounded-full"
+            disabled={page >= pages}
+            onClick={() => onPage(page + 1)}
+          >
             Next
           </Button>
         </div>

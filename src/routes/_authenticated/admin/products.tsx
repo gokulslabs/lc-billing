@@ -328,7 +328,9 @@ function ProductPanel({
                     <TableCell>{product.groupName}</TableCell>
                     <TableCell>{unitLabel(product.unit)}</TableCell>
                     <TableCell>{formatRupees(product.price)}</TableCell>
-                    <TableCell>{product.discountPercent ? `${product.discountPercent}%` : ""}</TableCell>
+                    <TableCell>
+                      {product.discountPercent ? `${product.discountPercent}%` : ""}
+                    </TableCell>
                     <TableCell className="space-x-2 text-right">
                       <Button
                         variant="outline"
@@ -540,7 +542,9 @@ function GroupPanel({
                   <TableRow key={group.id}>
                     <TableCell className="font-medium">{group.name}</TableCell>
                     <TableCell>{group.code}</TableCell>
-                    <TableCell>{group.discountPercent ? `${group.discountPercent}%` : ""}</TableCell>
+                    <TableCell>
+                      {group.discountPercent ? `${group.discountPercent}%` : ""}
+                    </TableCell>
                     <TableCell>{group.productCount}</TableCell>
                     <TableCell className="space-x-2 text-right">
                       <Button
@@ -737,7 +741,9 @@ function GroupDialog({
 }) {
   const [name, setName] = useState(group?.name ?? "");
   const [code, setCode] = useState(group?.code ?? "");
-  const [discount, setDiscount] = useState(group?.discountPercent ? String(group.discountPercent) : "");
+  const [discount, setDiscount] = useState(
+    group?.discountPercent ? String(group.discountPercent) : "",
+  );
   const [seen, setSeen] = useState<string | null>(null);
   const mode = open ? (group?.id ?? "new") : null;
   if (mode && seen !== mode) {

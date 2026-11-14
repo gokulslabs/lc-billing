@@ -13,7 +13,11 @@ describe("nextProductCode", () => {
 
 describe("productSort", () => {
   it("puts the highest price first for most costly", () => {
-    expect(productSort("price-desc")).toEqual({ id: "price-desc", column: "price", ascending: false });
+    expect(productSort("price-desc")).toEqual({
+      id: "price-desc",
+      column: "price",
+      ascending: false,
+    });
   });
 
   it("keeps name A to Z when the choice is missing", () => {

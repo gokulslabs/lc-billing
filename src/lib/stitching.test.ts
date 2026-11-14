@@ -13,9 +13,12 @@ describe("nextOrderNo", () => {
 
 describe("cleanMeasurements", () => {
   it("keeps free-text values and the old label spelling style", () => {
-    expect(cleanMeasurements([{ label: "hip", value: "36+4" }, { label: "", value: "" }])).toEqual([
-      { label: "HIP", value: "36+4" },
-    ]);
+    expect(
+      cleanMeasurements([
+        { label: "hip", value: "36+4" },
+        { label: "", value: "" },
+      ]),
+    ).toEqual([{ label: "HIP", value: "36+4" }]);
   });
 
   it("asks for a value when a label is filled", () => {

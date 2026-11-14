@@ -33,7 +33,10 @@ const groupCode = z
 export const productGroupSchema = z.object({
   name: z.string().trim().min(1, "Enter a group name.").max(80, "Group name is too long."),
   code: groupCode,
-  discountPercent: z.number().min(0, "Discount cannot be negative.").max(100, "Discount cannot pass 100."),
+  discountPercent: z
+    .number()
+    .min(0, "Discount cannot be negative.")
+    .max(100, "Discount cannot pass 100."),
 });
 
 export const productSchema = z.object({
@@ -74,7 +77,8 @@ export function productSort(value: string | undefined): {
   ascending: boolean;
 } {
   const id = PRODUCT_SORTS.some((sort) => sort.id === value) ? (value as ProductSort) : "name-asc";
-  const column = id.slice(0, id.lastIndexOf("-")) as "name" | "code" | "price" | "group" | "discount" | "unit";
+  const column = id.slice(0, id.lastIndexOf("-")) as
+    "name" | "code" | "price" | "group" | "discount" | "unit";
   return { id, column, ascending: id.endsWith("-asc") };
 }
 
@@ -85,7 +89,11 @@ export function unitLabel(unit: string): string {
 }
 
 export function formatRupees(amount: number): string {
-  return new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(amount);
+  return new Intl.NumberFormat("en-IN", {
+    style: "currency",
+    currency: "INR",
+    maximumFractionDigits: 2,
+  }).format(amount);
 }
 
 export function nextProductCode(groupCode: string, existingCodes: readonly string[]): string {

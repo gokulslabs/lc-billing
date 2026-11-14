@@ -24,12 +24,25 @@ dashboard.get("/", async (c) => {
         .range(from, to),
     ),
     readAll<{ amount: number | string; mode: string | null }>((from, to) =>
-      supabaseAdmin.from("payments").select("amount, mode").eq("paid_on", today).order("id").range(from, to),
+      supabaseAdmin
+        .from("payments")
+        .select("amount, mode")
+        .eq("paid_on", today)
+        .order("id")
+        .range(from, to),
     ),
     readAll<{ id: string; billed_on: string }>((from, to) =>
-      supabaseAdmin.from("invoices").select("id, billed_on").in("status", ["open", "partial"]).order("id").range(from, to),
+      supabaseAdmin
+        .from("invoices")
+        .select("id, billed_on")
+        .in("status", ["open", "partial"])
+        .order("id")
+        .range(from, to),
     ),
-    supabaseAdmin.from("stitching_orders").select("id", { count: "exact", head: true }).eq("status", "READY"),
+    supabaseAdmin
+      .from("stitching_orders")
+      .select("id", { count: "exact", head: true })
+      .eq("status", "READY"),
     supabaseAdmin
       .from("stitching_orders")
       .select("id", { count: "exact", head: true })
@@ -50,21 +63,48 @@ dashboard.get("/", async (c) => {
   const billedOn = new Map(openInvoices.rows.map((row) => [row.id, row.billed_on]));
   const [lines, openLines, openPayments, todayPaymentsOnBills] = await Promise.all([
     readIn<{ quantity: number | string; amount: number | string }>(invoiceIds, (chunk, from, to) =>
-      supabaseAdmin.from("invoice_lines").select("quantity, amount").in("invoice_id", chunk).order("id").range(from, to),
+      supabaseAdmin
+        .from("invoice_lines")
+        .select("quantity, amount")
+        .in("invoice_id", chunk)
+        .order("id")
+        .range(from, to),
     ),
     readIn<{ invoice_id: string; amount: number | string }>(openIds, (chunk, from, to) =>
-      supabaseAdmin.from("invoice_lines").select("invoice_id, amount").in("invoice_id", chunk).order("id").range(from, to),
+      supabaseAdmin
+        .from("invoice_lines")
+        .select("invoice_id, amount")
+        .in("invoice_id", chunk)
+        .order("id")
+        .range(from, to),
     ),
-    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(openIds, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("invoice_id, amount, mode").in("invoice_id", chunk).order("id").range(from, to),
+    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(
+      openIds,
+      (chunk, from, to) =>
+        supabaseAdmin
+          .from("payments")
+          .select("invoice_id, amount, mode")
+          .in("invoice_id", chunk)
+          .order("id")
+          .range(from, to),
     ),
-    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(invoiceIds, (chunk, from, to) =>
-      supabaseAdmin.from("payments").select("invoice_id, amount, mode").in("invoice_id", chunk).order("id").range(from, to),
+    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(
+      invoiceIds,
+      (chunk, from, to) =>
+        supabaseAdmin
+          .from("payments")
+          .select("invoice_id, amount, mode")
+          .in("invoice_id", chunk)
+          .order("id")
+          .range(from, to),
     ),
   ]);
-  if (!lines || !openLines || !openPayments || !todayPaymentsOnBills) return c.json({ error: "Could not load today's sales." }, 500);
+  if (!lines || !openLines || !openPayments || !todayPaymentsOnBills)
+    return c.json({ error: "Could not load today's sales." }, 500);
 
-  const sales = sumSales(lines.map((row) => ({ quantity: Number(row.quantity), amount: Number(row.amount) })));
+  const sales = sumSales(
+    lines.map((row) => ({ quantity: Number(row.quantity), amount: Number(row.amount) })),
+  );
   const owed = sumByInvoice(openLines);
   const paid = sumByInvoice(openPayments);
   let unpaidBills = 0;
@@ -83,14 +123,24 @@ dashboard.get("/", async (c) => {
       unpaidAmount = Math.round((unpaidAmount + balance) * 100) / 100;
     }
   }
-  const collectedOnToday = sumMoney(todayPaymentsOnBills.filter((row) => !isPendingPayment(row.mode)).map((row) => Number(row.amount)));
+  const collectedOnToday = sumMoney(
+    todayPaymentsOnBills
+      .filter((row) => !isPendingPayment(row.mode))
+      .map((row) => Number(row.amount)),
+  );
   const modeAmount = (mode: string) =>
-    sumMoney(payments.rows.filter((row) => row.mode === mode && !isPendingPayment(row.mode)).map((row) => Number(row.amount)));
+    sumMoney(
+      payments.rows
+        .filter((row) => row.mode === mode && !isPendingPayment(row.mode))
+        .map((row) => Number(row.amount)),
+    );
   const stats: DashboardStats = {
     salesAmount: sales.amount,
     salesQuantity: sales.quantity,
     billsToday: invoices.rows.length,
-    collections: sumMoney(payments.rows.filter((row) => !isPendingPayment(row.mode)).map((row) => Number(row.amount))),
+    collections: sumMoney(
+      payments.rows.filter((row) => !isPendingPayment(row.mode)).map((row) => Number(row.amount)),
+    ),
     dueOnToday: Math.max(0, Math.round((sales.amount - collectedOnToday) * 100) / 100),
     unpaidBills,
     unpaidAmount,
@@ -106,11 +156,16 @@ dashboard.get("/", async (c) => {
   return c.json({ stats });
 });
 
-function sumByInvoice(rows: { invoice_id: string; amount: number | string; mode?: string | null }[]): Map<string, number> {
+function sumByInvoice(
+  rows: { invoice_id: string; amount: number | string; mode?: string | null }[],
+): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
     if (isPendingPayment(row.mode ?? null)) continue;
-    totals.set(row.invoice_id, Math.round(((totals.get(row.invoice_id) ?? 0) + Number(row.amount)) * 100) / 100);
+    totals.set(
+      row.invoice_id,
+      Math.round(((totals.get(row.invoice_id) ?? 0) + Number(row.amount)) * 100) / 100,
+    );
   }
   return totals;
 }

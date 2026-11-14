@@ -21,14 +21,47 @@ export const Route = createFileRoute("/_authenticated/admin/dashboard")({
 });
 
 const NEEDS: { key: keyof DashboardStats; label: string; detail: string; href: string }[] = [
-  { key: "billsToday", label: "Bills today", detail: "Open Sales to write the next one", href: "/admin/sales" },
-  { key: "unpaidBills", label: "Unpaid bills", detail: "Open the bills list to follow up", href: "/admin/sales?view=due" },
-  { key: "readyStitching", label: "Ready for pickup", detail: "Call these customers", href: "/admin/stitching?board=ready" },
-  { key: "dueTodayStitching", label: "Stitching due today", detail: "Orders awaiting completion", href: "/admin/stitching?board=today" },
-  { key: "overdueStitching", label: "Stitching past the date", detail: "Orders awaiting completion", href: "/admin/stitching?board=overdue" },
+  {
+    key: "billsToday",
+    label: "Bills today",
+    detail: "Open Sales to write the next one",
+    href: "/admin/sales",
+  },
+  {
+    key: "unpaidBills",
+    label: "Unpaid bills",
+    detail: "Open the bills list to follow up",
+    href: "/admin/sales?view=due",
+  },
+  {
+    key: "readyStitching",
+    label: "Ready for pickup",
+    detail: "Call these customers",
+    href: "/admin/stitching?board=ready",
+  },
+  {
+    key: "dueTodayStitching",
+    label: "Stitching due today",
+    detail: "Orders awaiting completion",
+    href: "/admin/stitching?board=today",
+  },
+  {
+    key: "overdueStitching",
+    label: "Stitching past the date",
+    detail: "Orders awaiting completion",
+    href: "/admin/stitching?board=overdue",
+  },
 ];
 
-function CloseFigure({ label, value, quantity = false }: { label: string; value: number | undefined; quantity?: boolean }) {
+function CloseFigure({
+  label,
+  value,
+  quantity = false,
+}: {
+  label: string;
+  value: number | undefined;
+  quantity?: boolean;
+}) {
   return (
     <div>
       <p className="text-sm text-muted-foreground">{label}</p>
@@ -45,7 +78,11 @@ function Dashboard() {
     queryKey: ["profile", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase.from("profiles").select("full_name").eq("id", user!.id).maybeSingle();
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user!.id)
+        .maybeSingle();
       return data;
     },
   });
@@ -63,7 +100,9 @@ function Dashboard() {
         <h1 className="mt-3 text-4xl font-semibold md:text-5xl">
           {shopGreeting()}, {name}
         </h1>
-        <p className="mt-2 max-w-lg text-sm opacity-95">What needs a person today, then the money that came in.</p>
+        <p className="mt-2 max-w-lg text-sm opacity-95">
+          What needs a person today, then the money that came in.
+        </p>
       </section>
 
       <section>
@@ -96,13 +135,19 @@ function Dashboard() {
             }}
           />
         </div>
-        {stats.error instanceof Error ? <p className="mb-4 text-sm text-destructive">{stats.error.message}</p> : null}
+        {stats.error instanceof Error ? (
+          <p className="mb-4 text-sm text-destructive">{stats.error.message}</p>
+        ) : null}
         <div className="grid gap-4 md:grid-cols-2">
           {NEEDS.map((item) => {
             const value = stats.data?.stats[item.key];
             const shown = value == null ? "…" : String(value);
             return (
-              <a key={item.key} href={item.href} className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary">
+              <a
+                key={item.key}
+                href={item.href}
+                className="rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary"
+              >
                 <p className="text-sm text-muted-foreground">{item.label}</p>
                 <p className="mt-2 text-3xl font-semibold tabular-nums">{shown}</p>
                 <p className="mt-2 text-sm text-muted-foreground">{item.detail}</p>
@@ -114,7 +159,10 @@ function Dashboard() {
 
       <section>
         <h2 className="mb-4 text-2xl font-semibold">Today's close</h2>
-        <a href="/admin/sales?view=close" className="grid gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary md:grid-cols-3">
+        <a
+          href="/admin/sales?view=close"
+          className="grid gap-4 rounded-2xl border border-border bg-card p-5 transition-colors hover:border-primary md:grid-cols-3"
+        >
           <CloseFigure label="Billed" value={stats.data?.stats.salesAmount} />
           <CloseFigure label="Collected" value={stats.data?.stats.collections} />
           <CloseFigure label="Still due on today's bills" value={stats.data?.stats.dueOnToday} />

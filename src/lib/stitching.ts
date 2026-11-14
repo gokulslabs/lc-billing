@@ -43,7 +43,10 @@ export type StitchingOrder = {
   measurements: StitchingMeasurement[];
 };
 
-const day = z.string().trim().regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
+const day = z
+  .string()
+  .trim()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "Enter a valid date.");
 
 export const measurementSchema = z.object({
   label: z.string().trim().max(40, "Measurement name is too long."),
@@ -79,7 +82,9 @@ export function nextOrderNo(existing: readonly string[]): string {
   return String(max + 1);
 }
 
-export function cleanMeasurements(rows: readonly StitchingMeasurement[]): StitchingMeasurement[] | string {
+export function cleanMeasurements(
+  rows: readonly StitchingMeasurement[],
+): StitchingMeasurement[] | string {
   const kept: StitchingMeasurement[] = [];
   for (const row of rows) {
     const label = row.label.trim();

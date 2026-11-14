@@ -67,8 +67,24 @@ describe("groupPurchases", () => {
     expect(
       groupPurchases(
         [
-          { createdAt: "2025-09-27T04:30:00.000Z", inventoryNo: "1", productId: "p1", quantity: 1, supplierName: "Silk mill", supplierBillNo: "44", cost: 800 },
-          { createdAt: "2025-09-27T10:00:00.000Z", inventoryNo: "6", productId: "p1", quantity: 5, supplierName: "Silk mill", supplierBillNo: "44", cost: 800 },
+          {
+            createdAt: "2025-09-27T04:30:00.000Z",
+            inventoryNo: "1",
+            productId: "p1",
+            quantity: 1,
+            supplierName: "Silk mill",
+            supplierBillNo: "44",
+            cost: 800,
+          },
+          {
+            createdAt: "2025-09-27T10:00:00.000Z",
+            inventoryNo: "6",
+            productId: "p1",
+            quantity: 5,
+            supplierName: "Silk mill",
+            supplierBillNo: "44",
+            cost: 800,
+          },
         ],
         products,
       ),
@@ -97,7 +113,9 @@ describe("groupPurchases", () => {
 
 describe("formatPurchaseNumbers", () => {
   it("shows a from–to range when the numbers run in order", () => {
-    expect(formatPurchaseNumbers(["IN0003812", "IN0003814", "IN0003813"])).toBe("IN0003812 – IN0003814");
+    expect(formatPurchaseNumbers(["IN0003812", "IN0003814", "IN0003813"])).toBe(
+      "IN0003812 – IN0003814",
+    );
   });
 
   it("shows one number when the receipt is a single slip", () => {

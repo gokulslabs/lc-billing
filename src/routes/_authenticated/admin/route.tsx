@@ -1,5 +1,12 @@
 import { useRef, type CSSProperties } from "react";
-import { createFileRoute, Link, Outlet, redirect, useLocation, useNavigate } from "@tanstack/react-router";
+import {
+  createFileRoute,
+  Link,
+  Outlet,
+  redirect,
+  useLocation,
+  useNavigate,
+} from "@tanstack/react-router";
 import { BackButton } from "@/components/app/BackButton";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Boxes, LogOut, Tag, Users } from "lucide-react";
@@ -52,7 +59,11 @@ function AuthenticatedLayout() {
     queryFn: async () => {
       const userId = user?.id;
       if (!userId) return null;
-      const { data } = await supabase.from("profiles").select("full_name").eq("id", userId).maybeSingle();
+      const { data } = await supabase
+        .from("profiles")
+        .select("full_name")
+        .eq("id", userId)
+        .maybeSingle();
       return data;
     },
   });
@@ -62,7 +73,10 @@ function AuthenticatedLayout() {
     queryFn: async () => {
       const userId = user?.id;
       if (!userId) return [];
-      const { data, error } = await supabase.from("user_roles").select("role").eq("user_id", userId);
+      const { data, error } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", userId);
       if (error) throw error;
       return data.map((r) => r.role);
     },
@@ -85,10 +99,16 @@ function AuthenticatedLayout() {
   const idle = useIdleLogout(Boolean(user), signOut);
 
   if (isLoading || !user) {
-    return <div className="flex min-h-screen items-center justify-center text-muted-foreground">Loading…</div>;
+    return (
+      <div className="flex min-h-screen items-center justify-center text-muted-foreground">
+        Loading…
+      </div>
+    );
   }
 
-  const idleWarning = idle.warning ? <IdleWarning unsaved={idle.unsaved} onStay={idle.stay} /> : null;
+  const idleWarning = idle.warning ? (
+    <IdleWarning unsaved={idle.unsaved} onStay={idle.stay} />
+  ) : null;
 
   if (!roles || roles.length === 0) {
     return (
@@ -99,7 +119,8 @@ function AuthenticatedLayout() {
           </div>
           <h1 className="text-3xl font-semibold">Waiting for access</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            Your account ({user.email}) is created. The shop owner needs to give you access before you can open the app.
+            Your account ({user.email}) is created. The shop owner needs to give you access before
+            you can open the app.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-2">
             <Button variant="outline" className="rounded-full" onClick={signOut}>
@@ -132,19 +153,41 @@ function AuthenticatedLayout() {
             <SidebarGroupContent className="flex flex-1 flex-col">
               <SidebarMenu className="flex-1 justify-between py-2">
                 {MODULES.filter((m) => m.key !== "employees" || isAdmin).map((m) => (
-                  <SidebarMenuItem key={m.key} className="flex flex-1 items-center group-data-[collapsible=icon]:justify-center">
+                  <SidebarMenuItem
+                    key={m.key}
+                    className="flex flex-1 items-center group-data-[collapsible=icon]:justify-center"
+                  >
                     {m.to ? (
-                      <SidebarMenuButton asChild size="lg" tooltip={m.label} className="h-full min-h-11 rounded-xl px-3 text-base [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden">
-                        <Link to={m.to} activeProps={{ className: "bg-sidebar-accent text-sidebar-accent-foreground font-medium" }}>
+                      <SidebarMenuButton
+                        asChild
+                        size="lg"
+                        tooltip={m.label}
+                        className="h-full min-h-11 rounded-xl px-3 text-base [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden"
+                      >
+                        <Link
+                          to={m.to}
+                          activeProps={{
+                            className:
+                              "bg-sidebar-accent text-sidebar-accent-foreground font-medium",
+                          }}
+                        >
                           <m.icon />
                           <span>{m.label}</span>
                         </Link>
                       </SidebarMenuButton>
                     ) : (
-                      <SidebarMenuButton disabled size="lg" tooltip={m.label} className="h-full min-h-11 rounded-xl px-3 text-base opacity-60 [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden">
+                      <SidebarMenuButton
+                        disabled
+                        size="lg"
+                        tooltip={m.label}
+                        className="h-full min-h-11 rounded-xl px-3 text-base opacity-60 [&>svg]:size-5 group-data-[collapsible=icon]:!size-9 group-data-[collapsible=icon]:!p-2 group-data-[collapsible=icon]:[&>span]:hidden"
+                      >
                         <m.icon />
                         <span>{m.label}</span>
-                        <Badge variant="secondary" className="ml-auto text-[10px] group-data-[collapsible=icon]:hidden">
+                        <Badge
+                          variant="secondary"
+                          className="ml-auto text-[10px] group-data-[collapsible=icon]:hidden"
+                        >
                           Soon
                         </Badge>
                       </SidebarMenuButton>
@@ -156,7 +199,12 @@ function AuthenticatedLayout() {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
-          <ExportExcelButton filename="ladies-collections" label="Export all data" className="mb-2 w-full group-data-[collapsible=icon]:hidden" load={loadMasterExport} />
+          <ExportExcelButton
+            filename="ladies-collections"
+            label="Export all data"
+            className="mb-2 w-full group-data-[collapsible=icon]:hidden"
+            load={loadMasterExport}
+          />
           <ThemeToggle className="mb-2" />
         </SidebarFooter>
         <SidebarRail />
@@ -166,7 +214,10 @@ function AuthenticatedLayout() {
           <span className="font-display text-lg font-semibold md:hidden">Ladies Collections</span>
           <div className="ml-auto flex min-w-0 items-center gap-2 sm:gap-3">
             <div className="min-w-0 text-right">
-              <div className="max-w-32 truncate text-sm font-medium" title={profile?.full_name?.trim() || user.email || undefined}>
+              <div
+                className="max-w-32 truncate text-sm font-medium"
+                title={profile?.full_name?.trim() || user.email || undefined}
+              >
                 {profile?.full_name?.trim() || "Staff"}
               </div>
               <div className="text-xs text-muted-foreground">{isAdmin ? "Admin" : "Staff"}</div>
@@ -213,7 +264,10 @@ function PhoneBar() {
             key={item.to}
             to={item.to}
             className="flex flex-col items-center gap-1 px-2 py-2 text-xs text-muted-foreground"
-            activeProps={{ className: "flex flex-col items-center gap-1 px-2 py-2 text-xs font-medium text-primary" }}
+            activeProps={{
+              className:
+                "flex flex-col items-center gap-1 px-2 py-2 text-xs font-medium text-primary",
+            }}
           >
             <item.icon className="h-5 w-5" />
             {item.label}

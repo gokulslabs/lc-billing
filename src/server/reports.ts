@@ -1,7 +1,15 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
-import { billTotals, moneyBalance, monthStart, pendingTotals, pricedBill, rangeProblem, stockGap } from "@/lib/reports";
+import {
+  billTotals,
+  moneyBalance,
+  monthStart,
+  pendingTotals,
+  pricedBill,
+  rangeProblem,
+  stockGap,
+} from "@/lib/reports";
 import { billBook, isPendingPayment, paymentStatus, shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
@@ -49,7 +57,11 @@ reports.get("/invoices", async (c) => {
       const totals = pricedBill(
         lines
           .filter((line) => line.invoice_id === row.id)
-          .map((line) => ({ quantity: Number(line.quantity), rate: Number(line.rate), amount: Number(line.amount) })),
+          .map((line) => ({
+            quantity: Number(line.quantity),
+            rate: Number(line.rate),
+            amount: Number(line.amount),
+          })),
       );
       return {
         billNo: row.bill_no,
@@ -151,12 +163,20 @@ reports.get("/pending", async (c) => {
   );
   if (!loaded) return c.json({ error: "Could not load pending bills." }, 500);
   const invoices = loaded.rows.filter((row) => billBook(row.billed_on) === books);
-  const [lines, payments] = await Promise.all([loadLines(invoices.map((row) => row.id)), loadPayments(invoices.map((row) => row.id))]);
+  const [lines, payments] = await Promise.all([
+    loadLines(invoices.map((row) => row.id)),
+    loadPayments(invoices.map((row) => row.id)),
+  ]);
   if (!lines || !payments) return c.json({ error: "Could not load pending bills." }, 500);
   const pending = invoices.flatMap((invoice) => {
-    const invoiced = billTotals(lines.filter((line) => line.invoice_id === invoice.id).map((line) => Number(line.amount))).net;
-    const paidRows = payments.filter((row) => row.invoice_id === invoice.id && !isPendingPayment(row.mode));
-    const paid = paidRows.reduce((total, row) => total + Math.round(Number(row.amount) * 100), 0) / 100;
+    const invoiced = billTotals(
+      lines.filter((line) => line.invoice_id === invoice.id).map((line) => Number(line.amount)),
+    ).net;
+    const paidRows = payments.filter(
+      (row) => row.invoice_id === invoice.id && !isPendingPayment(row.mode),
+    );
+    const paid =
+      paidRows.reduce((total, row) => total + Math.round(Number(row.amount) * 100), 0) / 100;
     const balance = moneyBalance(invoiced, paid);
     if (balance <= 0) return [];
     const showrooms = [...new Set(paidRows.flatMap((row) => (row.showroom ? [row.showroom] : [])))];
@@ -203,23 +223,34 @@ reports.get("/pending", async (c) => {
 
 reports.get("/mismatch", async (c) => {
   const [stock, lines, invoices] = await Promise.all([
-    readAll<{ id: string; inventory_no: string; product_id: string; quantity: number | string; received_quantity: number | string }>(
-      (from, to) =>
-        supabaseAdmin
-          .from("inventory_items")
-          .select("id, inventory_no, product_id, quantity, received_quantity")
-          .order("id")
-          .range(from, to),
-    ),
-    readAll<{ inventory_item_id: string | null; invoice_id: string; quantity: number | string }>((from, to) =>
+    readAll<{
+      id: string;
+      inventory_no: string;
+      product_id: string;
+      quantity: number | string;
+      received_quantity: number | string;
+    }>((from, to) =>
       supabaseAdmin
-        .from("invoice_lines")
-        .select("inventory_item_id, invoice_id, quantity")
+        .from("inventory_items")
+        .select("id, inventory_no, product_id, quantity, received_quantity")
         .order("id")
         .range(from, to),
     ),
+    readAll<{ inventory_item_id: string | null; invoice_id: string; quantity: number | string }>(
+      (from, to) =>
+        supabaseAdmin
+          .from("invoice_lines")
+          .select("inventory_item_id, invoice_id, quantity")
+          .order("id")
+          .range(from, to),
+    ),
     readAll<{ id: string; status: string }>((from, to) =>
-      supabaseAdmin.from("invoices").select("id, status").neq("status", "cancelled").order("id").range(from, to),
+      supabaseAdmin
+        .from("invoices")
+        .select("id, status")
+        .neq("status", "cancelled")
+        .order("id")
+        .range(from, to),
     ),
   ]);
   if (!stock || !lines || !invoices) return c.json({ error: "Could not check stock." }, 500);
@@ -227,7 +258,10 @@ reports.get("/mismatch", async (c) => {
   const billed = new Map<string, number>();
   for (const line of lines.rows) {
     if (!line.inventory_item_id || !active.has(line.invoice_id)) continue;
-    billed.set(line.inventory_item_id, (billed.get(line.inventory_item_id) ?? 0) + Number(line.quantity));
+    billed.set(
+      line.inventory_item_id,
+      (billed.get(line.inventory_item_id) ?? 0) + Number(line.quantity),
+    );
   }
   const catalogue = await loadProducts(stock.rows.map((row) => row.product_id));
   if (!catalogue) return c.json({ error: "Could not load products." }, 500);
@@ -265,13 +299,18 @@ reports.get("/returns", async (c) => {
       billNo: row.bill_no,
       billedOn: row.billed_on,
       customerName: loaded.customers.get(row.customer_id) ?? "",
-      net: billTotals(lines.filter((line) => line.invoice_id === row.id).map((line) => Number(line.amount))).net,
+      net: billTotals(
+        lines.filter((line) => line.invoice_id === row.id).map((line) => Number(line.amount)),
+      ).net,
       remarks: row.remarks,
     })),
   });
 });
 
-function readRange(fromQuery: string | undefined, toQuery: string | undefined): { from: string; to: string } | { error: string } {
+function readRange(
+  fromQuery: string | undefined,
+  toQuery: string | undefined,
+): { from: string; to: string } | { error: string } {
   const today = shopToday();
   const from = fromQuery || monthStart(today);
   const to = toQuery || today;
@@ -294,7 +333,10 @@ async function loadInvoices(
       .lte("billed_on", to)
       .order("billed_on")
       .order("id");
-    const filtered = which === "cancelled" ? ranked.eq("status", "cancelled") : ranked.neq("status", "cancelled").neq("status", "draft");
+    const filtered =
+      which === "cancelled"
+        ? ranked.eq("status", "cancelled")
+        : ranked.neq("status", "cancelled").neq("status", "draft");
     return filtered.range(start, end);
   });
   if (!loaded) return null;
@@ -308,7 +350,10 @@ async function lineReport(
   fromQuery: string | undefined,
   toQuery: string | undefined,
   withCustomer: boolean,
-): Promise<{ rows: Record<string, string | number | null>[]; status: 200 } | { error: string; status: 400 | 500 }> {
+): Promise<
+  | { rows: Record<string, string | number | null>[]; status: 200 }
+  | { error: string; status: 400 | 500 }
+> {
   const range = readRange(fromQuery, toQuery);
   if ("error" in range) return { error: range.error, status: 400 };
   const loaded = await loadInvoices(range.from, range.to, "active");
@@ -382,9 +427,16 @@ async function loadCustomers(ids: string[]): Promise<Map<string, string> | null>
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
-async function loadProducts(ids: string[]): Promise<Map<string, { code: string; name: string }> | null> {
+async function loadProducts(
+  ids: string[],
+): Promise<Map<string, { code: string; name: string }> | null> {
   const rows = await readIn<{ id: string; code: string; name: string }>(ids, (chunk, from, to) =>
-    supabaseAdmin.from("products").select("id, code, name").in("id", chunk).order("id").range(from, to),
+    supabaseAdmin
+      .from("products")
+      .select("id, code, name")
+      .in("id", chunk)
+      .order("id")
+      .range(from, to),
   );
   if (!rows) return null;
   return new Map(rows.map((row) => [row.id, { code: row.code, name: row.name }]));

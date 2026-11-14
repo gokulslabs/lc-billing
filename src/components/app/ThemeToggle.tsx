@@ -4,7 +4,13 @@ import { Button } from "@/components/ui/button";
 import { applyShopTheme, storedShopTheme, type ShopTheme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
-export function ThemeToggle({ className, iconOnly = false }: { className?: string; iconOnly?: boolean }) {
+export function ThemeToggle({
+  className,
+  iconOnly = false,
+}: {
+  className?: string;
+  iconOnly?: boolean;
+}) {
   const [theme, setTheme] = useState<ShopTheme>("light");
 
   useEffect(() => {
@@ -20,7 +26,9 @@ export function ThemeToggle({ className, iconOnly = false }: { className?: strin
       size="sm"
       className={cn(
         "rounded-full",
-        iconOnly ? "h-8 w-8 px-0" : "w-full group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0",
+        iconOnly
+          ? "h-8 w-8 px-0"
+          : "w-full group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:px-0",
         className,
       )}
       title={dark ? "Switch to light mode" : "Switch to dark mode"}
@@ -32,7 +40,11 @@ export function ThemeToggle({ className, iconOnly = false }: { className?: strin
       }}
     >
       {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
-      {iconOnly ? null : <span className="group-data-[collapsible=icon]:hidden">{dark ? "Light mode" : "Dark mode"}</span>}
+      {iconOnly ? null : (
+        <span className="group-data-[collapsible=icon]:hidden">
+          {dark ? "Light mode" : "Dark mode"}
+        </span>
+      )}
     </Button>
   );
 }

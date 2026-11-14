@@ -275,7 +275,19 @@ type Sheet = {
   total?: number;
 };
 
-const MONEY = new Set(["Gross", "Disc.", "Net", "Rate", "Amount", "Inv amount", "Paid", "Balance", "Gross Amount", "Disc. Amount", "Net Amount"]);
+const MONEY = new Set([
+  "Gross",
+  "Disc.",
+  "Net",
+  "Rate",
+  "Amount",
+  "Inv amount",
+  "Paid",
+  "Balance",
+  "Gross Amount",
+  "Disc. Amount",
+  "Net Amount",
+]);
 
 function legacyReportDate(value: string): string {
   const [year, month, day] = value.slice(0, 10).split("-");
@@ -415,7 +427,15 @@ async function loadReport(
     const discount = sumRupees(data.invoices.map((row) => row.discount));
     const net = sumRupees(data.invoices.map((row) => row.net));
     return {
-      columns: ["Sl.No.", "Invoice No.", "Date", "Customer Name", "Gross Amount", "Disc. Amount", "Net Amount"],
+      columns: [
+        "Sl.No.",
+        "Invoice No.",
+        "Date",
+        "Customer Name",
+        "Gross Amount",
+        "Disc. Amount",
+        "Net Amount",
+      ],
       rows: data.invoices.map((row, index) => [
         index + 1,
         row.billNo,

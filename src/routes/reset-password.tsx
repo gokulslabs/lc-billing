@@ -13,9 +13,15 @@ export const Route = createFileRoute("/reset-password")({
   head: () => ({
     meta: [
       { title: "Set a new password — Ladies Collections" },
-      { name: "description", content: "Choose a new password for your Ladies Collections account." },
+      {
+        name: "description",
+        content: "Choose a new password for your Ladies Collections account.",
+      },
       { property: "og:title", content: "Set a new password — Ladies Collections" },
-      { property: "og:description", content: "Choose a new password for your Ladies Collections account." },
+      {
+        property: "og:description",
+        content: "Choose a new password for your Ladies Collections account.",
+      },
     ],
   }),
   component: ResetPasswordPage,
@@ -42,7 +48,10 @@ function ResetPasswordPage() {
       return;
     }
     toast.success("Password updated.");
-    navigate({ to: user?.user_metadata["account_type"] === "customer" ? "/" : "/admin", replace: true });
+    navigate({
+      to: user?.user_metadata["account_type"] === "customer" ? "/" : "/admin",
+      replace: true,
+    });
   }
 
   return (

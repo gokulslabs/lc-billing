@@ -1,7 +1,13 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
-import { nextSortOrder, shopName, type StitchingGarment, type StitchingHead, type StitchingProcess } from "@/lib/settings";
+import {
+  nextSortOrder,
+  shopName,
+  type StitchingGarment,
+  type StitchingHead,
+  type StitchingProcess,
+} from "@/lib/settings";
 import { zodMessage } from "@/lib/stitching";
 import { requireShop } from "@/server/guard";
 
@@ -17,7 +23,11 @@ const nameSchema = z.object({
 
 const headSchema = z.object({
   productId: z.string().uuid("Choose a garment."),
-  label: z.string().trim().min(1, "Enter a measurement head.").max(40, "Measurement head is too long."),
+  label: z
+    .string()
+    .trim()
+    .min(1, "Enter a measurement head.")
+    .max(40, "Measurement head is too long."),
 });
 
 const settings = new Hono<Env>();
@@ -54,7 +64,8 @@ settings.delete("/garments/:id", async (c) => {
     .select("id", { count: "exact", head: true })
     .eq("stitching_product_id", id);
   if (orders.error) return c.json({ error: "Could not check this garment." }, 500);
-  if ((orders.count ?? 0) > 0) return c.json({ error: "This garment is on a stitching order." }, 400);
+  if ((orders.count ?? 0) > 0)
+    return c.json({ error: "This garment is on a stitching order." }, 400);
 
   const { error } = await supabaseAdmin.from("stitching_products").delete().eq("id", id);
   if (isRestrict(error)) return c.json({ error: "This garment is on a stitching order." }, 400);
@@ -81,7 +92,10 @@ settings.post("/processes", async (c) => {
 });
 
 settings.delete("/processes/:id", async (c) => {
-  const { error } = await supabaseAdmin.from("stitching_processes").delete().eq("id", c.req.param("id"));
+  const { error } = await supabaseAdmin
+    .from("stitching_processes")
+    .delete()
+    .eq("id", c.req.param("id"));
   if (error) return c.json({ error: "Could not remove the process." }, 500);
   return c.json({ ok: true });
 });
@@ -92,7 +106,11 @@ settings.post("/measurements", async (c) => {
   const label = shopName(parsed.data.label);
   if (!label) return c.json({ error: "Enter a measurement head." }, 400);
 
-  const garment = await supabaseAdmin.from("stitching_products").select("id").eq("id", parsed.data.productId).maybeSingle();
+  const garment = await supabaseAdmin
+    .from("stitching_products")
+    .select("id")
+    .eq("id", parsed.data.productId)
+    .maybeSingle();
   if (garment.error) return c.json({ error: "Could not check the garment." }, 500);
   if (!garment.data) return c.json({ error: "Choose a garment." }, 400);
 
@@ -114,19 +132,33 @@ settings.post("/measurements", async (c) => {
 });
 
 settings.delete("/measurements/:id", async (c) => {
-  const { error } = await supabaseAdmin.from("stitching_measurement_fields").delete().eq("id", c.req.param("id"));
+  const { error } = await supabaseAdmin
+    .from("stitching_measurement_fields")
+    .delete()
+    .eq("id", c.req.param("id"));
   if (error) return c.json({ error: "Could not remove the measurement head." }, 500);
   return c.json({ ok: true });
 });
 
-async function loadSettings(): Promise<{ garments: StitchingGarment[]; processes: StitchingProcess[] } | null> {
+async function loadSettings(): Promise<{
+  garments: StitchingGarment[];
+  processes: StitchingProcess[];
+} | null> {
   const [garments, fields, processes] = await Promise.all([
-    supabaseAdmin.from("stitching_products").select("id, name, sort_order").order("sort_order").order("name"),
+    supabaseAdmin
+      .from("stitching_products")
+      .select("id, name, sort_order")
+      .order("sort_order")
+      .order("name"),
     supabaseAdmin
       .from("stitching_measurement_fields")
       .select("id, stitching_product_id, label, sort_order")
       .order("sort_order"),
-    supabaseAdmin.from("stitching_processes").select("id, name, sort_order").order("sort_order").order("name"),
+    supabaseAdmin
+      .from("stitching_processes")
+      .select("id, name, sort_order")
+      .order("sort_order")
+      .order("name"),
   ]);
   if (garments.error || fields.error || processes.error) return null;
   const grouped = new Map<string, StitchingHead[]>();
@@ -136,13 +168,21 @@ async function loadSettings(): Promise<{ garments: StitchingGarment[]; processes
     grouped.set(field.stitching_product_id, list);
   }
   return {
-    garments: ((garments.data ?? []) as GarmentRow[]).map((row) => toGarment(row, grouped.get(row.id) ?? [])),
+    garments: ((garments.data ?? []) as GarmentRow[]).map((row) =>
+      toGarment(row, grouped.get(row.id) ?? []),
+    ),
     processes: ((processes.data ?? []) as ProcessRow[]).map(toProcess),
   };
 }
 
-async function nextOrder(table: "stitching_products" | "stitching_processes"): Promise<number | null> {
-  const { data, error } = await supabaseAdmin.from(table).select("sort_order").order("sort_order", { ascending: false }).limit(1);
+async function nextOrder(
+  table: "stitching_products" | "stitching_processes",
+): Promise<number | null> {
+  const { data, error } = await supabaseAdmin
+    .from(table)
+    .select("sort_order")
+    .order("sort_order", { ascending: false })
+    .limit(1);
   if (error) return null;
   return nextSortOrder((data ?? []).map((row) => row.sort_order));
 }

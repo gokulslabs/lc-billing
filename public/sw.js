@@ -4,7 +4,14 @@ self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE)
-      .then((cache) => cache.addAll(["/offline.html", "/favicon.ico", "/icons/icon-192.png", "/icons/icon-512.png"]))
+      .then((cache) =>
+        cache.addAll([
+          "/offline.html",
+          "/favicon.ico",
+          "/icons/icon-192.png",
+          "/icons/icon-512.png",
+        ]),
+      )
       .then(() => self.skipWaiting()),
   );
 });
@@ -13,7 +20,9 @@ self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
-      .then((keys) => Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))))
+      .then((keys) =>
+        Promise.all(keys.filter((key) => key !== CACHE).map((key) => caches.delete(key))),
+      )
       .then(() => self.clients.claim()),
   );
 });
@@ -30,7 +39,10 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  const cacheable = url.pathname.startsWith("/assets/") || url.pathname.startsWith("/icons/") || url.pathname === "/favicon.ico";
+  const cacheable =
+    url.pathname.startsWith("/assets/") ||
+    url.pathname.startsWith("/icons/") ||
+    url.pathname === "/favicon.ico";
   if (!cacheable) return;
 
   event.respondWith(

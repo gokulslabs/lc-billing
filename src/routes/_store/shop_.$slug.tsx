@@ -17,11 +17,13 @@ export const Route = createFileRoute("/_store/shop_/$slug")({
   head: ({ loaderData }) => ({
     meta: [{ title: `${loaderData?.name ?? "Product"} | Ladies Collections` }],
   }),
-  component: () => {
-    const product = Route.useLoaderData();
-    return <ProductDetail key={product.id} product={product} />;
-  },
+  component: ProductDetailRoute,
 });
+
+function ProductDetailRoute() {
+  const product = Route.useLoaderData();
+  return <ProductDetail key={product.id} product={product} />;
+}
 
 function ProductDetail({ product }: { product: StoreProduct }) {
   const { cart, add, ready } = useCart();

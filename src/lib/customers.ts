@@ -59,7 +59,8 @@ export type CustomerHistory = {
 const optionalText = (max: number) => z.string().trim().max(max);
 
 export const UNRECORDED_NAME = "NOT RECORDED";
-export const UNRECORDED_BILL_ERROR = "Choose a customer, or type a walk-in name. NOT RECORDED cannot take a bill.";
+export const UNRECORDED_BILL_ERROR =
+  "Choose a customer, or type a walk-in name. NOT RECORDED cannot take a bill.";
 
 export function isUnrecordedName(name: string): boolean {
   return name.trim().toUpperCase() === UNRECORDED_NAME;

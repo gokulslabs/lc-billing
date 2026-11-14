@@ -39,14 +39,16 @@ const supplierName = z.string().trim().max(80, "Supplier name is too long.");
 const supplierBillNo = z.string().trim().max(40, "Supplier bill number is too long.");
 const cost = z.number().min(0, "Cost cannot be negative.").max(9_999_999, "Cost is too large.");
 
-export const stockReceiptSchema = inventorySchema.extend({
-  supplierName: supplierName.default(""),
-  supplierBillNo: supplierBillNo.default(""),
-  cost,
-}).refine(
-  (receipt) => Boolean(receipt.supplierName) === Boolean(receipt.supplierBillNo),
-  "Enter both supplier and supplier bill number, or leave both blank.",
-);
+export const stockReceiptSchema = inventorySchema
+  .extend({
+    supplierName: supplierName.default(""),
+    supplierBillNo: supplierBillNo.default(""),
+    cost,
+  })
+  .refine(
+    (receipt) => Boolean(receipt.supplierName) === Boolean(receipt.supplierBillNo),
+    "Enter both supplier and supplier bill number, or leave both blank.",
+  );
 
 export const inventoryUpdateSchema = inventorySchema.extend({
   quantity: z

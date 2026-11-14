@@ -7,7 +7,12 @@ const apply = process.argv.includes("--apply");
 function envValue(file: string, name: string): string {
   const text = readFileSync(file, "utf8");
   const line = text.split("\n").find((item) => item.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim().replace(/^"|"$/g, "") ?? "";
+  return (
+    line
+      ?.slice(name.length + 1)
+      .trim()
+      .replace(/^"|"$/g, "") ?? ""
+  );
 }
 
 async function renameRows(
@@ -26,7 +31,10 @@ async function renameRows(
       changed += 1;
       continue;
     }
-    const { error: updateError } = await supabase.from(table).update({ [column]: next }).eq("id", row.id);
+    const { error: updateError } = await supabase
+      .from(table)
+      .update({ [column]: next })
+      .eq("id", row.id);
     if (updateError) throw new Error(`${table} ${row.id}: ${updateError.message}`);
     changed += 1;
   }
@@ -47,7 +55,9 @@ async function main() {
     names.push(row.name);
     byCode.set(row.code, names);
   }
-  const sharedCodes = [...byCode.entries()].filter(([, names]) => names.length > 1).map(([code, names]) => ({ code, names }));
+  const sharedCodes = [...byCode.entries()]
+    .filter(([, names]) => names.length > 1)
+    .map(([code, names]) => ({ code, names }));
 
   const sources = [
     { table: "product_groups", column: "name" },
@@ -56,13 +66,24 @@ async function main() {
   ] as const;
   const spellingHits: { table: string; changed: number }[] = [];
   for (const source of sources) {
-    spellingHits.push({ table: source.table, changed: await renameRows(supabase, source.table, source.column) });
+    spellingHits.push({
+      table: source.table,
+      changed: await renameRows(supabase, source.table, source.column),
+    });
   }
   const saved = await supabase.from("stitching_order_measurements").select("label");
   if (saved.error) throw new Error(saved.error.message);
-  const keptOnOrders = (saved.data ?? []).filter((row) => correctedSpelling(row.label) !== row.label).length;
+  const keptOnOrders = (saved.data ?? []).filter(
+    (row) => correctedSpelling(row.label) !== row.label,
+  ).length;
 
-  console.log(JSON.stringify({ mode: apply ? "apply" : "dry-run", sharedCodes, spellingHits, keptOnOrders }, null, 2));
+  console.log(
+    JSON.stringify(
+      { mode: apply ? "apply" : "dry-run", sharedCodes, spellingHits, keptOnOrders },
+      null,
+      2,
+    ),
+  );
 }
 
 main().catch((error: unknown) => {

@@ -9,15 +9,31 @@ import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authenticated/admin/settings")({
   head: () => ({
     meta: [
       { title: "Settings — Ladies Collections" },
-      { name: "description", content: "Stitching garments, measurement heads, and processes for Ladies Collections." },
+      {
+        name: "description",
+        content: "Stitching garments, measurement heads, and processes for Ladies Collections.",
+      },
     ],
   }),
   component: SettingsPage,
@@ -26,7 +42,8 @@ export const Route = createFileRoute("/_authenticated/admin/settings")({
 function SettingsPage() {
   const settings = useQuery({
     queryKey: ["settings"],
-    queryFn: () => apiFetch<{ garments: StitchingGarment[]; processes: StitchingProcess[] }>("/api/settings"),
+    queryFn: () =>
+      apiFetch<{ garments: StitchingGarment[]; processes: StitchingProcess[] }>("/api/settings"),
   });
   const garments = settings.data?.garments ?? [];
   const processes = settings.data?.processes ?? [];
@@ -47,7 +64,9 @@ function SettingsPage() {
               {
                 name: "Measurements",
                 columns: ["Garment", "Field"],
-                rows: garments.flatMap((garment) => garment.measurements.map((field) => [garment.name, field.label])),
+                rows: garments.flatMap((garment) =>
+                  garment.measurements.map((field) => [garment.name, field.label]),
+                ),
               },
               {
                 name: "Processes",
@@ -58,12 +77,15 @@ function SettingsPage() {
           />
         </div>
         <p className="mt-2 text-sm text-muted-foreground">
-          Stitching garments, the measurement heads for each garment, and the process list. Names can be added or removed.
+          Stitching garments, the measurement heads for each garment, and the process list. Names
+          can be added or removed.
         </p>
       </div>
       <InstallApp />
       {settings.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {settings.error instanceof Error ? <p className="text-sm text-destructive">{settings.error.message}</p> : null}
+      {settings.error instanceof Error ? (
+        <p className="text-sm text-destructive">{settings.error.message}</p>
+      ) : null}
       {settings.data ? (
         <Tabs defaultValue="products">
           <TabsList>
@@ -112,7 +134,12 @@ function InstallApp() {
       <p className="mt-1 text-sm text-muted-foreground">
         Puts Products, Customers and Inventory on the phone home screen.
       </p>
-      <Button type="button" className="mt-3 rounded-full" disabled={installed} onClick={() => void install()}>
+      <Button
+        type="button"
+        className="mt-3 rounded-full"
+        disabled={installed}
+        onClick={() => void install()}
+      >
         {installed ? "App installed" : "Install app"}
       </Button>
       {help ? <p className="mt-3 text-sm text-muted-foreground">{help}</p> : null}
@@ -124,7 +151,8 @@ function Garments({ garments }: { garments: StitchingGarment[] }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const add = useMutation({
-    mutationFn: () => apiFetch("/api/settings/garments", { method: "POST", body: JSON.stringify({ name }) }),
+    mutationFn: () =>
+      apiFetch("/api/settings/garments", { method: "POST", body: JSON.stringify({ name }) }),
     onSuccess: async () => {
       setName("");
       toast.success("Garment added.");
@@ -157,7 +185,12 @@ function Garments({ garments }: { garments: StitchingGarment[] }) {
         sortable
         rows={garments.map((garment) => ({ id: garment.id, name: garment.name }))}
         onRemove={(row) => {
-          if (!window.confirm(`Remove ${row.name}? Its measurement heads are removed with it. This cannot be undone.`)) return;
+          if (
+            !window.confirm(
+              `Remove ${row.name}? Its measurement heads are removed with it. This cannot be undone.`,
+            )
+          )
+            return;
           remove.mutate(row.id);
         }}
       />
@@ -215,7 +248,11 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
             heading="Measurement head"
             rows={garment.measurements.map((field) => ({ id: field.id, name: field.label }))}
             onRemove={(row) => {
-              if (!window.confirm(`Remove ${row.name} from ${garment.name}? Saved orders keep the measurements already written on them. This cannot be undone.`)) {
+              if (
+                !window.confirm(
+                  `Remove ${row.name} from ${garment.name}? Saved orders keep the measurements already written on them. This cannot be undone.`,
+                )
+              ) {
                 return;
               }
               remove.mutate(row.id);
@@ -242,7 +279,8 @@ function Processes({ processes }: { processes: StitchingProcess[] }) {
   const queryClient = useQueryClient();
   const [name, setName] = useState("");
   const add = useMutation({
-    mutationFn: () => apiFetch("/api/settings/processes", { method: "POST", body: JSON.stringify({ name }) }),
+    mutationFn: () =>
+      apiFetch("/api/settings/processes", { method: "POST", body: JSON.stringify({ name }) }),
     onSuccess: async () => {
       setName("");
       toast.success("Process added.");
@@ -307,7 +345,14 @@ function NameForm({
     <form className="flex flex-wrap items-end gap-3" onSubmit={submit}>
       <div className="space-y-2">
         <Label htmlFor={id}>{label}</Label>
-        <Input id={id} value={value} onChange={(event) => onChange(event.target.value)} maxLength={40} className="w-72" required />
+        <Input
+          id={id}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          maxLength={40}
+          className="w-72"
+          required
+        />
       </div>
       <Button type="submit" className="rounded-full" disabled={pending}>
         {pending ? "Saving…" : action}
@@ -339,12 +384,23 @@ function NameTable({
             <TableHead className="w-20">Sl.no.</TableHead>
             <TableHead aria-sort={direction}>
               {sortable ? (
-                <button type="button" className="cursor-pointer hover:underline" onClick={() =>
-                  setDirection((current) => current === "ascending" ? "descending" : "ascending")
-                }>
-                  {heading} <span aria-hidden="true">{direction === "ascending" ? "↑" : direction === "descending" ? "↓" : "↕"}</span>
+                <button
+                  type="button"
+                  className="cursor-pointer hover:underline"
+                  onClick={() =>
+                    setDirection((current) =>
+                      current === "ascending" ? "descending" : "ascending",
+                    )
+                  }
+                >
+                  {heading}{" "}
+                  <span aria-hidden="true">
+                    {direction === "ascending" ? "↑" : direction === "descending" ? "↓" : "↕"}
+                  </span>
                 </button>
-              ) : heading}
+              ) : (
+                heading
+              )}
             </TableHead>
             <TableHead className="w-28 text-right">Action</TableHead>
           </TableRow>
@@ -355,7 +411,13 @@ function NameTable({
               <TableCell>{index + 1}</TableCell>
               <TableCell className="font-medium">{row.name}</TableCell>
               <TableCell className="text-right">
-                <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => onRemove(row)}>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => onRemove(row)}
+                >
                   Remove
                 </Button>
               </TableCell>

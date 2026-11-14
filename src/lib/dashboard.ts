@@ -16,7 +16,10 @@ export type DashboardStats = {
   card: number;
 };
 
-export function sumSales(lines: readonly { quantity: number; amount: number }[]): { amount: number; quantity: number } {
+export function sumSales(lines: readonly { quantity: number; amount: number }[]): {
+  amount: number;
+  quantity: number;
+} {
   let paise = 0;
   let thousandths = 0;
   for (const line of lines) {

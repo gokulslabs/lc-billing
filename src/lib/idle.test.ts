@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { IDLE_TIMEOUT_MINUTES, IDLE_TIMEOUT_MS, IDLE_WARNING_MS, idlePhase, idleWarningText, readLastActivity } from "./idle";
+import {
+  IDLE_TIMEOUT_MINUTES,
+  IDLE_TIMEOUT_MS,
+  IDLE_WARNING_MS,
+  idlePhase,
+  idleWarningText,
+  readLastActivity,
+} from "./idle";
 
 describe("idlePhase", () => {
   it("warns two minutes before logout and logs out at the limit", () => {
@@ -29,7 +36,9 @@ describe("idlePhase", () => {
 describe("idleWarningText", () => {
   it("names the unsaved bill or order before logout", () => {
     expect(idleWarningText(false)).toBe("You will be logged out in 2 minutes due to inactivity.");
-    expect(idleWarningText(true)).toContain("You will be logged out in 2 minutes due to inactivity.");
+    expect(idleWarningText(true)).toContain(
+      "You will be logged out in 2 minutes due to inactivity.",
+    );
     expect(idleWarningText(true)).toContain("not saved");
     expect(idleWarningText(true)).toContain("will be lost");
   });

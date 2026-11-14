@@ -14,11 +14,8 @@ import {
 import { formatRupees, unitLabel, type Product, type ProductGroup } from "@/lib/products";
 import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
-import {
-  barcodeLabelsDocument,
-  LabelSheet,
-  type BarcodeLabel,
-} from "@/components/app/BarcodeLabel";
+import { LabelSheet, type BarcodeLabel } from "@/components/app/BarcodeLabel";
+import { barcodeLabelsDocument } from "@/lib/barcode-labels";
 import { printHtmlInSameTab } from "@/components/app/ShopSlip";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { ListFooter } from "@/components/app/ListFooter";

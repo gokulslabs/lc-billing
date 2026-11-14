@@ -15,8 +15,9 @@ const { from, setRoleRows } = vi.hoisted(() => {
     }),
     then: (resolve: (value: typeof roleRows) => unknown, reject?: (reason: unknown) => unknown) => {
       const data =
-        roleRows.data?.filter((row) => filters.every(([column, value]) => column !== "role" || row.role === value)) ??
-        null;
+        roleRows.data?.filter((row) =>
+          filters.every(([column, value]) => column !== "role" || row.role === value),
+        ) ?? null;
       return Promise.resolve({ ...roleRows, data }).then(resolve, reject);
     },
   };
@@ -57,7 +58,9 @@ describe("shop role guards", () => {
   it("blocks an authenticated account without a shop role", async () => {
     const response = await shopApp().request("/shop");
     expect(response.status).toBe(403);
-    await expect(response.json()).resolves.toEqual({ error: "You do not have access to the shop." });
+    await expect(response.json()).resolves.toEqual({
+      error: "You do not have access to the shop.",
+    });
   });
 
   it("allows a staff role into shop routes but blocks admin-only exports", async () => {

@@ -35,16 +35,20 @@ type ProductRow = {
   price: number | string;
 };
 
-function rankProducts<T extends { order: (column: string, options?: { ascending?: boolean; referencedTable?: string }) => T }>(
-  query: T,
-  raw: string | undefined,
-): T {
+function rankProducts<
+  T extends {
+    order: (column: string, options?: { ascending?: boolean; referencedTable?: string }) => T;
+  },
+>(query: T, raw: string | undefined): T {
   const chosen = productSort(raw);
   const ordered =
     chosen.column === "group" || chosen.column === "discount"
-      ? query.order(chosen.column === "group" ? "product_groups(name)" : "product_groups(discount_percent)", {
-          ascending: chosen.ascending,
-        })
+      ? query.order(
+          chosen.column === "group" ? "product_groups(name)" : "product_groups(discount_percent)",
+          {
+            ascending: chosen.ascending,
+          },
+        )
       : query.order(chosen.column, { ascending: chosen.ascending });
   return ordered.order("id", { ascending: true });
 }
@@ -60,11 +64,16 @@ groups.get("/", async (c) => {
   return c.json({ groups: loaded.groups });
 });
 
-const groupDiscountChanges = z.array(z.object({
-  id: z.string().uuid(),
-  discount: productGroupSchema.shape.discountPercent.multipleOf(0.01),
-  previous: productGroupSchema.shape.discountPercent,
-})).min(1).max(1000);
+const groupDiscountChanges = z
+  .array(
+    z.object({
+      id: z.string().uuid(),
+      discount: productGroupSchema.shape.discountPercent.multipleOf(0.01),
+      previous: productGroupSchema.shape.discountPercent,
+    }),
+  )
+  .min(1)
+  .max(1000);
 
 groups.patch("/discounts", async (c) => {
   const parsed = groupDiscountChanges.safeParse(await readJson(c));
@@ -131,7 +140,8 @@ groups.delete("/:id", async (c) => {
     .select("id", { count: "exact", head: true })
     .eq("group_id", id);
   if (countError) return c.json({ error: "Could not check the group." }, 500);
-  if ((count ?? 0) > 0) return c.json({ error: "Move or remove the products in this group first." }, 400);
+  if ((count ?? 0) > 0)
+    return c.json({ error: "Move or remove the products in this group first." }, 400);
   const { error } = await supabaseAdmin.from("product_groups").delete().eq("id", id);
   if (error) return c.json({ error: "Could not remove the group." }, 500);
   invalidateCatalogueCache();
@@ -152,7 +162,9 @@ products.get("/", async (c) => {
     const loaded = await readAll<ProductRow>((from, to) => {
       const source = supabaseAdmin
         .from("products")
-        .select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)");
+        .select(
+          "id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)",
+        );
       const ranked = sort
         ? rankProducts(source, sort)
         : source.order("created_at", { ascending: false }).order("id", { ascending: false });
@@ -171,7 +183,12 @@ products.get("/", async (c) => {
   const page = readPage(c.req.query("page"));
   const { from, to } = pageRange(page);
   const ranked = rankProducts(
-    supabaseAdmin.from("products").select("id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)", { count: "exact" }),
+    supabaseAdmin
+      .from("products")
+      .select(
+        "id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)",
+        { count: "exact" },
+      ),
     sort,
   );
   const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;

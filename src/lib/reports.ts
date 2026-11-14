@@ -40,12 +40,20 @@ export function rangeProblem(from: string, to: string): string | null {
   return null;
 }
 
-export function billTotals(amounts: readonly number[]): { gross: number; discount: number; net: number } {
+export function billTotals(amounts: readonly number[]): {
+  gross: number;
+  discount: number;
+  net: number;
+} {
   const gross = amounts.reduce((total, amount) => total + Math.round(amount * 100), 0) / 100;
   return { gross, discount: 0, net: gross };
 }
 
-export function pricedBill(lines: readonly { quantity: number; rate: number; amount: number }[]): { gross: number; discount: number; net: number } {
+export function pricedBill(lines: readonly { quantity: number; rate: number; amount: number }[]): {
+  gross: number;
+  discount: number;
+  net: number;
+} {
   let gross = 0;
   let net = 0;
   for (const line of lines) {

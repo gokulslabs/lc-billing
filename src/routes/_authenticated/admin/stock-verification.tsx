@@ -241,10 +241,20 @@ function Lookup({ mode }: { mode: "scan" | "status" | "quantity" }) {
           />
         </div>
         <Button type="submit" className="rounded-full" disabled={busy}>
-          {record.isPending ? "Recording…" : mode === "scan" ? "Record scan" : lookup.isPending ? "Looking…" : "Get"}
+          {record.isPending
+            ? "Recording…"
+            : mode === "scan"
+              ? "Record scan"
+              : lookup.isPending
+                ? "Looking…"
+                : "Get"}
         </Button>
       </form>
-      {message ? <p role="status" className="text-sm text-muted-foreground">{message}</p> : null}
+      {message ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          {message}
+        </p>
+      ) : null}
       {item && mode === "scan" ? (
         <div className="max-w-lg rounded-2xl border border-border bg-card p-4">
           <ItemSummary item={item} />

@@ -1,12 +1,5 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import {
-  ArrowUpRight,
-  LogOut,
-  Search,
-  ShoppingBag,
-  Sparkles,
-  UserRound,
-} from "lucide-react";
+import { ArrowUpRight, LogOut, Search, ShoppingBag, Sparkles, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CartContext, type Cart } from "@/components/store/cart-state";
 import { categories, MAX_QUANTITY, productById } from "@/lib/storefront";

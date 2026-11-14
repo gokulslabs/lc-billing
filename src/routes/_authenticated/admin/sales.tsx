@@ -6,19 +6,53 @@ import { apiFetch } from "@/lib/api";
 import { isUnrecordedName, type Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
-import { billStatusLabel, lineAmount, PAYMENT_MODES, paymentModeLabel, shopToday, type BillPay, type BillSort } from "@/lib/sales";
+import {
+  billStatusLabel,
+  lineAmount,
+  PAYMENT_MODES,
+  paymentModeLabel,
+  shopToday,
+  type BillPay,
+  type BillSort,
+} from "@/lib/sales";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
-import { escapePrint, legacyDate, plainAmount, shopHeading, slipRow } from "@/components/app/ShopSlip";
+import {
+  escapePrint,
+  legacyDate,
+  plainAmount,
+  shopHeading,
+  slipRow,
+} from "@/components/app/ShopSlip";
 import { ListFooter } from "@/components/app/ListFooter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/_authenticated/admin/sales")({
   head: () => ({
@@ -43,7 +77,8 @@ function SalesPage() {
         onBack={() => {
           setBillId(null);
           setList(true);
-          if (window.location.search.includes("bill=")) window.history.replaceState(null, "", "/admin/sales");
+          if (window.location.search.includes("bill="))
+            window.history.replaceState(null, "", "/admin/sales");
         }}
       />
     );
@@ -54,7 +89,9 @@ function SalesPage() {
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
             <h1 className="text-4xl font-semibold">New bill</h1>
-            <p className="mt-2 text-sm text-muted-foreground">Search for someone who has already been in. A new name is only for a first visit.</p>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Search for someone who has already been in. A new name is only for a first visit.
+            </p>
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
             Bill list
@@ -68,7 +105,15 @@ function SalesPage() {
     <SalesHome
       onOpen={setBillId}
       onNew={() => setList(false)}
-      startTab={opening === "due" ? "due" : opening === "pending" ? "pending" : opening === "close" ? "close" : "bills"}
+      startTab={
+        opening === "due"
+          ? "due"
+          : opening === "pending"
+            ? "pending"
+            : opening === "close"
+              ? "close"
+              : "bills"
+      }
       books={books}
     />
   );
@@ -138,16 +183,29 @@ function SalesHome({
   });
   const items = useQuery({
     queryKey: ["invoice-items", deferred, listFrom, listTo, page],
-    queryFn: () => apiFetch<{ items: InvoiceItem[]; total: number }>(`/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, page })}`),
+    queryFn: () =>
+      apiFetch<{ items: InvoiceItem[]; total: number }>(
+        `/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, page })}`,
+      ),
   });
   const rows = bills.data?.invoices ?? [];
-  const matches = (people.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  const matches = (people.data?.customers ?? []).filter(
+    (customer) => !isUnrecordedName(customer.name),
+  );
   async function loadBillsPrint() {
     const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
       `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
     );
     return {
-      columns: ["Sl.No.", "Invoice No.", "Date", "Customer Name", "Gross Amt", "Disc Amt", "Net Amt"],
+      columns: [
+        "Sl.No.",
+        "Invoice No.",
+        "Date",
+        "Customer Name",
+        "Gross Amt",
+        "Disc Amt",
+        "Net Amt",
+      ],
       lines: [`From date : ${legacyDate(listFrom)}`, `To date : ${legacyDate(listTo)}`],
       rows: data.invoices.map((bill, index) => [
         index + 1,
@@ -165,10 +223,27 @@ function SalesHome({
       `/api/invoices${query({ q: deferred, from: listFrom, to: listTo, pay, sort, dir: direction, export: true })}`,
     );
     return {
-      columns: ["Bill no.", "Date", "Customer", "Gross", "Discount", "Net", "Collected", "Balance", "Status"],
+      columns: [
+        "Bill no.",
+        "Date",
+        "Customer",
+        "Gross",
+        "Discount",
+        "Net",
+        "Collected",
+        "Balance",
+        "Status",
+      ],
       rows: data.invoices.map((bill) => [
-        bill.billNo, bill.billedOn, bill.customerName, bill.gross, bill.discount,
-        bill.total, bill.collected, bill.balance, billStatusLabel(bill.status),
+        bill.billNo,
+        bill.billedOn,
+        bill.customerName,
+        bill.gross,
+        bill.discount,
+        bill.total,
+        bill.collected,
+        bill.balance,
+        billStatusLabel(bill.status),
       ]),
     };
   }
@@ -245,31 +320,59 @@ function SalesHome({
       </form>
       {looking ? (
         <div className="max-w-xl space-y-2">
-          {people.isLoading ? <p className="text-sm text-muted-foreground">Searching customers…</p> : null}
+          {people.isLoading ? (
+            <p className="text-sm text-muted-foreground">Searching customers…</p>
+          ) : null}
           {matches.map((customer) => (
-            <div key={customer.id} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3">
+            <div
+              key={customer.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-card px-4 py-3"
+            >
               <p className="text-sm">{customerMatchLabel(customer)}</p>
-              <Button className="rounded-full" disabled={openFor.isPending} onClick={() => openFor.mutate(customer.id)}>
+              <Button
+                className="rounded-full"
+                disabled={openFor.isPending}
+                onClick={() => openFor.mutate(customer.id)}
+              >
                 New bill
               </Button>
             </div>
           ))}
           {people.data && matches.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No customer with that name, phone, or book. New bill is for a first visit.</p>
+            <p className="text-sm text-muted-foreground">
+              No customer with that name, phone, or book. New bill is for a first visit.
+            </p>
           ) : null}
           {people.data && people.data.total > people.data.customers.length ? (
-            <p className="text-sm text-muted-foreground">Type more of the name, phone, or book number.</p>
+            <p className="text-sm text-muted-foreground">
+              Type more of the name, phone, or book number.
+            </p>
           ) : null}
         </div>
       ) : null}
       <div className="flex flex-wrap items-center gap-3">
-        <Button type="button" variant={from === yesterday && to === yesterday ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(yesterday, yesterday)}>
+        <Button
+          type="button"
+          variant={from === yesterday && to === yesterday ? "default" : "outline"}
+          className="rounded-full"
+          onClick={() => setDateRange(yesterday, yesterday)}
+        >
           Yesterday
         </Button>
-        <Button type="button" variant={from === lastWeek && to === today ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(lastWeek)}>
+        <Button
+          type="button"
+          variant={from === lastWeek && to === today ? "default" : "outline"}
+          className="rounded-full"
+          onClick={() => setDateRange(lastWeek)}
+        >
           Last 7 days
         </Button>
-        <Button type="button" variant={from === lastMonth.from && to === lastMonth.to ? "default" : "outline"} className="rounded-full" onClick={() => setDateRange(lastMonth.from, lastMonth.to)}>
+        <Button
+          type="button"
+          variant={from === lastMonth.from && to === lastMonth.to ? "default" : "outline"}
+          className="rounded-full"
+          onClick={() => setDateRange(lastMonth.from, lastMonth.to)}
+        >
           Last month
         </Button>
         <Input
@@ -332,10 +435,16 @@ function SalesHome({
             <PrintTableButton title="Invoice List (Date)" load={loadBillsPrint} />
           </div>
           {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-          {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
+          {bills.error instanceof Error ? (
+            <p className="text-sm text-destructive">{bills.error.message}</p>
+          ) : null}
           {!bills.isLoading && rows.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              {looking ? "No bills for this search." : showingToday ? "No bills today." : "No bills in these dates."}
+              {looking
+                ? "No bills for this search."
+                : showingToday
+                  ? "No bills today."
+                  : "No bills in these dates."}
             </p>
           ) : null}
           {rows.length > 0 ? (
@@ -343,14 +452,62 @@ function SalesHome({
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <SortHead label="Bill no." column="bill" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Date" column="date" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Customer" column="customer" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Gross" column="gross" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Discount" column="discount" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Net" column="net" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Collected" column="collected" sort={sort} direction={direction} onSort={chooseSort} />
-                    <SortHead label="Balance" column="balance" sort={sort} direction={direction} onSort={chooseSort} />
+                    <SortHead
+                      label="Bill no."
+                      column="bill"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Date"
+                      column="date"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Customer"
+                      column="customer"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Gross"
+                      column="gross"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Discount"
+                      column="discount"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Net"
+                      column="net"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Collected"
+                      column="collected"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
+                    <SortHead
+                      label="Balance"
+                      column="balance"
+                      sort={sort}
+                      direction={direction}
+                      onSort={chooseSort}
+                    />
                     <TableHead>Status</TableHead>
                     <TableHead />
                   </TableRow>
@@ -359,9 +516,15 @@ function SalesHome({
                   {rows.map((bill) => (
                     <TableRow key={bill.id}>
                       <TableCell className="font-medium">{bill.billNo}</TableCell>
-                      <TableCell className="whitespace-nowrap">{slashDate(bill.billedOn)}</TableCell>
+                      <TableCell className="whitespace-nowrap">
+                        {slashDate(bill.billedOn)}
+                      </TableCell>
                       <TableCell>
-                        <Link to="/admin/customers/$customerId" params={{ customerId: bill.customerId }} className="hover:underline">
+                        <Link
+                          to="/admin/customers/$customerId"
+                          params={{ customerId: bill.customerId }}
+                          className="hover:underline"
+                        >
                           {bill.customerName}
                         </Link>
                       </TableCell>
@@ -372,7 +535,12 @@ function SalesHome({
                       <TableCell>{formatRupees(bill.balance)}</TableCell>
                       <TableCell>{billStatusLabel(bill.status)}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(bill.id)}>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="rounded-full"
+                          onClick={() => onOpen(bill.id)}
+                        >
                           Open
                         </Button>
                       </TableCell>
@@ -382,24 +550,55 @@ function SalesHome({
               </Table>
             </div>
           ) : null}
-          <ListFooter page={page} total={bills.data?.total ?? 0} shown={rows.length} onPage={setPage} />
+          <ListFooter
+            page={page}
+            total={bills.data?.total ?? 0}
+            shown={rows.length}
+            onPage={setPage}
+          />
         </TabsContent>
         <TabsContent value="items" className="space-y-4">
           <ExportExcelButton
             filename="bill-items"
             load={async () => {
-              const data = await apiFetch<{ items: InvoiceItem[] }>(`/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, export: true })}`);
+              const data = await apiFetch<{ items: InvoiceItem[] }>(
+                `/api/invoices/items${query({ q: deferred, from: listFrom, to: listTo, export: true })}`,
+              );
               return [
                 {
                   name: "Bill items",
-                  columns: ["Bill no.", "Date", "Customer", "Inventory no.", "Code", "Group", "Product", "Qty", "Rate", "Amount"],
-                  rows: data.items.map((item) => [item.billNo, item.billedOn, item.customerName, item.inventoryNo, item.productCode, item.groupName, item.productName, item.quantity, item.rate, item.amount]),
+                  columns: [
+                    "Bill no.",
+                    "Date",
+                    "Customer",
+                    "Inventory no.",
+                    "Code",
+                    "Group",
+                    "Product",
+                    "Qty",
+                    "Rate",
+                    "Amount",
+                  ],
+                  rows: data.items.map((item) => [
+                    item.billNo,
+                    item.billedOn,
+                    item.customerName,
+                    item.inventoryNo,
+                    item.productCode,
+                    item.groupName,
+                    item.productName,
+                    item.quantity,
+                    item.rate,
+                    item.amount,
+                  ]),
                 },
               ];
             }}
           />
           {items.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-          {items.error instanceof Error ? <p className="text-sm text-destructive">{items.error.message}</p> : null}
+          {items.error instanceof Error ? (
+            <p className="text-sm text-destructive">{items.error.message}</p>
+          ) : null}
           {(items.data?.items.length ?? 0) === 0 && !items.isLoading ? (
             <p className="text-sm text-muted-foreground">No bill lines yet.</p>
           ) : null}
@@ -480,7 +679,9 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
       <div className="flex flex-wrap items-start justify-start gap-8">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-4xl font-semibold">{invoice ? `Bill ${invoice.billNo}` : "Bill"}</h1>
+            <h1 className="text-4xl font-semibold">
+              {invoice ? `Bill ${invoice.billNo}` : "Bill"}
+            </h1>
             {invoice ? (
               <ExportExcelButton
                 filename={`bill-${invoice.billNo}`}
@@ -488,12 +689,24 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   {
                     name: "Lines",
                     columns: ["Inventory no.", "Code", "Product", "Qty", "Rate", "Amount"],
-                    rows: invoice.lines.map((line) => [line.inventoryNo, line.productCode, line.productName, line.quantity, line.rate, line.amount]),
+                    rows: invoice.lines.map((line) => [
+                      line.inventoryNo,
+                      line.productCode,
+                      line.productName,
+                      line.quantity,
+                      line.rate,
+                      line.amount,
+                    ]),
                   },
                   {
                     name: "Payments",
                     columns: ["Date", "Mode", "Showroom", "Amount"],
-                    rows: invoice.payments.map((payment) => [payment.paidOn, payment.mode ?? "", payment.showroom ?? "", payment.amount]),
+                    rows: invoice.payments.map((payment) => [
+                      payment.paidOn,
+                      payment.mode ?? "",
+                      payment.showroom ?? "",
+                      payment.amount,
+                    ]),
                   },
                 ]}
               />
@@ -501,20 +714,28 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           </div>
           {invoice ? (
             <p className="mt-2 text-sm text-muted-foreground">
-              <Link to="/admin/customers/$customerId" params={{ customerId: invoice.customerId }} className="hover:underline">
+              <Link
+                to="/admin/customers/$customerId"
+                params={{ customerId: invoice.customerId }}
+                className="hover:underline"
+              >
                 {invoice.customerName}
               </Link>{" "}
               · {invoice.billedOn} · {billStatusLabel(invoice.status)}
             </p>
           ) : null}
-          {invoice && invoice.status !== "cancelled" ? <ChangeBillCustomer invoice={invoice} onSaved={refresh} /> : null}
+          {invoice && invoice.status !== "cancelled" ? (
+            <ChangeBillCustomer invoice={invoice} onSaved={refresh} />
+          ) : null}
         </div>
         {invoice ? (
           <div className="flex w-full max-w-sm shrink-0 flex-col items-stretch gap-3 print:hidden">
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-sm text-muted-foreground">Balance</p>
-                <p className="font-display text-4xl font-semibold tabular-nums">{formatRupees(invoice.balance)}</p>
+                <p className="font-display text-4xl font-semibold tabular-nums">
+                  {formatRupees(invoice.balance)}
+                </p>
               </div>
               <Button
                 variant="outline"
@@ -525,16 +746,30 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               </Button>
             </div>
             {invoice.status !== "cancelled" && invoice.balance > 0 ? (
-              <CollectForm key={`${invoice.id}-${invoice.balance}`} invoiceId={invoice.id} billNo={invoice.billNo} balance={invoice.balance} onSaved={refresh} />
+              <CollectForm
+                key={`${invoice.id}-${invoice.balance}`}
+                invoiceId={invoice.id}
+                billNo={invoice.billNo}
+                balance={invoice.balance}
+                onSaved={refresh}
+              />
             ) : null}
           </div>
         ) : null}
       </div>
       {bill.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {bill.error instanceof Error ? <p className="text-sm text-destructive">{bill.error.message}</p> : null}
-      {invoice?.remarks ? <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p> : null}
-      {invoice && invoice.status !== "cancelled" ? <LineForm invoiceId={invoice.id} onSaved={refresh} /> : null}
-      {invoice && invoice.status !== "cancelled" ? <InvoiceDiscountForm invoice={invoice} onSaved={refresh} /> : null}
+      {bill.error instanceof Error ? (
+        <p className="text-sm text-destructive">{bill.error.message}</p>
+      ) : null}
+      {invoice?.remarks ? (
+        <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p>
+      ) : null}
+      {invoice && invoice.status !== "cancelled" ? (
+        <LineForm invoiceId={invoice.id} onSaved={refresh} />
+      ) : null}
+      {invoice && invoice.status !== "cancelled" ? (
+        <InvoiceDiscountForm invoice={invoice} onSaved={refresh} />
+      ) : null}
       {invoice ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -587,23 +822,38 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           <section className="space-y-3">
             <h2 className="text-lg font-semibold">Payment history</h2>
             <p className="text-sm text-muted-foreground">
-              Gross {formatRupees(invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0))} · Discount{" "}
-              {formatRupees(invoice.lines.reduce((sum, line) => sum + line.discount, 0))} · Balance {formatRupees(invoice.balance)}
+              Gross{" "}
+              {formatRupees(
+                invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0),
+              )}{" "}
+              · Discount {formatRupees(invoice.lines.reduce((sum, line) => sum + line.discount, 0))}{" "}
+              · Balance {formatRupees(invoice.balance)}
             </p>
             {invoice.payments.map((payment) => (
-              <div key={payment.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
+              <div
+                key={payment.id}
+                className="flex flex-wrap items-center justify-between gap-2 text-sm"
+              >
                 <p>
-                  {payment.mode === "PENDING" ? `Pending until ${slashDate(payment.paidOn)}` : payment.paidOn} · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
+                  {payment.mode === "PENDING"
+                    ? `Pending until ${slashDate(payment.paidOn)}`
+                    : payment.paidOn}{" "}
+                  · {paymentLabel(payment.mode)} · {formatRupees(payment.amount)}
                   {payment.showroom ? ` · ${payment.showroom}` : ""}
                 </p>
-                {invoice.status !== "cancelled" && (payment.mode === "PENDING" || payment.paidOn === shopToday()) ? (
+                {invoice.status !== "cancelled" &&
+                (payment.mode === "PENDING" || payment.paidOn === shopToday()) ? (
                   <RemovePayment invoiceId={invoice.id} paymentId={payment.id} onSaved={refresh} />
                 ) : null}
               </div>
             ))}
-            {invoice.payments.length === 0 ? <p className="text-sm text-muted-foreground">No payments or pending promises yet.</p> : null}
+            {invoice.payments.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No payments or pending promises yet.</p>
+            ) : null}
           </section>
-          {invoice.status !== "cancelled" ? <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} /> : null}
+          {invoice.status !== "cancelled" ? (
+            <CancelForm invoice={invoice} onSaved={refresh} onRemoved={onBack} />
+          ) : null}
         </div>
       ) : null}
       {invoice ? (
@@ -611,7 +861,9 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           <DialogContent className="flex max-h-[92vh] w-[min(96vw,38rem)] flex-col">
             <DialogHeader>
               <DialogTitle>Bill {invoice.billNo} preview</DialogTitle>
-              <DialogDescription>Review the receipt, then choose Print to send it to your printer.</DialogDescription>
+              <DialogDescription>
+                Review the receipt, then choose Print to send it to your printer.
+              </DialogDescription>
             </DialogHeader>
             <iframe
               ref={receiptFrame}
@@ -620,8 +872,19 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
               srcDoc={salesBillDocument(invoice)}
             />
             <DialogFooter>
-              <Button variant="outline" className="rounded-full" onClick={() => setReceiptOpen(false)}>Close</Button>
-              <Button className="rounded-full" onClick={() => receiptFrame.current?.contentWindow?.print()}>Print bill</Button>
+              <Button
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setReceiptOpen(false)}
+              >
+                Close
+              </Button>
+              <Button
+                className="rounded-full"
+                onClick={() => receiptFrame.current?.contentWindow?.print()}
+              >
+                Print bill
+              </Button>
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -630,8 +893,16 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
   );
 }
 
-function InvoiceDiscountForm({ invoice, onSaved }: { invoice: InvoiceDetail; onSaved: () => void }) {
-  const existingDiscount = Number(invoice.lines.reduce((sum, line) => sum + line.discount, 0).toFixed(2));
+function InvoiceDiscountForm({
+  invoice,
+  onSaved,
+}: {
+  invoice: InvoiceDetail;
+  onSaved: () => void;
+}) {
+  const existingDiscount = Number(
+    invoice.lines.reduce((sum, line) => sum + line.discount, 0).toFixed(2),
+  );
   const [discount, setDiscount] = useState(String(existingDiscount));
   useEffect(() => setDiscount(String(existingDiscount)), [invoice.id, existingDiscount]);
   const save = useMutation({
@@ -670,10 +941,18 @@ function InvoiceDiscountForm({ invoice, onSaved }: { invoice: InvoiceDetail; onS
           disabled={invoice.lines.length === 0 || save.isPending}
         />
       </Field>
-      <Button type="submit" variant="outline" className="rounded-full" disabled={invoice.lines.length === 0 || save.isPending}>
+      <Button
+        type="submit"
+        variant="outline"
+        className="rounded-full"
+        disabled={invoice.lines.length === 0 || save.isPending}
+      >
         {save.isPending ? "Saving…" : "Save discount"}
       </Button>
-      <p className="w-full text-sm text-muted-foreground">Updates this bill’s total discount across its items. It cannot reduce the total below payments already collected.</p>
+      <p className="w-full text-sm text-muted-foreground">
+        Updates this bill’s total discount across its items. It cannot reduce the total below
+        payments already collected.
+      </p>
     </form>
   );
 }
@@ -686,9 +965,14 @@ function ChangeBillCustomer({ invoice, onSaved }: { invoice: InvoiceDetail; onSa
   const customers = useQuery({
     queryKey: ["customers", "change-bill-customer", deferred],
     enabled: open && deferred.trim().length > 0,
-    queryFn: () => apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`),
+    queryFn: () =>
+      apiFetch<{ customers: Customer[]; total: number }>(
+        `/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`,
+      ),
   });
-  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  const matches = (customers.data?.customers ?? []).filter(
+    (customer) => !isUnrecordedName(customer.name),
+  );
   const save = useMutation({
     mutationFn: () => {
       if (!customerId) throw new Error("Choose a customer first.");
@@ -709,7 +993,13 @@ function ChangeBillCustomer({ invoice, onSaved }: { invoice: InvoiceDetail; onSa
 
   if (!open) {
     return (
-      <Button type="button" variant="ghost" size="sm" className="mt-1 h-auto px-0 text-sm" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="mt-1 h-auto px-0 text-sm"
+        onClick={() => setOpen(true)}
+      >
         Change customer
       </Button>
     );
@@ -739,14 +1029,31 @@ function ChangeBillCustomer({ invoice, onSaved }: { invoice: InvoiceDetail; onSa
             {customerMatchLabel(customer)}
           </button>
         ))}
-        {q.trim() && customers.data && matches.length === 0 ? <p className="text-sm text-muted-foreground">No matching customer.</p> : null}
+        {q.trim() && customers.data && matches.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No matching customer.</p>
+        ) : null}
         {customers.data && customers.data.total > customers.data.customers.length ? (
-          <p className="text-sm text-muted-foreground">Showing {customers.data.customers.length} of {customers.data.total}. Type more to narrow the search.</p>
+          <p className="text-sm text-muted-foreground">
+            Showing {customers.data.customers.length} of {customers.data.total}. Type more to narrow
+            the search.
+          </p>
         ) : null}
       </div>
       <div className="flex gap-2">
-        <Button type="button" variant="outline" className="rounded-full" onClick={() => setOpen(false)}>Close</Button>
-        <Button type="button" className="rounded-full" disabled={!customerId || save.isPending} onClick={() => save.mutate()}>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          onClick={() => setOpen(false)}
+        >
+          Close
+        </Button>
+        <Button
+          type="button"
+          className="rounded-full"
+          disabled={!customerId || save.isPending}
+          onClick={() => save.mutate()}
+        >
           {save.isPending ? "Saving…" : "Save customer"}
         </Button>
       </div>
@@ -774,7 +1081,11 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
   extraRef.current = extraOff;
   useUnsavedWork(
     "bill-line",
-    inventoryNo.trim().length > 0 || rate.trim().length > 0 || discountPercent.trim().length > 0 || extraOff.trim().length > 0 || quantity !== "1",
+    inventoryNo.trim().length > 0 ||
+      rate.trim().length > 0 ||
+      discountPercent.trim().length > 0 ||
+      extraOff.trim().length > 0 ||
+      quantity !== "1",
   );
   useEffect(() => {
     const handle = window.setTimeout(() => setLookup(inventoryNo.trim()), 300);
@@ -792,7 +1103,8 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         if (!fast) return;
         event.preventDefault();
         event.stopPropagation();
-        if (event.target instanceof HTMLInputElement && event.target.id === "line-qty") setQuantity("1");
+        if (event.target instanceof HTMLInputElement && event.target.id === "line-qty")
+          setQuantity("1");
         void addRef.current(scanned);
         return;
       }
@@ -810,7 +1122,15 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
     enabled: lookup.length > 0,
     queryFn: () =>
       apiFetch<{
-        preview: { productCode: string; groupName: string; productName: string; rate: number; discountPercent: number; status: string; available: number };
+        preview: {
+          productCode: string;
+          groupName: string;
+          productName: string;
+          rate: number;
+          discountPercent: number;
+          status: string;
+          available: number;
+        };
       }>(`/api/invoices/preview?inventoryNo=${encodeURIComponent(lookup)}`),
     retry: false,
   });
@@ -833,11 +1153,15 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       try {
         if (!Number.isFinite(amount)) throw new Error("Enter a quantity.");
         const typedRate = rateRef.current.trim() === "" ? undefined : Number(rateRef.current);
-        const typedPercent = discountRef.current.trim() === "" ? undefined : Number(discountRef.current);
+        const typedPercent =
+          discountRef.current.trim() === "" ? undefined : Number(discountRef.current);
         const typedExtra = extraRef.current.trim() === "" ? undefined : Number(extraRef.current);
-        if (typedRate !== undefined && !Number.isFinite(typedRate)) throw new Error("Enter a rate.");
-        if (typedPercent !== undefined && !Number.isFinite(typedPercent)) throw new Error("Enter a discount percent.");
-        if (typedExtra !== undefined && !Number.isFinite(typedExtra)) throw new Error("Enter the extra off.");
+        if (typedRate !== undefined && !Number.isFinite(typedRate))
+          throw new Error("Enter a rate.");
+        if (typedPercent !== undefined && !Number.isFinite(typedPercent))
+          throw new Error("Enter a discount percent.");
+        if (typedExtra !== undefined && !Number.isFinite(typedExtra))
+          throw new Error("Enter the extra off.");
         await apiFetch(`/api/invoices/${invoiceId}/lines`, {
           method: "POST",
           body: JSON.stringify({
@@ -891,7 +1215,13 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         />
       </Field>
       <Field label="Quantity" id="line-qty">
-        <Input id="line-qty" value={quantity} onChange={(event) => setQuantity(event.target.value)} className="w-full min-w-0" required />
+        <Input
+          id="line-qty"
+          value={quantity}
+          onChange={(event) => setQuantity(event.target.value)}
+          className="w-full min-w-0"
+          required
+        />
       </Field>
       <Field label="Rate" id="line-rate">
         <Input
@@ -912,24 +1242,33 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         />
       </Field>
       <Field label="Extra off" id="line-extra">
-        <Input id="line-extra" value={extraOff} onChange={(event) => setExtraOff(event.target.value)} className="w-full min-w-0" placeholder="₹" />
+        <Input
+          id="line-extra"
+          value={extraOff}
+          onChange={(event) => setExtraOff(event.target.value)}
+          className="w-full min-w-0"
+          placeholder="₹"
+        />
       </Field>
       <Button type="submit" className="w-fit rounded-full" disabled={busy}>
         {busy ? "Adding…" : "Add"}
       </Button>
       {preview.data ? (
         <p className="col-span-full pb-2 text-sm text-muted-foreground">
-          {preview.data.preview.productCode} · {preview.data.preview.groupName} · {preview.data.preview.productName} ·{" "}
-          {formatRupees(preview.data.preview.rate)}
-          {preview.data.preview.discountPercent ? ` · ${preview.data.preview.discountPercent}% off` : ""} · {preview.data.preview.status} ·{" "}
-          {preview.data.preview.available} left
+          {preview.data.preview.productCode} · {preview.data.preview.groupName} ·{" "}
+          {preview.data.preview.productName} · {formatRupees(preview.data.preview.rate)}
+          {preview.data.preview.discountPercent
+            ? ` · ${preview.data.preview.discountPercent}% off`
+            : ""}{" "}
+          · {preview.data.preview.status} · {preview.data.preview.available} left
         </p>
       ) : null}
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
         <p className="col-span-full pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
       <p className="col-span-full w-full text-sm text-muted-foreground">
-        Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the group percent. Extra off comes off after that.
+        Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the
+        group percent. Extra off comes off after that.
       </p>
     </form>
   );
@@ -981,13 +1320,20 @@ function ReturnLine({
             toast.error("Enter a quantity to return.");
             return;
           }
-          if (!window.confirm(`Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`)) return;
+          if (
+            !window.confirm(`Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`)
+          )
+            return;
           void apiFetch(`/api/invoices/${invoiceId}/lines/${line.id}/return`, {
             method: "POST",
             body: JSON.stringify({ quantity }),
           })
             .then(() => {
-              toast.success(quantity >= line.quantity ? `${line.inventoryNo} is back on the shelf.` : `${line.inventoryNo} updated.`);
+              toast.success(
+                quantity >= line.quantity
+                  ? `${line.inventoryNo} is back on the shelf.`
+                  : `${line.inventoryNo} updated.`,
+              );
               onSaved();
             })
             .catch((reason: Error) => toast.error(reason.message));
@@ -999,12 +1345,26 @@ function ReturnLine({
   );
 }
 
-function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; paymentId: string; onSaved: () => void }) {
+function RemovePayment({
+  invoiceId,
+  paymentId,
+  onSaved,
+}: {
+  invoiceId: string;
+  paymentId: string;
+  onSaved: () => void;
+}) {
   const [reason, setReason] = useState("");
   const [open, setOpen] = useState(false);
   if (!open) {
     return (
-      <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setOpen(true)}>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        className="rounded-full"
+        onClick={() => setOpen(true)}
+      >
         Remove
       </Button>
     );
@@ -1030,7 +1390,14 @@ function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; p
           .catch((error: Error) => toast.error(error.message));
       }}
     >
-      <Input value={reason} onChange={(event) => setReason(event.target.value)} placeholder="Reason" className="h-8 w-40" maxLength={300} required />
+      <Input
+        value={reason}
+        onChange={(event) => setReason(event.target.value)}
+        placeholder="Reason"
+        className="h-8 w-40"
+        maxLength={300}
+        required
+      />
       <Button type="submit" size="sm" className="rounded-full">
         Remove
       </Button>
@@ -1038,14 +1405,27 @@ function RemovePayment({ invoiceId, paymentId, onSaved }: { invoiceId: string; p
   );
 }
 
-function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: string; billNo: string; balance: number; onSaved: () => void }) {
+function CollectForm({
+  invoiceId,
+  billNo,
+  balance,
+  onSaved,
+}: {
+  invoiceId: string;
+  billNo: string;
+  balance: number;
+  onSaved: () => void;
+}) {
   const [amount, setAmount] = useState(String(balance));
   const [paidOn, setPaidOn] = useState(shopToday());
   const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
   const [showroom, setShowroom] = useState("");
   useUnsavedWork(
     "bill-collect",
-    amount !== String(balance) || paidOn !== shopToday() || mode !== "CASH" || showroom.trim().length > 0,
+    amount !== String(balance) ||
+      paidOn !== shopToday() ||
+      mode !== "CASH" ||
+      showroom.trim().length > 0,
   );
   const save = useMutation({
     mutationFn: () => {
@@ -1070,18 +1450,30 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
       onSubmit={(event) => {
         event.preventDefault();
         const value = Number(amount);
-        const prompt = mode === "PENDING"
-          ? `Record ${formatRupees(Number.isFinite(value) ? value : 0)} as pending until ${slashDate(paidOn)} on bill ${billNo}?`
-          : `Collect ${formatRupees(Number.isFinite(value) ? value : 0)} on bill ${billNo}?`;
+        const prompt =
+          mode === "PENDING"
+            ? `Record ${formatRupees(Number.isFinite(value) ? value : 0)} as pending until ${slashDate(paidOn)} on bill ${billNo}?`
+            : `Collect ${formatRupees(Number.isFinite(value) ? value : 0)} on bill ${billNo}?`;
         if (!window.confirm(prompt)) return;
         save.mutate();
       }}
     >
       <Field label="Amount" id="collect-amount">
-        <Input id="collect-amount" value={amount} onChange={(event) => setAmount(event.target.value)} required />
+        <Input
+          id="collect-amount"
+          value={amount}
+          onChange={(event) => setAmount(event.target.value)}
+          required
+        />
       </Field>
       <Field label={mode === "PENDING" ? "Expected payment date" : "Date"} id="collect-date">
-        <Input id="collect-date" type="date" value={paidOn} onChange={(event) => setPaidOn(event.target.value)} required />
+        <Input
+          id="collect-date"
+          type="date"
+          value={paidOn}
+          onChange={(event) => setPaidOn(event.target.value)}
+          required
+        />
       </Field>
       <div className="space-y-2">
         <Label>Payment method or pay later</Label>
@@ -1104,9 +1496,19 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
         </div>
       </div>
       <Field label={mode === "PENDING" ? "Note (optional)" : "Note"} id="collect-showroom">
-        <Input id="collect-showroom" value={showroom} onChange={(event) => setShowroom(event.target.value)} maxLength={80} />
+        <Input
+          id="collect-showroom"
+          value={showroom}
+          onChange={(event) => setShowroom(event.target.value)}
+          maxLength={80}
+        />
       </Field>
-      {mode === "PENDING" ? <p className="text-xs text-muted-foreground">This records a due date only. It does not count as money collected or reduce the bill balance.</p> : null}
+      {mode === "PENDING" ? (
+        <p className="text-xs text-muted-foreground">
+          This records a due date only. It does not count as money collected or reduce the bill
+          balance.
+        </p>
+      ) : null}
       <Button type="submit" className="rounded-full" disabled={save.isPending}>
         {save.isPending ? "Saving…" : mode === "PENDING" ? "Record pending" : "Collect"}
       </Button>
@@ -1114,13 +1516,24 @@ function CollectForm({ invoiceId, billNo, balance, onSaved }: { invoiceId: strin
   );
 }
 
-function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; onSaved: () => void; onRemoved: () => void }) {
+function CancelForm({
+  invoice,
+  onSaved,
+  onRemoved,
+}: {
+  invoice: InvoiceDetail;
+  onSaved: () => void;
+  onRemoved: () => void;
+}) {
   const [remarks, setRemarks] = useState("");
   useUnsavedWork("bill-cancel", remarks.trim().length > 0);
   const empty = invoice.lines.length === 0 && invoice.payments.length === 0;
   const cancel = useMutation({
     mutationFn: () =>
-      apiFetch(`/api/invoices/${invoice.id}/cancel`, { method: "POST", body: JSON.stringify({ remarks }) }),
+      apiFetch(`/api/invoices/${invoice.id}/cancel`, {
+        method: "POST",
+        body: JSON.stringify({ remarks }),
+      }),
     onSuccess: () => {
       toast.success("Bill cancelled.");
       onSaved();
@@ -1149,7 +1562,8 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
           className="rounded-full"
           disabled={discard.isPending}
           onClick={() => {
-            if (!window.confirm(`Discard empty bill ${invoice.billNo}? This cannot be undone.`)) return;
+            if (!window.confirm(`Discard empty bill ${invoice.billNo}? This cannot be undone.`))
+              return;
             discard.mutate();
           }}
         >
@@ -1165,9 +1579,20 @@ function CancelForm({ invoice, onSaved, onRemoved }: { invoice: InvoiceDetail; o
           }}
         >
           <Field label="Reason" id="cancel-reason">
-            <Input id="cancel-reason" value={remarks} onChange={(event) => setRemarks(event.target.value)} maxLength={300} required />
+            <Input
+              id="cancel-reason"
+              value={remarks}
+              onChange={(event) => setRemarks(event.target.value)}
+              maxLength={300}
+              required
+            />
           </Field>
-          <Button type="submit" variant="outline" className="rounded-full" disabled={cancel.isPending}>
+          <Button
+            type="submit"
+            variant="outline"
+            className="rounded-full"
+            disabled={cancel.isPending}
+          >
             {cancel.isPending ? "Cancelling…" : "Cancel bill"}
           </Button>
         </form>
@@ -1181,16 +1606,26 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [customerId, setCustomerId] = useState("");
   const [walkIn, setWalkIn] = useState("");
   const [phone, setPhone] = useState("");
-  useUnsavedWork("new-bill", q.trim().length > 0 || customerId.length > 0 || walkIn.trim().length > 0 || phone.trim().length > 0);
+  useUnsavedWork(
+    "new-bill",
+    q.trim().length > 0 ||
+      customerId.length > 0 ||
+      walkIn.trim().length > 0 ||
+      phone.trim().length > 0,
+  );
   const customers = useQuery({
     queryKey: ["customers", "bill", q],
     enabled: q.trim().length > 0,
     queryFn: () => {
       const params = new URLSearchParams({ q: q.trim(), picker: "1" });
-      return apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?${params.toString()}`);
+      return apiFetch<{ customers: Customer[]; total: number }>(
+        `/api/customers?${params.toString()}`,
+      );
     },
   });
-  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  const matches = (customers.data?.customers ?? []).filter(
+    (customer) => !isUnrecordedName(customer.name),
+  );
   const create = useMutation({
     mutationFn: async () => {
       let id = customerId || (matches.length === 1 ? (matches[0]?.id ?? "") : "");
@@ -1198,7 +1633,9 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
         if (phone.trim()) {
-          const found = await apiFetch<{ customer: Customer | null }>(`/api/customers/lookup?phone=${encodeURIComponent(phone.trim())}`);
+          const found = await apiFetch<{ customer: Customer | null }>(
+            `/api/customers/lookup?phone=${encodeURIComponent(phone.trim())}`,
+          );
           if (found.customer) {
             return apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
               method: "POST",
@@ -1208,7 +1645,12 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
         }
         const saved = await apiFetch<{ customer: Customer }>("/api/customers", {
           method: "POST",
-          body: JSON.stringify({ name: walkIn.trim(), address: "", phone: phone.trim(), bookNo: "" }),
+          body: JSON.stringify({
+            name: walkIn.trim(),
+            address: "",
+            phone: phone.trim(),
+            bookNo: "",
+          }),
         });
         id = saved.customer.id;
       }
@@ -1228,85 +1670,92 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   });
 
   return (
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            create.mutate();
+    <form
+      className="space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        create.mutate();
+      }}
+    >
+      <Field label="Find customer" id="bill-customer-search">
+        <Input
+          id="bill-customer-search"
+          value={q}
+          onChange={(event) => {
+            setQ(event.target.value);
+            setCustomerId("");
           }}
-        >
-          <Field label="Find customer" id="bill-customer-search">
-            <Input
-              id="bill-customer-search"
-              value={q}
-              onChange={(event) => {
-                setQ(event.target.value);
-                setCustomerId("");
-              }}
-              placeholder="Name, phone or book no."
-              autoFocus
-            />
-          </Field>
-          {!q.trim() ? <p className="text-sm text-muted-foreground">Type a name, phone, or book number.</p> : null}
-          <div className="max-h-48 space-y-1 overflow-auto">
-            {matches.map((customer) => (
-              <button
-                key={customer.id}
-                type="button"
-                className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
-                onClick={() => {
-                  setCustomerId(customer.id);
-                  setWalkIn("");
-                  setPhone("");
-                }}
-              >
-                {customerMatchLabel(customer)}
-              </button>
-            ))}
-            {q.trim() && customers.data && matches.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No match. Add them below.</p>
-            ) : null}
-            {customers.data && customers.data.total > customers.data.customers.length ? (
-              <p className="text-sm text-muted-foreground">
-                Showing {customers.data.customers.length} of {customers.data.total}. Type more of the name or phone.
-              </p>
-            ) : null}
-          </div>
-          <p className="text-sm text-muted-foreground">Name and phone, only when the search has no match.</p>
-          <Field label="First visit" id="bill-walk-in">
-            <Input
-              id="bill-walk-in"
-              value={walkIn}
-              onChange={(event) => {
-                setWalkIn(event.target.value);
-                setCustomerId("");
-              }}
-              placeholder="Name"
-              maxLength={120}
-              disabled={Boolean(customerId) || matches.length > 0}
-            />
-          </Field>
-          <Field label="Phone" id="bill-walk-in-phone">
-            <Input
-              id="bill-walk-in-phone"
-              value={phone}
-              onChange={(event) => setPhone(event.target.value)}
-              placeholder="Optional"
-              maxLength={20}
-              disabled={Boolean(customerId) || matches.length > 0}
-            />
-          </Field>
-          <Button type="submit" className="rounded-full" disabled={create.isPending}>
-            {create.isPending ? "Opening…" : "Open bill"}
-          </Button>
-        </form>
+          placeholder="Name, phone or book no."
+          autoFocus
+        />
+      </Field>
+      {!q.trim() ? (
+        <p className="text-sm text-muted-foreground">Type a name, phone, or book number.</p>
+      ) : null}
+      <div className="max-h-48 space-y-1 overflow-auto">
+        {matches.map((customer) => (
+          <button
+            key={customer.id}
+            type="button"
+            className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
+            onClick={() => {
+              setCustomerId(customer.id);
+              setWalkIn("");
+              setPhone("");
+            }}
+          >
+            {customerMatchLabel(customer)}
+          </button>
+        ))}
+        {q.trim() && customers.data && matches.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No match. Add them below.</p>
+        ) : null}
+        {customers.data && customers.data.total > customers.data.customers.length ? (
+          <p className="text-sm text-muted-foreground">
+            Showing {customers.data.customers.length} of {customers.data.total}. Type more of the
+            name or phone.
+          </p>
+        ) : null}
+      </div>
+      <p className="text-sm text-muted-foreground">
+        Name and phone, only when the search has no match.
+      </p>
+      <Field label="First visit" id="bill-walk-in">
+        <Input
+          id="bill-walk-in"
+          value={walkIn}
+          onChange={(event) => {
+            setWalkIn(event.target.value);
+            setCustomerId("");
+          }}
+          placeholder="Name"
+          maxLength={120}
+          disabled={Boolean(customerId) || matches.length > 0}
+        />
+      </Field>
+      <Field label="Phone" id="bill-walk-in-phone">
+        <Input
+          id="bill-walk-in-phone"
+          value={phone}
+          onChange={(event) => setPhone(event.target.value)}
+          placeholder="Optional"
+          maxLength={20}
+          disabled={Boolean(customerId) || matches.length > 0}
+        />
+      </Field>
+      <Button type="submit" className="rounded-full" disabled={create.isPending}>
+        {create.isPending ? "Opening…" : "Open bill"}
+      </Button>
+    </form>
   );
 }
 
 function salesBillHtml(invoice: InvoiceDetail): string {
   const gross = invoice.lines.reduce((sum, line) => sum + lineAmount(line.quantity, line.rate), 0);
   const discount = invoice.lines.reduce((sum, line) => sum + line.discount, 0);
-  const collected = invoice.payments.filter((payment) => payment.mode !== "PENDING").reduce((sum, payment) => sum + payment.amount, 0);
+  const collected = invoice.payments
+    .filter((payment) => payment.mode !== "PENDING")
+    .reduce((sum, payment) => sum + payment.amount, 0);
   const lines = invoice.lines
     .map(
       (line, index) =>
@@ -1334,12 +1783,18 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
   const [customerId, setCustomerId] = useState("");
   const bills = useQuery({
     queryKey: ["invoices-unrecorded", page],
-    queryFn: () => apiFetch<{ invoices: InvoiceSummary[]; total: number }>(`/api/invoices/unrecorded?page=${page}`),
+    queryFn: () =>
+      apiFetch<{ invoices: InvoiceSummary[]; total: number }>(
+        `/api/invoices/unrecorded?page=${page}`,
+      ),
   });
   const customers = useQuery({
     queryKey: ["customers", "attach", deferred],
     enabled: deferred.trim().length > 0,
-    queryFn: () => apiFetch<{ customers: Customer[]; total: number }>(`/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`),
+    queryFn: () =>
+      apiFetch<{ customers: Customer[]; total: number }>(
+        `/api/customers?q=${encodeURIComponent(deferred.trim())}&picker=1`,
+      ),
   });
   const attach = useMutation({
     mutationFn: () => {
@@ -1364,28 +1819,44 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
   });
   const rows = bills.data?.invoices ?? [];
   const chosen = rows.find((row) => row.id === billId);
-  const matches = (customers.data?.customers ?? []).filter((customer) => !isUnrecordedName(customer.name));
+  const matches = (customers.data?.customers ?? []).filter(
+    (customer) => !isUnrecordedName(customer.name),
+  );
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        These bills are on NOT RECORDED. Attach the real customer, or a named walk-in. The bill then shows in that customer’s history and in Who owes.
+        These bills are on NOT RECORDED. Attach the real customer, or a named walk-in. The bill then
+        shows in that customer’s history and in Who owes.
       </p>
       <ExportExcelButton
         filename="not-recorded"
         load={async () => {
-          const data = await apiFetch<{ invoices: InvoiceSummary[] }>("/api/invoices/unrecorded?export=1");
+          const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
+            "/api/invoices/unrecorded?export=1",
+          );
           return [
             {
               name: "Not recorded",
               columns: ["Bill no.", "Date", "Net", "Collected", "Balance", "Status"],
-              rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+              rows: data.invoices.map((bill) => [
+                bill.billNo,
+                bill.billedOn,
+                bill.total,
+                bill.collected,
+                bill.balance,
+                billStatusLabel(bill.status),
+              ]),
             },
           ];
         }}
       />
       {bills.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {bills.error instanceof Error ? <p className="text-sm text-destructive">{bills.error.message}</p> : null}
-      {!bills.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No bills are waiting for a customer.</p> : null}
+      {bills.error instanceof Error ? (
+        <p className="text-sm text-destructive">{bills.error.message}</p>
+      ) : null}
+      {!bills.isLoading && rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No bills are waiting for a customer.</p>
+      ) : null}
       {rows.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -1408,7 +1879,12 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
                   <TableCell>{formatRupees(invoice.balance)}</TableCell>
                   <TableCell>{billStatusLabel(invoice.status)}</TableCell>
                   <TableCell className="space-x-2 text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(invoice.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => onOpen(invoice.id)}
+                    >
                       Open
                     </Button>
                     <Button
@@ -1440,7 +1916,12 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
         >
           <p className="text-sm font-medium">Attach bill {chosen.billNo}</p>
           <Field label="Find customer" id="attach-customer">
-            <Input id="attach-customer" value={q} onChange={(event) => setQ(event.target.value)} placeholder="Name, phone or book no." />
+            <Input
+              id="attach-customer"
+              value={q}
+              onChange={(event) => setQ(event.target.value)}
+              placeholder="Name, phone or book no."
+            />
           </Field>
           <div className="max-h-48 space-y-1 overflow-auto">
             {matches.map((customer) => (
@@ -1463,13 +1944,21 @@ function UnrecordedBills({ onOpen }: { onOpen: (id: string) => void }) {
   );
 }
 
-function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initialBooks: "new" | "old" }) {
+function DueList({
+  onOpen,
+  initialBooks,
+}: {
+  onOpen: (id: string) => void;
+  initialBooks: "new" | "old";
+}) {
   const [page, setPage] = useState(1);
   const [books, setBooks] = useState<"new" | "old">(initialBooks);
   const due = useQuery({
     queryKey: ["invoices-due", books, page],
     queryFn: () =>
-      apiFetch<{ invoices: InvoiceSummary[]; total: number; balance: number }>(`/api/invoices/due?books=${books}&page=${page}`),
+      apiFetch<{ invoices: InvoiceSummary[]; total: number; balance: number }>(
+        `/api/invoices/due?books=${books}&page=${page}`,
+      ),
   });
   const rows = due.data?.invoices ?? [];
   return (
@@ -1478,12 +1967,22 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
         <ExportExcelButton
           filename="unpaid-bills"
           load={async () => {
-            const data = await apiFetch<{ invoices: InvoiceSummary[] }>(`/api/invoices/due?books=${books}&export=1`);
+            const data = await apiFetch<{ invoices: InvoiceSummary[] }>(
+              `/api/invoices/due?books=${books}&export=1`,
+            );
             return [
               {
                 name: "Unpaid",
                 columns: ["Bill no.", "Date", "Customer", "Net", "Collected", "Balance", "Status"],
-                rows: data.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.customerName, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+                rows: data.invoices.map((bill) => [
+                  bill.billNo,
+                  bill.billedOn,
+                  bill.customerName,
+                  bill.total,
+                  bill.collected,
+                  bill.balance,
+                  billStatusLabel(bill.status),
+                ]),
               },
             ];
           }}
@@ -1511,12 +2010,17 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
       </div>
       {due.data ? (
         <p className="text-sm text-muted-foreground">
-          Total balance {formatRupees(due.data.balance)} across {due.data.total.toLocaleString("en-IN")} bills.
+          Total balance {formatRupees(due.data.balance)} across{" "}
+          {due.data.total.toLocaleString("en-IN")} bills.
         </p>
       ) : null}
       {due.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {due.error instanceof Error ? <p className="text-sm text-destructive">{due.error.message}</p> : null}
-      {!due.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">Nothing is owing.</p> : null}
+      {due.error instanceof Error ? (
+        <p className="text-sm text-destructive">{due.error.message}</p>
+      ) : null}
+      {!due.isLoading && rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">Nothing is owing.</p>
+      ) : null}
       {rows.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -1541,7 +2045,12 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
                   <TableCell>{formatRupees(invoice.balance)}</TableCell>
                   <TableCell>{billStatusLabel(invoice.status)}</TableCell>
                   <TableCell className="text-right">
-                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(invoice.id)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => onOpen(invoice.id)}
+                    >
                       Open
                     </Button>
                   </TableCell>
@@ -1559,26 +2068,62 @@ function DueList({ onOpen, initialBooks }: { onOpen: (id: string) => void; initi
 function PendingPromises({ onOpen }: { onOpen: (id: string) => void }) {
   const pending = useQuery({
     queryKey: ["invoice-pending-promises"],
-    queryFn: () => apiFetch<{ promises: { id: string; invoiceId: string; billNo: string; customerId: string; customerName: string; dueOn: string; amount: number; balance: number; note: string | null }[] }>("/api/invoices/pending"),
+    queryFn: () =>
+      apiFetch<{
+        promises: {
+          id: string;
+          invoiceId: string;
+          billNo: string;
+          customerId: string;
+          customerName: string;
+          dueOn: string;
+          amount: number;
+          balance: number;
+          note: string | null;
+        }[];
+      }>("/api/invoices/pending"),
   });
   const rows = pending.data?.promises ?? [];
   return (
     <div className="space-y-4">
-      <p className="text-sm text-muted-foreground">Amounts customers have promised to pay later. These remain outstanding until an actual collection is recorded.</p>
+      <p className="text-sm text-muted-foreground">
+        Amounts customers have promised to pay later. These remain outstanding until an actual
+        collection is recorded.
+      </p>
       <ExportExcelButton
         filename="pending-payments"
         load={async () => {
           const data = await apiFetch<{ promises: typeof rows }>("/api/invoices/pending");
-          return [{
-            name: "Pending payments",
-            columns: ["Due date", "Bill no.", "Customer", "Pending amount", "Bill balance", "Note"],
-            rows: data.promises.map((row) => [row.dueOn, row.billNo, row.customerName, row.amount, row.balance, row.note ?? ""]),
-          }];
+          return [
+            {
+              name: "Pending payments",
+              columns: [
+                "Due date",
+                "Bill no.",
+                "Customer",
+                "Pending amount",
+                "Bill balance",
+                "Note",
+              ],
+              rows: data.promises.map((row) => [
+                row.dueOn,
+                row.billNo,
+                row.customerName,
+                row.amount,
+                row.balance,
+                row.note ?? "",
+              ]),
+            },
+          ];
         }}
       />
       {pending.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {pending.error instanceof Error ? <p className="text-sm text-destructive">{pending.error.message}</p> : null}
-      {!pending.isLoading && rows.length === 0 ? <p className="text-sm text-muted-foreground">No pending payment promises.</p> : null}
+      {pending.error instanceof Error ? (
+        <p className="text-sm text-destructive">{pending.error.message}</p>
+      ) : null}
+      {!pending.isLoading && rows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No pending payment promises.</p>
+      ) : null}
       {rows.length > 0 ? (
         <div className="rounded-2xl border border-border bg-card">
           <Table>
@@ -1599,12 +2144,27 @@ function PendingPromises({ onOpen }: { onOpen: (id: string) => void }) {
                   <TableCell className="whitespace-nowrap">{slashDate(row.dueOn)}</TableCell>
                   <TableCell>{row.billNo}</TableCell>
                   <TableCell>
-                    <Link to="/admin/customers/$customerId" params={{ customerId: row.customerId }} className="hover:underline">{row.customerName}</Link>
+                    <Link
+                      to="/admin/customers/$customerId"
+                      params={{ customerId: row.customerId }}
+                      className="hover:underline"
+                    >
+                      {row.customerName}
+                    </Link>
                   </TableCell>
                   <TableCell>{formatRupees(row.amount)}</TableCell>
                   <TableCell>{formatRupees(row.balance)}</TableCell>
                   <TableCell>{row.note || "—"}</TableCell>
-                  <TableCell className="text-right"><Button variant="outline" size="sm" className="rounded-full" onClick={() => onOpen(row.invoiceId)}>Open bill</Button></TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full"
+                      onClick={() => onOpen(row.invoiceId)}
+                    >
+                      Open bill
+                    </Button>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -1620,16 +2180,29 @@ function DayClose() {
   const close = useQuery({
     queryKey: ["day-close", date],
     queryFn: () =>
-      apiFetch<{ date: string; bills: number; billed: number; collected: number; due: number; pending: number; unpaid: number; modes: { mode: string; amount: number }[] }>(
-        `/api/invoices/close?date=${date}`,
-      ),
+      apiFetch<{
+        date: string;
+        bills: number;
+        billed: number;
+        collected: number;
+        due: number;
+        pending: number;
+        unpaid: number;
+        modes: { mode: string; amount: number }[];
+      }>(`/api/invoices/close?date=${date}`),
   });
   const day = close.data;
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end gap-3">
         <Field label="Date" id="close-date">
-          <Input id="close-date" type="date" value={date} onChange={(event) => setDate(event.target.value)} className="w-40" />
+          <Input
+            id="close-date"
+            type="date"
+            value={date}
+            onChange={(event) => setDate(event.target.value)}
+            className="w-40"
+          />
         </Field>
         {day ? (
           <ExportExcelButton
@@ -1637,23 +2210,64 @@ function DayClose() {
             load={async () => [
               {
                 name: "Day close",
-                columns: ["Date", "Bills", "Billed", "Collected", "Still due", "Unpaid bills", "Pending promised", ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map(paymentModeLabel)],
-                rows: [[day.date, day.bills, day.billed, day.collected, day.due, day.unpaid, day.pending, ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map((mode) => day.modes.find((item) => item.mode === mode)?.amount ?? 0)]],
+                columns: [
+                  "Date",
+                  "Bills",
+                  "Billed",
+                  "Collected",
+                  "Still due",
+                  "Unpaid bills",
+                  "Pending promised",
+                  ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map(paymentModeLabel),
+                ],
+                rows: [
+                  [
+                    day.date,
+                    day.bills,
+                    day.billed,
+                    day.collected,
+                    day.due,
+                    day.unpaid,
+                    day.pending,
+                    ...PAYMENT_MODES.filter((mode) => mode !== "PENDING").map(
+                      (mode) => day.modes.find((item) => item.mode === mode)?.amount ?? 0,
+                    ),
+                  ],
+                ],
               },
             ]}
           />
         ) : null}
       </div>
       {close.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
-      {close.error instanceof Error ? <p className="text-sm text-destructive">{close.error.message}</p> : null}
+      {close.error instanceof Error ? (
+        <p className="text-sm text-destructive">{close.error.message}</p>
+      ) : null}
       {day ? (
         <div className="grid gap-4 md:grid-cols-3">
           <CloseCard label="Billed" value={formatRupees(day.billed)} note={`${day.bills} bills`} />
-          <CloseCard label="Collected today" value={formatRupees(day.collected)} note="Money that came in, including older bills" />
-          <CloseCard label="Still due on these bills" value={formatRupees(day.due)} note={`${day.unpaid} unpaid`} />
-          <CloseCard label="Pending promises due" value={formatRupees(day.pending)} note="Due on the selected date; not counted as collected" />
+          <CloseCard
+            label="Collected today"
+            value={formatRupees(day.collected)}
+            note="Money that came in, including older bills"
+          />
+          <CloseCard
+            label="Still due on these bills"
+            value={formatRupees(day.due)}
+            note={`${day.unpaid} unpaid`}
+          />
+          <CloseCard
+            label="Pending promises due"
+            value={formatRupees(day.pending)}
+            note="Due on the selected date; not counted as collected"
+          />
           {day.modes.map((mode) => (
-            <CloseCard key={mode.mode} label={paymentModeLabel(mode.mode)} value={formatRupees(mode.amount)} note="Collected today" />
+            <CloseCard
+              key={mode.mode}
+              label={paymentModeLabel(mode.mode)}
+              value={formatRupees(mode.amount)}
+              note="Collected today"
+            />
           ))}
         </div>
       ) : null}
@@ -1684,7 +2298,16 @@ function previousMonthRange(today: string): { from: string; to: string } {
   return { from: previous.toISOString().slice(0, 10), to: end.toISOString().slice(0, 10) };
 }
 
-function query(input: { q: string; from: string; to: string; page?: number; pay?: BillPay; sort?: BillSort; dir?: "asc" | "desc"; export?: boolean }): string {
+function query(input: {
+  q: string;
+  from: string;
+  to: string;
+  page?: number;
+  pay?: BillPay;
+  sort?: BillSort;
+  dir?: "asc" | "desc";
+  export?: boolean;
+}): string {
   const params = new URLSearchParams();
   if (input.q.trim()) params.set("q", input.q.trim());
   if (input.from) params.set("from", input.from);
@@ -1714,7 +2337,11 @@ function SortHead({
   const active = sort === column;
   return (
     <TableHead>
-      <button type="button" className="inline-flex items-center gap-1 font-medium" onClick={() => onSort(column)}>
+      <button
+        type="button"
+        className="inline-flex items-center gap-1 font-medium"
+        onClick={() => onSort(column)}
+      >
         {label}
         {active ? <span aria-hidden="true">{direction === "asc" ? "↑" : "↓"}</span> : null}
       </button>

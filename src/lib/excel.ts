@@ -1,4 +1,5 @@
-export type ExcelCell = string | number | null | { date: string } | { formula: string; result: number };
+export type ExcelCell =
+  string | number | null | { date: string } | { formula: string; result: number };
 
 export type ExcelSheet = {
   name: string;
@@ -23,11 +24,13 @@ const encoder = new TextEncoder();
 
 export function excelFile(sheets: ExcelSheet[]): Uint8Array {
   const used = new Set<string>();
-  const named = (sheets.length > 0 ? sheets : [{ name: "Sheet", columns: [], rows: [] }]).map((sheet, index) => ({
-    sheet,
-    name: uniqueSheetName(sheet.name, used),
-    index,
-  }));
+  const named = (sheets.length > 0 ? sheets : [{ name: "Sheet", columns: [], rows: [] }]).map(
+    (sheet, index) => ({
+      sheet,
+      name: uniqueSheetName(sheet.name, used),
+      index,
+    }),
+  );
   const entries: { name: string; data: Uint8Array }[] = [
     { name: "[Content_Types].xml", data: encoder.encode(contentTypes(named.length)) },
     { name: "_rels/.rels", data: encoder.encode(rootRels()) },
@@ -36,7 +39,10 @@ export function excelFile(sheets: ExcelSheet[]): Uint8Array {
     { name: "xl/styles.xml", data: encoder.encode(styles()) },
   ];
   for (const item of named) {
-    entries.push({ name: `xl/worksheets/sheet${item.index + 1}.xml`, data: encoder.encode(worksheet(item.sheet)) });
+    entries.push({
+      name: `xl/worksheets/sheet${item.index + 1}.xml`,
+      data: encoder.encode(worksheet(item.sheet)),
+    });
   }
   return zipStore(entries);
 }
@@ -61,26 +67,52 @@ function worksheet(sheet: ExcelSheet): string {
   const headerRow = sheet.layout?.headerRow ?? 1;
   const width = Math.max(sheet.columns.length, ...sheet.rows.map((row) => row.length), 1);
   const columns = Array.from({ length: width }, (_, index) => sheet.columns[index] ?? "");
-  const header = columns.map((column, index) => stringCell(headerRow, start + index, column, sheet.layout?.headerStyles?.[index] === "red" ? 4 : sheet.layout?.headerStyles?.[index] === "green" ? 5 : 1)).join("");
+  const header = columns
+    .map((column, index) =>
+      stringCell(
+        headerRow,
+        start + index,
+        column,
+        sheet.layout?.headerStyles?.[index] === "red"
+          ? 4
+          : sheet.layout?.headerStyles?.[index] === "green"
+            ? 5
+            : 1,
+      ),
+    )
+    .join("");
   const body = sheet.rows
     .map((row, rowIndex) => {
       const rowNumber = headerRow + rowIndex + 1;
       const rowStyle = sheet.layout?.rowStyles?.[rowIndex];
-      const style = rowStyle === "total" ? 2 : rowStyle === "handCash" ? 3 : sheet.layout?.grid ? 6 : 0;
-      const cells = columns.map((_, index) => cell(rowNumber, start + index, row[index] ?? null, style)).join("");
+      const style =
+        rowStyle === "total" ? 2 : rowStyle === "handCash" ? 3 : sheet.layout?.grid ? 6 : 0;
+      const cells = columns
+        .map((_, index) => cell(rowNumber, start + index, row[index] ?? null, style))
+        .join("");
       return `<row r="${rowNumber}">${cells}</row>`;
     })
     .join("");
   const cols = columns
     .map((column, index) => {
-      const columnWidth = sheet.layout?.columnWidths?.[index] ?? Math.min(40, Math.max(12, column.length + 2));
+      const columnWidth =
+        sheet.layout?.columnWidths?.[index] ?? Math.min(40, Math.max(12, column.length + 2));
       return `<col min="${start + index + 1}" max="${start + index + 1}" width="${columnWidth}" customWidth="1"/>`;
     })
     .join("");
   const titleColumn = sheet.layout?.titleColumn ?? start;
   const titleRow = sheet.layout?.titleRow ?? headerRow - 2;
-  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1).map((row) => row === titleRow && sheet.layout?.title ? `<row r="${row}">${cell(row, titleColumn, sheet.layout.title, 7)}</row>` : `<row r="${row}"/>`).join("");
-  const titleMerge = sheet.layout?.titleEndColumn != null ? `<mergeCells count="1"><mergeCell ref="${address(titleRow, titleColumn)}:${address(sheet.layout.titleEndRow ?? titleRow, sheet.layout.titleEndColumn)}"/></mergeCells>` : "";
+  const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1)
+    .map((row) =>
+      row === titleRow && sheet.layout?.title
+        ? `<row r="${row}">${cell(row, titleColumn, sheet.layout.title, 7)}</row>`
+        : `<row r="${row}"/>`,
+    )
+    .join("");
+  const titleMerge =
+    sheet.layout?.titleEndColumn != null
+      ? `<mergeCells count="1"><mergeCell ref="${address(titleRow, titleColumn)}:${address(sheet.layout.titleEndRow ?? titleRow, sheet.layout.titleEndColumn)}"/></mergeCells>`
+      : "";
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
 <sheetViews><sheetView workbookViewId="0"><pane ySplit="${headerRow}" topLeftCell="${address(headerRow + 1, start)}" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
@@ -91,9 +123,14 @@ function worksheet(sheet: ExcelSheet): string {
 
 function cell(row: number, index: number, value: ExcelCell, style = 0): string {
   if (value && typeof value === "object") {
-    if ("formula" in value) return `<c r="${address(row, index)}"${style ? ` s="${style}"` : ""}><f>${xml(value.formula)}</f><v>${value.result}</v></c>`;
-    const serial = Math.round((Date.parse(`${value.date}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000);
-    return Number.isFinite(serial) ? `<c r="${address(row, index)}" s="8"><v>${serial}</v></c>` : stringCell(row, index, value.date, style);
+    if ("formula" in value)
+      return `<c r="${address(row, index)}"${style ? ` s="${style}"` : ""}><f>${xml(value.formula)}</f><v>${value.result}</v></c>`;
+    const serial = Math.round(
+      (Date.parse(`${value.date}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000,
+    );
+    return Number.isFinite(serial)
+      ? `<c r="${address(row, index)}" s="8"><v>${serial}</v></c>`
+      : stringCell(row, index, value.date, style);
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     return `<c r="${address(row, index)}"${style ? ` s="${style}"` : ""}><v>${value}</v></c>`;
@@ -117,7 +154,11 @@ function address(row: number, index: number): string {
 }
 
 function uniqueSheetName(name: string, used: Set<string>): string {
-  const base = name.replace(/[:\\/?*[\]]/g, " ").trim().slice(0, 31) || "Sheet";
+  const base =
+    name
+      .replace(/[:\\/?*[\]]/g, " ")
+      .trim()
+      .slice(0, 31) || "Sheet";
   let candidate = base;
   let n = 2;
   while (used.has(candidate.toLowerCase())) {
@@ -153,7 +194,9 @@ function rootRels(): string {
 
 function workbook(names: string[]): string {
   const sheets = names
-    .map((name, index) => `<sheet name="${xml(name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`)
+    .map(
+      (name, index) => `<sheet name="${xml(name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`,
+    )
     .join("");
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
@@ -187,11 +230,17 @@ function styles(): string {
 }
 
 function clean(value: string): string {
+  // Strip XML-illegal control bytes before placing user text in spreadsheet XML.
+  // eslint-disable-next-line no-control-regex
   return value.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g, "");
 }
 
 function xml(value: string): string {
-  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function zipStore(entries: { name: string; data: Uint8Array }[]): Uint8Array {

@@ -4,7 +4,13 @@ import type { Employee } from "@/lib/employees";
 import { formatPurchaseNumbers, type InventoryItem, type PurchaseLine } from "@/lib/inventory";
 import type { ExcelSheet } from "@/lib/excel";
 import type { Product, ProductGroup } from "@/lib/products";
-import { billStatusLabel, paymentModeLabel, shopToday, type InvoiceItem, type InvoiceSummary } from "@/lib/sales";
+import {
+  billStatusLabel,
+  paymentModeLabel,
+  shopToday,
+  type InvoiceItem,
+  type InvoiceSummary,
+} from "@/lib/sales";
 import type { StitchingGarment, StitchingProcess } from "@/lib/settings";
 import type { StitchingOrder } from "@/lib/stitching";
 
@@ -43,9 +49,21 @@ function billRows(bills: InvoiceSummary[]): ExcelSheet["rows"] {
   ]);
 }
 
-const BILL_COLUMNS = ["Bill no.", "Date", "Customer", "Gross", "Discount", "Net", "Collected", "Balance", "Status"];
+const BILL_COLUMNS = [
+  "Bill no.",
+  "Date",
+  "Customer",
+  "Gross",
+  "Discount",
+  "Net",
+  "Collected",
+  "Balance",
+  "Status",
+];
 
-export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>): Promise<ExcelSheet[]> {
+export async function loadMasterExportFrom(
+  get: <T>(path: string) => Promise<T>,
+): Promise<ExcelSheet[]> {
   const today = shopToday();
   const dates = `from=${FIRST_DAY}&to=${today}`;
   const [
@@ -87,17 +105,34 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     {
       name: "Customers",
       columns: ["Name", "Phone", "Book no.", "Address"],
-      rows: customers.customers.map((customer) => [customer.name, customer.phone ?? "", customer.bookNo ?? "", customer.address ?? ""]),
+      rows: customers.customers.map((customer) => [
+        customer.name,
+        customer.phone ?? "",
+        customer.bookNo ?? "",
+        customer.address ?? "",
+      ]),
     },
     {
       name: "Products",
       columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
-      rows: products.products.map((product) => [product.code, product.groupName, product.name, product.unit, product.price, product.discountPercent]),
+      rows: products.products.map((product) => [
+        product.code,
+        product.groupName,
+        product.name,
+        product.unit,
+        product.price,
+        product.discountPercent,
+      ]),
     },
     {
       name: "Groups",
       columns: ["Group", "Code", "Discount %", "Products"],
-      rows: groups.groups.map((group) => [group.name, group.code, group.discountPercent, group.productCount]),
+      rows: groups.groups.map((group) => [
+        group.name,
+        group.code,
+        group.discountPercent,
+        group.productCount,
+      ]),
     },
     {
       name: "Employees",
@@ -115,7 +150,16 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     {
       name: "Stock",
       columns: ["Inventory no.", "Code", "Product", "Group", "Unit", "Price", "Quantity", "Status"],
-      rows: stock.items.map((item) => [item.inventoryNo, item.productCode, item.productName, item.groupName, item.unit, item.price, item.quantity, item.status]),
+      rows: stock.items.map((item) => [
+        item.inventoryNo,
+        item.productCode,
+        item.productName,
+        item.groupName,
+        item.unit,
+        item.price,
+        item.quantity,
+        item.status,
+      ]),
     },
     {
       name: "Current stock",
@@ -124,7 +168,18 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     },
     {
       name: "Purchases",
-      columns: ["Date", "Product code", "Product group", "Product name", "Supplier", "Supplier bill", "Cost", "Quantity", "Unit", "Inventory nos."],
+      columns: [
+        "Date",
+        "Product code",
+        "Product group",
+        "Product name",
+        "Supplier",
+        "Supplier bill",
+        "Cost",
+        "Quantity",
+        "Unit",
+        "Inventory nos.",
+      ],
       rows: purchases.purchases.map((row) => [
         row.date,
         row.productCode,
@@ -141,7 +196,18 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     { name: "Bills", columns: BILL_COLUMNS, rows: billRows(bills.invoices) },
     {
       name: "Bill items",
-      columns: ["Bill no.", "Date", "Customer", "Inventory no.", "Code", "Group", "Product", "Qty", "Rate", "Amount"],
+      columns: [
+        "Bill no.",
+        "Date",
+        "Customer",
+        "Inventory no.",
+        "Code",
+        "Group",
+        "Product",
+        "Qty",
+        "Rate",
+        "Amount",
+      ],
       rows: items.items.map((item) => [
         item.billNo,
         item.billedOn,
@@ -170,13 +236,30 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     {
       name: "Not recorded",
       columns: ["Bill no.", "Date", "Net", "Collected", "Balance", "Status"],
-      rows: unrecorded.invoices.map((bill) => [bill.billNo, bill.billedOn, bill.total, bill.collected, bill.balance, billStatusLabel(bill.status)]),
+      rows: unrecorded.invoices.map((bill) => [
+        bill.billNo,
+        bill.billedOn,
+        bill.total,
+        bill.collected,
+        bill.balance,
+        billStatusLabel(bill.status),
+      ]),
     },
     { name: "Unpaid live", columns: BILL_COLUMNS, rows: billRows(liveDue.invoices) },
     { name: "Unpaid old", columns: BILL_COLUMNS, rows: billRows(oldDue.invoices) },
     {
       name: "Orders",
-      columns: ["Order", "Bag", "Customer", "Phone", "Garment", "Ordered", "Delivery", "Status", "Amount"],
+      columns: [
+        "Order",
+        "Bag",
+        "Customer",
+        "Phone",
+        "Garment",
+        "Ordered",
+        "Delivery",
+        "Status",
+        "Amount",
+      ],
       rows: orders.orders.map((order) => [
         order.orderNo,
         order.bagNo ?? "",
@@ -197,7 +280,9 @@ export async function loadMasterExportFrom(get: <T>(path: string) => Promise<T>)
     {
       name: "Measurements",
       columns: ["Garment", "Field"],
-      rows: settings.garments.flatMap((garment) => garment.measurements.map((field) => [garment.name, field.label])),
+      rows: settings.garments.flatMap((garment) =>
+        garment.measurements.map((field) => [garment.name, field.label]),
+      ),
     },
     {
       name: "Processes",

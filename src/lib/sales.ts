@@ -7,7 +7,16 @@ export function billBook(billedOn: string): "new" | "old" {
   return billedOn < NEW_COUNTER_FROM ? "old" : "new";
 }
 
-export const PAYMENT_MODES = ["CASH", "UPI", "CHEQUE", "IMPS/NEFT", "SALES RETURN", "CARD", "PENDING", "GIFT"] as const;
+export const PAYMENT_MODES = [
+  "CASH",
+  "UPI",
+  "CHEQUE",
+  "IMPS/NEFT",
+  "SALES RETURN",
+  "CARD",
+  "PENDING",
+  "GIFT",
+] as const;
 export type PaymentMode = (typeof PAYMENT_MODES)[number] | "MAINTENANCE";
 
 const PAYMENT_MODE_LABELS: Record<PaymentMode, string> = {
@@ -68,12 +77,25 @@ export type InvoiceSummary = {
   balance: number;
 };
 
-export const BILL_SORTS = ["date", "bill", "customer", "gross", "discount", "net", "collected", "balance"] as const;
+export const BILL_SORTS = [
+  "date",
+  "bill",
+  "customer",
+  "gross",
+  "discount",
+  "net",
+  "collected",
+  "balance",
+] as const;
 export type BillSort = (typeof BILL_SORTS)[number];
 export const BILL_PAYS = ["all", "unpaid", "paid"] as const;
 export type BillPay = (typeof BILL_PAYS)[number];
 
-export function paymentStatus(net: number, collected: number, stored: string): "open" | "partial" | "paid" | "cancelled" | "draft" {
+export function paymentStatus(
+  net: number,
+  collected: number,
+  stored: string,
+): "open" | "partial" | "paid" | "cancelled" | "draft" {
   if (stored === "cancelled") return "cancelled";
   const balance = Math.round((net - collected) * 100) / 100;
   if (collected > 0.001 && balance <= 0.001) return "paid";
@@ -104,11 +126,19 @@ export function selectBills(
     return pay === "unpaid" ? unpaid : !unpaid;
   });
   const sign = direction === "asc" ? 1 : -1;
-  return [...filtered].sort((a, b) => compareBills(a, b, sort) * sign || a.billNo.localeCompare(b.billNo, undefined, { numeric: true }));
+  return [...filtered].sort(
+    (a, b) =>
+      compareBills(a, b, sort) * sign ||
+      a.billNo.localeCompare(b.billNo, undefined, { numeric: true }),
+  );
 }
 
 function compareBills(a: InvoiceSummary, b: InvoiceSummary, sort: BillSort): number {
-  if (sort === "date") return a.billedOn.localeCompare(b.billedOn) || a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
+  if (sort === "date")
+    return (
+      a.billedOn.localeCompare(b.billedOn) ||
+      a.billNo.localeCompare(b.billNo, undefined, { numeric: true })
+    );
   if (sort === "bill") return a.billNo.localeCompare(b.billNo, undefined, { numeric: true });
   if (sort === "customer") return a.customerName.localeCompare(b.customerName);
   if (sort === "gross") return a.gross - b.gross;
@@ -149,11 +179,27 @@ export const assignCustomerSchema = z.object({
 });
 
 export const invoiceLineSchema = z.object({
-  inventoryNo: z.string().trim().min(1, "Enter an inventory number.").max(40, "Inventory number is too long."),
+  inventoryNo: z
+    .string()
+    .trim()
+    .min(1, "Enter an inventory number.")
+    .max(40, "Inventory number is too long."),
   quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
-  rate: z.number().min(0, "Rate cannot be negative.").max(9_999_999, "Rate is too large.").optional(),
-  discountPercent: z.number().min(0, "Discount cannot be negative.").max(100, "Discount cannot pass 100.").optional(),
-  extraOff: z.number().min(0, "Extra off cannot be negative.").max(9_999_999, "Extra off is too large.").optional(),
+  rate: z
+    .number()
+    .min(0, "Rate cannot be negative.")
+    .max(9_999_999, "Rate is too large.")
+    .optional(),
+  discountPercent: z
+    .number()
+    .min(0, "Discount cannot be negative.")
+    .max(100, "Discount cannot pass 100.")
+    .optional(),
+  extraOff: z
+    .number()
+    .min(0, "Extra off cannot be negative.")
+    .max(9_999_999, "Extra off is too large.")
+    .optional(),
 });
 
 export const returnLineSchema = z.object({
@@ -161,7 +207,10 @@ export const returnLineSchema = z.object({
 });
 
 export const invoiceDiscountSchema = z.object({
-  discount: z.number().min(0, "Discount cannot be negative.").max(9_999_999, "Discount is too large."),
+  discount: z
+    .number()
+    .min(0, "Discount cannot be negative.")
+    .max(9_999_999, "Discount is too large."),
 });
 
 export const removePaymentSchema = z.object({
@@ -205,7 +254,10 @@ export function priceLine(
   const rate = typedRate == null ? catalogueRate : typedRate;
   const percent = discountPercent == null ? groupPercent : discountPercent;
   const priced = applyGroupDiscount(quantity, rate, percent);
-  const extra = extraOff == null || extraOff <= 0 ? 0 : Math.min(priced.amount, Math.round(extraOff * 100) / 100);
+  const extra =
+    extraOff == null || extraOff <= 0
+      ? 0
+      : Math.min(priced.amount, Math.round(extraOff * 100) / 100);
   return { rate, amount: Math.round((priced.amount - extra) * 100) / 100 };
 }
 
@@ -218,11 +270,16 @@ export function returnQuantity(
   if (giveBack > lineQty + 0.0001) return "That is more than this line.";
   if (giveBack >= lineQty - 0.0001) return { quantity: 0, amount: 0 };
   const quantity = Math.round((lineQty - giveBack) * 1000) / 1000;
-  const amount = lineQty === 0 ? 0 : Math.round(((lineAmountValue * quantity) / lineQty) * 100) / 100;
+  const amount =
+    lineQty === 0 ? 0 : Math.round(((lineAmountValue * quantity) / lineQty) * 100) / 100;
   return { quantity, amount };
 }
 
-export function applyGroupDiscount(quantity: number, rate: number, percent: number): { gross: number; discount: number; amount: number } {
+export function applyGroupDiscount(
+  quantity: number,
+  rate: number,
+  percent: number,
+): { gross: number; discount: number; amount: number } {
   const gross = lineAmount(quantity, rate);
   const share = Number.isFinite(percent) ? Math.min(100, Math.max(0, percent)) : 0;
   const discount = Math.round(gross * share) / 100;
@@ -249,7 +306,13 @@ export function shopDateLabel(date = new Date()): string {
 }
 
 export function shopGreeting(date = new Date()): string {
-  const hour = Number(new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Kolkata", hour: "numeric", hourCycle: "h23" }).format(date));
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(date),
+  );
   return hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
 }
 

@@ -8,7 +8,12 @@ const apply = process.argv.includes("--apply");
 function envValue(file: string, name: string): string {
   const text = readFileSync(file, "utf8");
   const line = text.split("\n").find((item) => item.startsWith(`${name}=`));
-  return line?.slice(name.length + 1).trim().replace(/^"|"$/g, "") ?? "";
+  return (
+    line
+      ?.slice(name.length + 1)
+      .trim()
+      .replace(/^"|"$/g, "") ?? ""
+  );
 }
 
 async function main() {
@@ -33,13 +38,21 @@ async function main() {
   const withLines = new Set<string>();
   const withPayments = new Set<string>();
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from("invoice_lines").select("invoice_id").order("id").range(from, from + 999);
+    const { data, error } = await supabase
+      .from("invoice_lines")
+      .select("invoice_id")
+      .order("id")
+      .range(from, from + 999);
     if (error) throw new Error(error.message);
     for (const row of data ?? []) withLines.add(row.invoice_id);
     if ((data ?? []).length < 1000) break;
   }
   for (let from = 0; ; from += 1000) {
-    const { data, error } = await supabase.from("payments").select("invoice_id").order("id").range(from, from + 999);
+    const { data, error } = await supabase
+      .from("payments")
+      .select("invoice_id")
+      .order("id")
+      .range(from, from + 999);
     if (error) throw new Error(error.message);
     for (const row of data ?? []) withPayments.add(row.invoice_id);
     if ((data ?? []).length < 1000) break;
@@ -63,7 +76,8 @@ async function main() {
     ),
   );
   if (!apply) return;
-  if (process.env.BACKUP_CONFIRMED !== "1") throw new Error("Refusing to write. Set BACKUP_CONFIRMED=1 after a database backup.");
+  if (process.env.BACKUP_CONFIRMED !== "1")
+    throw new Error("Refusing to write. Set BACKUP_CONFIRMED=1 after a database backup.");
   for (const row of empty) {
     const remarks = row.remarks?.trim() ? row.remarks : "Voided empty bill — no lines.";
     const { error } = await supabase
