@@ -14,9 +14,9 @@ describe("expenseExportSheets", () => {
     expect(sheets.map((sheet) => sheet.name)).toEqual(["EXPENSES", "TARGET WISE PAYMENT"]);
     expect(sheets[0]?.layout).toMatchObject({ startColumn: 1, headerRow: 4, titleRow: 3, titleColumn: 4 });
     expect(sheets[0]?.rows[1]?.slice(0, 3)).toEqual(["TEA", "", 150]);
-    expect(sheets[0]?.rows[2]).toEqual(["TOT EXPENSES", 0, 150, "", "", "CASH RECIPETS ", 11880, "", 0, 0, 0, ""]);
-    expect(sheets[0]?.rows[4]?.[6]).toBe(11730);
-    expect(sheets[0]?.rows[6]?.[3]).toEqual({ date: "2026-11-02" });
+    expect(sheets[0]?.rows[41]).toEqual(["TOT EXPENSES", 0, 150, "", "", "CASH RECIPETS ", 11880, "", 0, 0, 0, ""]);
+    expect(sheets[0]?.rows[43]?.[6]).toEqual({ formula: "H46-H47", result: 11730 });
+    expect(sheets[0]?.rows[52]?.[3]).toEqual({ date: "2026-11-02" });
     expect(sheets[1]?.rows[0]?.[3]).toBe("008");
     expect(sheets[1]?.rows[4]?.slice(13)).toEqual(["S.NO", "NAMES", "ID NO"]);
     const bytes = new TextDecoder().decode(excelFile(sheets));
@@ -24,6 +24,7 @@ describe("expenseExportSheets", () => {
     expect(bytes).toContain('<c r="E3" s="8"><v>46327</v>');
     expect(bytes).toContain('r="E5"');
     expect(bytes).toContain('ref="E3:L4"');
-    expect(bytes).toContain('r="G7" t="inlineStr" s="2"');
+    expect(bytes).toContain('r="G46" t="inlineStr" s="2"');
+    expect(bytes).toContain('<c r="H48" s="3"><f>H46-H47</f><v>11730</v>');
   });
 });

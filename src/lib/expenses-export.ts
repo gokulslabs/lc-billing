@@ -2,6 +2,8 @@ import { LEDGER_COLUMNS, TARGET_COLUMNS, expenseLedgerTotals, type ExpenseRecord
 import type { ExcelCell, ExcelSheet } from "@/lib/excel";
 
 const amountColumns = new Set([1, 2, 6, 7, 8, 9, 10]);
+const minimumDailyLines = 40;
+const betweenDaysBlankLines = 8;
 
 function numberOrText(value: string, numeric: boolean): ExcelCell {
   return numeric && /^-?\d+(?:\.\d+)?$/.test(value.trim()) ? Number(value) : value;
@@ -17,16 +19,21 @@ export function expenseExportSheets(records: ExpenseRecord[], from: string, to: 
     grouped.set(record.entryDate, group);
   }
   for (const [date, group] of grouped) {
+    if (ledger.length) {
+      for (let index = 0; index < betweenDaysBlankLines; index += 1) ledger.push([]);
+      ledger.push(["", "", "", { date }]);
+    }
     ledger.push([]);
-    if (ledger.length > 1) { ledger.push(["", "", "", { date }]); ledger.push([]); }
     for (const record of group) ledger.push(LEDGER_COLUMNS.map((_, index) => numberOrText(record.details[index] ?? "", amountColumns.has(index))));
+    for (let index = group.length; index < minimumDailyLines; index += 1) ledger.push([]);
     const totals = expenseLedgerTotals(group);
+    const footerRow = 5 + ledger.length;
     rowStyles[ledger.length] = "total";
     ledger.push(["TOT EXPENSES", totals.gpayCheque, totals.cashExpenses, "", "", "CASH RECIPETS ", totals.cashReceipts, "", totals.savingsAccount, totals.currentAccount, totals.billPending, ""]);
     rowStyles[ledger.length] = "total";
     ledger.push(["SHREEDEVI MAM", "", "", "", "", "CASH EXPENSES", totals.cashExpenses, "", "", "", "", ""]);
     rowStyles[ledger.length] = "handCash";
-    ledger.push(["", "", "", "", "", "HAND CASH ", totals.handCash, "", "", "", "", ""]);
+    ledger.push(["", "", "", "", "", "HAND CASH ", { formula: `H${footerRow}-H${footerRow + 1}`, result: totals.handCash }, "", "", "", "", ""]);
   }
   const target: ExcelCell[][] = records.filter((row) => row.sheet === "target").map((record, index) => [
     index + 1,
