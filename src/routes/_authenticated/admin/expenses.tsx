@@ -47,7 +47,7 @@ function ExpensesPage() {
     setExportTo(lastDay(month));
   }
   return (
-    <main className="mx-auto max-w-[110rem] space-y-6 p-4 md:p-10">
+    <main className="mx-auto w-full min-w-0 max-w-[110rem] space-y-6 p-4 md:p-10">
       <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(12rem,1fr)_minmax(0,2fr)] xl:items-end">
         <div className="min-w-0">
           <h1 className="text-3xl font-semibold md:text-4xl">Expenses</h1>
@@ -118,7 +118,7 @@ function ExpensesPage() {
         <p className="text-destructive">{query.error.message}</p>
       ) : null}
       <Tabs defaultValue="ledger">
-        <TabsList>
+        <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
           <TabsTrigger value="ledger">Expenses and income</TabsTrigger>
           <TabsTrigger value="target">Target wise payment</TabsTrigger>
         </TabsList>
