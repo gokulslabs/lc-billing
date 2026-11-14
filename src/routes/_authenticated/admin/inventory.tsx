@@ -1,4 +1,5 @@
 import { useDeferredValue, useEffect, useRef, useState, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -15,8 +16,6 @@ import { monthStart } from "@/lib/reports";
 import { lineAmount, shopToday } from "@/lib/sales";
 import {
   LabelSheet,
-  openBarcodePrintWindow,
-  printBarcodeLabels,
   type BarcodeLabel,
 } from "@/components/app/BarcodeLabel";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
@@ -68,12 +67,12 @@ export const Route = createFileRoute("/_authenticated/admin/inventory")({
 });
 
 function printBarcodeSheet(labels: BarcodeLabel[]) {
-  const popup = openBarcodePrintWindow();
-  if (!popup) {
-    toast.error("Allow pop-ups to print barcode labels.");
-    return;
-  }
-  printBarcodeLabels(popup, labels);
+  if (labels.length === 0) return;
+  const printMode = document.documentElement;
+  const finishPrint = () => printMode.classList.remove("barcode-print-mode");
+  printMode.classList.add("barcode-print-mode");
+  window.addEventListener("afterprint", finishPrint, { once: true });
+  window.requestAnimationFrame(() => window.print());
 }
 
 function InventoryPage() {
@@ -121,7 +120,6 @@ function StockPanel() {
   const [page, setPage] = useState(1);
   const [editor, setEditor] = useState<InventoryItem | "new" | null>(null);
   const [stickers, setStickers] = useState<BarcodeLabel[]>([]);
-  const printWindowRef = useRef<Window | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (stickers.length === 0) return;
@@ -136,23 +134,12 @@ function StockPanel() {
         `/api/inventory/barcodes?${new URLSearchParams({ starting: item.inventoryNo })}`,
       ),
     onSuccess: (result) => {
-      const popup = printWindowRef.current;
-      printWindowRef.current = null;
-      if (popup && !popup.closed) printBarcodeLabels(popup, result.labels);
+      flushSync(() => setStickers(result.labels));
+      printBarcodeSheet(result.labels);
     },
-    onError: (error: Error) => {
-      printWindowRef.current?.close();
-      printWindowRef.current = null;
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
   const printInventoryItem = (item: InventoryItem) => {
-    const popup = openBarcodePrintWindow();
-    if (!popup) {
-      toast.error("Allow pop-ups to print barcode labels.");
-      return;
-    }
-    printWindowRef.current = popup;
     labelPreview.mutate(item);
   };
   const groups = useQuery({
@@ -644,6 +631,7 @@ function StockDialog({
 function BarcodePanel() {
   const [starting, setStarting] = useState("");
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
+  const printAfterLoad = useRef(false);
   const print = useMutation({
     mutationFn: () => {
       const params = new URLSearchParams({ starting: starting.trim() });
@@ -651,8 +639,16 @@ function BarcodePanel() {
         `/api/inventory/barcodes?${params.toString()}`,
       );
     },
-    onSuccess: (result) => setLabels(result.labels),
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (result) => {
+      const shouldPrint = printAfterLoad.current;
+      printAfterLoad.current = false;
+      flushSync(() => setLabels(result.labels));
+      if (shouldPrint) printBarcodeSheet(result.labels);
+    },
+    onError: (error: Error) => {
+      printAfterLoad.current = false;
+      toast.error(error.message);
+    },
   });
 
   return (
@@ -693,6 +689,7 @@ function BarcodePanel() {
           disabled={print.isPending}
           onClick={() => {
             if (labels.length === 0) {
+              printAfterLoad.current = true;
               print.mutate();
               return;
             }
