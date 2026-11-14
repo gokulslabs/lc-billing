@@ -476,6 +476,23 @@ export type Database = {
       };
     };
     Functions: {
+      shop_add_stock: {
+        Args: {
+          p_product_id: string;
+          p_count: number;
+          p_quantity: number;
+          p_cost: number | null;
+          p_supplier_name: string | null;
+          p_supplier_bill_no: string | null;
+        };
+        Returns: {
+          id: string;
+          inventory_no: string;
+          product_id: string;
+          quantity: number;
+          status: string;
+        }[];
+      };
       shop_save_stitching_order: {
         Args: { p_id: string | null; p_order: Json; p_measurements: Json };
         Returns: string | null;
