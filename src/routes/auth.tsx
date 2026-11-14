@@ -235,7 +235,7 @@ function CustomerAuthPage() {
                     />
                     {mode === "signup" ? (
                       <p className="text-xs text-muted-foreground">
-                        Use at least 10 characters with letters and numbers.
+                        Use at least 6 characters with letters and numbers.
                       </p>
                     ) : null}
                   </div>

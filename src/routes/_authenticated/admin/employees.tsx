@@ -376,7 +376,7 @@ function EmployeeDialog({
                 required
               />
               <p className="text-xs text-muted-foreground">
-                At least 10 characters with letters and numbers. Never a phone number.
+                At least 6 characters with letters and numbers. Never a phone number.
               </p>
             </Field>
           )}
@@ -515,7 +515,7 @@ function PasswordDialog({
               required
             />
             <p className="text-xs text-muted-foreground">
-              At least 10 characters with letters and numbers. Never a phone number.
+              At least 6 characters with letters and numbers. Never a phone number.
             </p>
           </Field>
           <DialogFooter>
