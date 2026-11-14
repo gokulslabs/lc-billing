@@ -31,6 +31,7 @@ type Mode = "signin" | "forgot";
 function AuthPage() {
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const userId = user?.id;
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -38,12 +39,12 @@ function AuthPage() {
   const [sent, setSent] = useState(false);
 
   useEffect(() => {
-    if (loading || !user) return;
+    if (loading || !userId) return;
     let active = true;
     void supabase
       .from("user_roles")
       .select("role")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .then(({ data, error }) => {
         if (!active) return;
         if (error) toast.error("We couldn't verify staff access. Please try again.");
@@ -52,7 +53,7 @@ function AuthPage() {
     return () => {
       active = false;
     };
-  }, [user?.id, loading, navigate]);
+  }, [userId, loading, navigate]);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -74,7 +75,9 @@ function AuthPage() {
             toast.error("We couldn't verify staff access. Please try again.");
           } else if (!roles.length) {
             await supabase.auth.signOut({ scope: "local" });
-            toast.error("This account doesn't have staff access. Use the customer sign-in instead.");
+            toast.error(
+              "This account doesn't have staff access. Use the customer sign-in instead.",
+            );
           } else {
             navigate({ to: "/admin", replace: true });
           }

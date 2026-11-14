@@ -18,8 +18,10 @@ function query(result: { data: unknown[]; error: null }) {
   for (const method of ["select", "order", "in"]) {
     builder[method] = vi.fn(() => builder);
   }
-  builder.then = (resolve: (value: typeof result) => unknown, reject?: (reason: unknown) => unknown) =>
-    Promise.resolve(result).then(resolve, reject);
+  builder["then"] = (
+    resolve: (value: typeof result) => unknown,
+    reject?: (reason: unknown) => unknown,
+  ) => Promise.resolve(result).then(resolve, reject);
   return builder;
 }
 

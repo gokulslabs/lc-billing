@@ -106,10 +106,10 @@ dashboard.get("/", async (c) => {
   return c.json({ stats });
 });
 
-function sumByInvoice(rows: { invoice_id: string; amount: number | string; mode: string | null }[]): Map<string, number> {
+function sumByInvoice(rows: { invoice_id: string; amount: number | string; mode?: string | null }[]): Map<string, number> {
   const totals = new Map<string, number>();
   for (const row of rows) {
-    if (isPendingPayment(row.mode)) continue;
+    if (isPendingPayment(row.mode ?? null)) continue;
     totals.set(row.invoice_id, Math.round(((totals.get(row.invoice_id) ?? 0) + Number(row.amount)) * 100) / 100);
   }
   return totals;

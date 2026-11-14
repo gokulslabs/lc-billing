@@ -13,14 +13,14 @@ export async function readAll<T>(
   fetchPage: (from: number, to: number) => PromiseLike<Page<T>>,
 ): Promise<{ rows: T[]; truncated: boolean } | null> {
   const rows: T[] = [];
-  for (let batchStart = 0; batchStart < MAX_ROWS; batchStart += PAGE_SIZE * PAGE_CONCURRENCY) {
+  for (let batchStart = 0; batchStart < MAX_ROWS;) {
+    // Don't fan out until the first page proves there is more data to read.
+    const concurrency = batchStart === 0 ? 1 : PAGE_CONCURRENCY;
     const starts = Array.from(
-      { length: Math.min(PAGE_CONCURRENCY, (MAX_ROWS - batchStart) / PAGE_SIZE) },
+      { length: Math.min(concurrency, Math.ceil((MAX_ROWS - batchStart) / PAGE_SIZE)) },
       (_, index) => batchStart + index * PAGE_SIZE,
     );
-    const pages = await Promise.all(
-      starts.map((from) => fetchPage(from, from + PAGE_SIZE - 1)),
-    );
+    const pages = await Promise.all(starts.map((from) => fetchPage(from, from + PAGE_SIZE - 1)));
     for (let index = 0; index < pages.length; index += 1) {
       const result = pages[index];
       if (!result) return null;
@@ -29,6 +29,7 @@ export async function readAll<T>(
       const page = data ?? [];
       rows.push(...page);
       if (page.length < PAGE_SIZE) return { rows, truncated: false };
+      batchStart += PAGE_SIZE;
     }
   }
   return { rows, truncated: true };
@@ -46,9 +47,9 @@ export async function readIn<T>(
   const results: T[][] = [];
   for (let index = 0; index < chunks.length; index += ID_CHUNK_CONCURRENCY) {
     const loadedChunks = await Promise.all(
-      chunks.slice(index, index + ID_CHUNK_CONCURRENCY).map(async (chunk) =>
-        readAll((from, to) => fetchPage(chunk, from, to)),
-      ),
+      chunks
+        .slice(index, index + ID_CHUNK_CONCURRENCY)
+        .map(async (chunk) => readAll((from, to) => fetchPage(chunk, from, to))),
     );
     for (const loaded of loadedChunks) {
       if (!loaded || loaded.truncated) return null;

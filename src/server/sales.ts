@@ -523,7 +523,7 @@ sales.post("/:id/discount", async (c) => {
     const amountCents = index === lines.data!.length - 1
       ? netCents - allocatedCents
       : grossTotalCents > 0
-        ? Math.round(netCents * grossCents[index] / grossTotalCents)
+        ? Math.round(netCents * (grossCents[index] ?? 0) / grossTotalCents)
         : 0;
     allocatedCents += amountCents;
     return { id: line.id, previous: Number(line.amount), amount: amountCents / 100 };

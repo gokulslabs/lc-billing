@@ -4,7 +4,8 @@ import { PAGE_SIZE, readAll, readIn } from "./read-all";
 describe("readAll", () => {
   it("keeps reading until a short page", async () => {
     const loaded = await readAll<number>(async (from) => {
-      if (from === 0) return { data: Array.from({ length: PAGE_SIZE }, (_, index) => index), error: null };
+      if (from === 0)
+        return { data: Array.from({ length: PAGE_SIZE }, (_, index) => index), error: null };
       return { data: [PAGE_SIZE], error: null };
     });
     expect(loaded?.truncated).toBe(false);

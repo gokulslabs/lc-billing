@@ -946,8 +946,8 @@ function paymentLabel(mode: string | null): string {
 }
 
 function monthEndDate(value: string): string {
-  const [year, month] = value.split("-").map(Number);
-  return new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10);
+  const [year = "1970", month = "1"] = value.split("-");
+  return new Date(Date.UTC(Number(year), Number(month), 0)).toISOString().slice(0, 10);
 }
 
 function ReturnLine({

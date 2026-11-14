@@ -58,7 +58,7 @@ function ExpensesPage() {
   );
 }
 
-function lastDay(month: string): string { const [year, number] = month.split("-").map(Number); return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10); }
+function lastDay(month: string): string { const [year = "1970", number = "1"] = month.split("-"); return new Date(Date.UTC(Number(year), Number(number), 0)).toISOString().slice(0, 10); }
 function shiftDay(date: string, days: number): string { const value = new Date(`${date}T00:00:00Z`); value.setUTCDate(value.getUTCDate() + days); return value.toISOString().slice(0, 10); }
 
 const amountFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
