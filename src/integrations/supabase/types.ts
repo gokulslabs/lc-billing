@@ -476,6 +476,20 @@ export type Database = {
       };
     };
     Functions: {
+      shop_cancel_invoice: {
+        Args: { p_invoice_id: string; p_remarks: string };
+        Returns: "ok" | "not_found" | "cancelled" | "has_payment";
+      };
+      shop_collect_invoice: {
+        Args: {
+          p_invoice_id: string;
+          p_amount: number;
+          p_paid_on: string;
+          p_mode: string;
+          p_showroom: string | null;
+        };
+        Returns: "ok" | "not_found" | "cancelled" | "invalid_amount" | "exceeds_balance";
+      };
       shop_dashboard_summary: {
         Args: { p_day: string; p_new_counter_from: string };
         Returns: import("@/lib/dashboard").DashboardStats;

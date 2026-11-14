@@ -13,7 +13,6 @@ import {
   BILL_SORTS,
   lineAmount,
   cancelInvoiceSchema,
-  collectionProblem,
   assignCustomerSchema,
   createInvoiceSchema,
   invoiceLineSchema,
@@ -667,34 +666,17 @@ sales.post("/:id/discount", async (c) => {
 sales.post("/:id/cancel", async (c) => {
   const parsed = cancelInvoiceSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const invoice = await findInvoice(c.req.param("id"));
-  if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status === "cancelled")
-    return c.json({ error: "This bill is already cancelled." }, 400);
-  const paid = await supabaseAdmin
-    .from("payments")
-    .select("id", { count: "exact", head: true })
-    .eq("invoice_id", invoice.id);
-  if (paid.error) return c.json({ error: "Could not check the payments." }, 500);
-  if ((paid.count ?? 0) > 0)
+  const id = c.req.param("id");
+  const { data: outcome, error } = await supabaseAdmin.rpc("shop_cancel_invoice", {
+    p_invoice_id: id,
+    p_remarks: parsed.data.remarks,
+  });
+  if (error || !outcome) return c.json({ error: "Could not cancel the bill." }, 500);
+  if (outcome === "not_found") return c.json({ error: "Bill not found." }, 404);
+  if (outcome === "cancelled") return c.json({ error: "This bill is already cancelled." }, 400);
+  if (outcome === "has_payment")
     return c.json({ error: "This bill has a payment. Remove it before cancelling." }, 400);
-  const lines = await supabaseAdmin
-    .from("invoice_lines")
-    .select("id, inventory_item_id, quantity")
-    .eq("invoice_id", invoice.id);
-  if (lines.error) return c.json({ error: "Could not check the bill lines." }, 500);
-  for (const line of lines.data ?? []) {
-    if (!line.inventory_item_id) continue;
-    const restored = await restoreStock(line.inventory_item_id, Number(line.quantity));
-    if (!restored) return c.json({ error: "Could not return stock for this bill." }, 500);
-  }
-  const { error } = await supabaseAdmin
-    .from("invoices")
-    .update({ status: "cancelled", remarks: parsed.data.remarks })
-    .eq("id", invoice.id)
-    .neq("status", "cancelled");
-  if (error) return c.json({ error: "Could not cancel the bill." }, 500);
-  const detail = await loadDetail(invoice.id);
+  const detail = await loadDetail(id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
 });
@@ -702,22 +684,21 @@ sales.post("/:id/cancel", async (c) => {
 sales.post("/:id/payments", async (c) => {
   const parsed = paymentSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const detail = await loadDetail(c.req.param("id"));
-  if ("error" in detail) return c.json({ error: detail.error }, detail.status);
-  if (detail.invoice.status === "cancelled")
-    return c.json({ error: "This bill is cancelled." }, 400);
-  const problem = collectionProblem(detail.invoice.balance, parsed.data.amount);
-  if (problem) return c.json({ error: problem }, 400);
-  const { error } = await supabaseAdmin.from("payments").insert({
-    invoice_id: detail.invoice.id,
-    amount: round2(parsed.data.amount),
-    paid_on: parsed.data.paidOn,
-    mode: parsed.data.mode,
-    showroom: blankToNull(parsed.data.showroom),
+  const id = c.req.param("id");
+  const { data: outcome, error } = await supabaseAdmin.rpc("shop_collect_invoice", {
+    p_invoice_id: id,
+    p_amount: parsed.data.amount,
+    p_paid_on: parsed.data.paidOn,
+    p_mode: parsed.data.mode,
+    p_showroom: blankToNull(parsed.data.showroom),
   });
-  if (error) return c.json({ error: "Could not save the collection." }, 500);
-  await syncInvoiceStatus(detail.invoice.id);
-  const next = await loadDetail(detail.invoice.id);
+  if (error || !outcome) return c.json({ error: "Could not save the collection." }, 500);
+  if (outcome === "not_found") return c.json({ error: "Bill not found." }, 404);
+  if (outcome === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
+  if (outcome === "invalid_amount") return c.json({ error: "Enter at least ₹0.01." }, 400);
+  if (outcome === "exceeds_balance")
+    return c.json({ error: "Amount is more than the balance." }, 400);
+  const next = await loadDetail(id);
   if ("error" in next) return c.json({ error: next.error }, next.status);
   return c.json({ invoice: next.invoice }, 201);
 });
