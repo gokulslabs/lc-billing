@@ -476,6 +476,31 @@ export type Database = {
       };
     };
     Functions: {
+      shop_dashboard_summary: {
+        Args: { p_day: string; p_new_counter_from: string };
+        Returns: import("@/lib/dashboard").DashboardStats;
+      };
+      shop_invoice_report: {
+        Args: { p_from: string; p_to: string; p_cancelled: boolean };
+        Returns: (import("@/lib/reports").InvoiceReportRow & { remarks: string | null })[];
+      };
+      shop_pending_report: {
+        Args: {
+          p_new_counter_from: string;
+          p_old: boolean;
+          p_offset: number;
+          p_limit: number | null;
+        };
+        Returns: {
+          pending: (import("@/lib/reports").PendingRow & {
+            billedOn: string;
+            customerName: string;
+            status: "open" | "partial";
+          })[];
+          total: number;
+          totals: { invoiced: number; paid: number; balance: number };
+        };
+      };
       customer_signup_enabled: { Args: Record<PropertyKey, never>; Returns: boolean };
       start_stock_count: {
         Args: { actor: string; expected_start: string | null };

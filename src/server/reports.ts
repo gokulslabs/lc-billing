@@ -1,16 +1,8 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
-import {
-  billTotals,
-  moneyBalance,
-  monthStart,
-  pendingTotals,
-  pricedBill,
-  rangeProblem,
-  stockGap,
-} from "@/lib/reports";
-import { billBook, isPendingPayment, paymentStatus, shopToday } from "@/lib/sales";
+import { monthStart, rangeProblem, stockGap } from "@/lib/reports";
+import { isPendingPayment, NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
 
@@ -48,30 +40,17 @@ reports.use("*", requireShop);
 reports.get("/invoices", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);
-  const loaded = await loadInvoices(range.from, range.to, "active");
+  const loaded = await loadInvoiceSummaries(range.from, range.to, false);
   if (!loaded) return c.json({ error: "Could not load invoices." }, 500);
-  const lines = await loadLines(loaded.rows.map((row) => row.id));
-  if (!lines) return c.json({ error: "Could not load invoice lines." }, 500);
   return c.json({
-    invoices: loaded.rows.map((row) => {
-      const totals = pricedBill(
-        lines
-          .filter((line) => line.invoice_id === row.id)
-          .map((line) => ({
-            quantity: Number(line.quantity),
-            rate: Number(line.rate),
-            amount: Number(line.amount),
-          })),
-      );
-      return {
-        billNo: row.bill_no,
-        billedOn: row.billed_on,
-        customerName: loaded.customers.get(row.customer_id) ?? "",
-        gross: totals.gross,
-        discount: totals.discount,
-        net: totals.net,
-      };
-    }),
+    invoices: loaded.rows.map(({ billNo, billedOn, customerName, gross, discount, net }) => ({
+      billNo,
+      billedOn,
+      customerName,
+      gross,
+      discount,
+      net,
+    })),
   });
 });
 
@@ -152,73 +131,19 @@ reports.get("/showrooms", async (c) => {
 reports.get("/pending", async (c) => {
   const books = c.req.query("books") === "old" ? "old" : "new";
   const page = readPage(c.req.query("page"));
-  const loaded = await readAll<InvoiceRow>((from, to) =>
-    supabaseAdmin
-      .from("invoices")
-      .select("id, bill_no, customer_id, billed_on, status, remarks")
-      .in("status", ["open", "partial"])
-      .order("billed_on")
-      .order("id")
-      .range(from, to),
-  );
-  if (!loaded) return c.json({ error: "Could not load pending bills." }, 500);
-  const invoices = loaded.rows.filter((row) => billBook(row.billed_on) === books);
-  const [lines, payments] = await Promise.all([
-    loadLines(invoices.map((row) => row.id)),
-    loadPayments(invoices.map((row) => row.id)),
-  ]);
-  if (!lines || !payments) return c.json({ error: "Could not load pending bills." }, 500);
-  const pending = invoices.flatMap((invoice) => {
-    const invoiced = billTotals(
-      lines.filter((line) => line.invoice_id === invoice.id).map((line) => Number(line.amount)),
-    ).net;
-    const paidRows = payments.filter(
-      (row) => row.invoice_id === invoice.id && !isPendingPayment(row.mode),
-    );
-    const paid =
-      paidRows.reduce((total, row) => total + Math.round(Number(row.amount) * 100), 0) / 100;
-    const balance = moneyBalance(invoiced, paid);
-    if (balance <= 0) return [];
-    const showrooms = [...new Set(paidRows.flatMap((row) => (row.showroom ? [row.showroom] : [])))];
-    return [
-      {
-        customerId: invoice.customer_id,
-        billNo: invoice.bill_no,
-        billedOn: invoice.billed_on,
-        showroom: showrooms.length ? showrooms.join(", ") : null,
-        invoiced,
-        paid,
-        balance,
-        status: paymentStatus(invoiced, paid, invoice.status),
-      },
-    ];
-  });
-  const totals = pendingTotals(pending);
   const exporting = c.req.query("export") === "1";
   if (exporting) {
     const denied = await denyUnlessAdmin(c);
     if (denied) return denied;
   }
-  const start = (page - 1) * PAGE_SIZE;
-  const slice = exporting ? pending : pending.slice(start, start + PAGE_SIZE);
-  const customers = await loadCustomers(slice.map((row) => row.customerId));
-  if (!customers) return c.json({ error: "Could not load pending bills." }, 500);
-  return c.json({
-    pending: slice.map((row) => ({
-      customerName: customers.get(row.customerId) ?? "",
-      billNo: row.billNo,
-      billedOn: row.billedOn,
-      showroom: row.showroom,
-      invoiced: row.invoiced,
-      paid: row.paid,
-      balance: row.balance,
-      status: row.status,
-    })),
-    total: pending.length,
-    page,
-    books,
-    totals,
+  const { data, error } = await supabaseAdmin.rpc("shop_pending_report", {
+    p_new_counter_from: NEW_COUNTER_FROM,
+    p_old: books === "old",
+    p_offset: exporting ? 0 : (page - 1) * PAGE_SIZE,
+    p_limit: exporting ? null : PAGE_SIZE,
   });
+  if (error || !data) return c.json({ error: "Could not load pending bills." }, 500);
+  return c.json({ ...data, page, books });
 });
 
 reports.get("/mismatch", async (c) => {
@@ -290,19 +215,15 @@ reports.get("/mismatch", async (c) => {
 reports.get("/returns", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);
-  const loaded = await loadInvoices(range.from, range.to, "cancelled");
+  const loaded = await loadInvoiceSummaries(range.from, range.to, true);
   if (!loaded) return c.json({ error: "Could not load returns." }, 500);
-  const lines = await loadLines(loaded.rows.map((row) => row.id));
-  if (!lines) return c.json({ error: "Could not load returns." }, 500);
   return c.json({
-    returns: loaded.rows.map((row) => ({
-      billNo: row.bill_no,
-      billedOn: row.billed_on,
-      customerName: loaded.customers.get(row.customer_id) ?? "",
-      net: billTotals(
-        lines.filter((line) => line.invoice_id === row.id).map((line) => Number(line.amount)),
-      ).net,
-      remarks: row.remarks,
+    returns: loaded.rows.map(({ billNo, billedOn, customerName, net, remarks }) => ({
+      billNo,
+      billedOn,
+      customerName,
+      net,
+      remarks,
     })),
   });
 });
@@ -395,14 +316,11 @@ async function loadLines(ids: string[]): Promise<LineRow[] | null> {
   );
 }
 
-async function loadPayments(ids: string[]): Promise<PaymentRow[] | null> {
-  return readIn<PaymentRow>(ids, (chunk, from, to) =>
+function loadInvoiceSummaries(from: string, to: string, cancelled: boolean) {
+  return readAll((start, end) =>
     supabaseAdmin
-      .from("payments")
-      .select("invoice_id, amount, paid_on, showroom, mode")
-      .in("invoice_id", chunk)
-      .order("id")
-      .range(from, to),
+      .rpc("shop_invoice_report", { p_from: from, p_to: to, p_cancelled: cancelled })
+      .range(start, end),
   );
 }
 
