@@ -601,13 +601,16 @@ function OrderScreen({
   });
 
   function chooseProduct(nextId: string) {
+    if (nextId === productId) return;
+    if (
+      measurements.some((row) => row.value.trim()) &&
+      !window.confirm("Changing the garment will clear the measurements entered for this order. Continue?")
+    ) return;
     setProductId(nextId);
     const product = products.data?.products.find((item) => item.id === nextId);
-    setMeasurements((current) => {
-      if (current.some((row) => row.label.trim() || row.value.trim())) return current;
-      if (!product?.measurements.length) return [{ label: "", value: "" }];
-      return product.measurements.map((field) => ({ label: field.label, value: "" }));
-    });
+    setMeasurements(product?.measurements.length
+      ? product.measurements.map((field) => ({ label: field.label, value: "" }))
+      : [{ label: "", value: "" }]);
   }
 
   return (
@@ -711,20 +714,32 @@ onClick={() => printCopy("office")}
             </div>
           </>
         )}
-        <Field label="Garment" id="stitch-product">
-          <Select value={productId || undefined} onValueChange={chooseProduct}>
-            <SelectTrigger id="stitch-product">
-              <SelectValue placeholder="Choose" />
-            </SelectTrigger>
-            <SelectContent>
-              {(products.data?.products ?? []).map((product) => (
-                <SelectItem key={product.id} value={product.id}>
-                  {product.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        {id ? (
+          <div className="space-y-1">
+            <p className="text-sm font-medium">Garment</p>
+            <p className="rounded-md border bg-muted/40 px-3 py-2 text-sm">
+              {order?.productName ?? "Loading garment…"}
+            </p>
+            <p className="text-xs text-muted-foreground">
+              These measurements belong to order {order?.orderNo ?? "…"}.
+            </p>
+          </div>
+        ) : (
+          <Field label="Garment" id="stitch-product">
+            <Select value={productId || undefined} onValueChange={chooseProduct}>
+              <SelectTrigger id="stitch-product">
+                <SelectValue placeholder="Choose" />
+              </SelectTrigger>
+              <SelectContent>
+                {(products.data?.products ?? []).map((product) => (
+                  <SelectItem key={product.id} value={product.id}>
+                    {product.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Bag no." id="stitch-bag">
             <Input
