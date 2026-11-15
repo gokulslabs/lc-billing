@@ -307,6 +307,20 @@ sales.get("/", async (c) => {
   const sort = BILL_SORTS.find((item) => item === c.req.query("sort")) ?? "date";
   const direction = c.req.query("dir") === "asc" ? "asc" : "desc";
   const page = readPage(c.req.query("page"));
+  if (!exporting && !q && pay === "all" && sort === "date") {
+    const { from: offset } = pageRange(page);
+    const { data, error } = await supabaseAdmin.rpc("shop_bills_by_date", {
+      p_from: range.from,
+      p_to: range.to,
+      p_ascending: direction === "asc",
+      p_offset: offset,
+      p_limit: PAGE_SIZE,
+    });
+    if (error || !data) return c.json({ error: "Could not load bills." }, 500);
+    const summaries = await summarize(data.rows);
+    if ("error" in summaries) return c.json({ error: summaries.error }, 500);
+    return c.json({ invoices: summaries.invoices, total: data.total, page });
+  }
   const loaded = await loadInvoices(range.from, range.to, q, page, true);
   if ("error" in loaded) return c.json({ error: loaded.error }, 500);
   const summaries = await summarize(loaded.rows);

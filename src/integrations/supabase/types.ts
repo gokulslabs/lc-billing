@@ -476,6 +476,22 @@ export type Database = {
       };
     };
     Functions: {
+      shop_bills_by_date: {
+        Args: {
+          p_from: string | null;
+          p_to: string | null;
+          p_ascending: boolean;
+          p_offset: number;
+          p_limit: number;
+        };
+        Returns: {
+          rows: Pick<
+            Database["public"]["Tables"]["invoices"]["Row"],
+            "id" | "bill_no" | "customer_id" | "billed_on" | "status" | "remarks"
+          >[];
+          total: number;
+        };
+      };
       shop_bill_amounts: {
         Args: { p_ids: string[] };
         Returns: { invoice_id: string; gross: number; net: number; collected: number }[];
