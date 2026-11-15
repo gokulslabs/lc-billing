@@ -565,76 +565,24 @@ sales.post("/:id/lines/:lineId/return", async (c) => {
 sales.post("/:id/discount", async (c) => {
   const parsed = invoiceDiscountSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const invoice = await findInvoice(c.req.param("id"));
-  if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
-
-  const lines = await supabaseAdmin
-    .from("invoice_lines")
-    .select("id, quantity, rate, amount")
-    .eq("invoice_id", invoice.id)
-    .order("id");
-  if (lines.error) return c.json({ error: "Could not load bill lines." }, 500);
-  if (!lines.data?.length)
+  const id = c.req.param("id");
+  const { data: outcome, error } = await supabaseAdmin.rpc("shop_set_invoice_discount", {
+    p_invoice_id: id,
+    p_discount: parsed.data.discount,
+  });
+  if (error || !outcome) return c.json({ error: "Could not save the bill discount." }, 500);
+  if (outcome === "not_found") return c.json({ error: "Bill not found." }, 404);
+  if (outcome === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
+  if (outcome === "no_lines")
     return c.json({ error: "Add an item before setting a bill discount." }, 400);
-
-  const grossCents = lines.data.map((line) =>
-    Math.round(lineAmount(Number(line.quantity), Number(line.rate)) * 100),
-  );
-  const grossTotalCents = grossCents.reduce((sum, amount) => sum + amount, 0);
-  const discountCents = Math.round(parsed.data.discount * 100);
-  if (discountCents > grossTotalCents)
+  if (outcome === "invalid_discount")
     return c.json({ error: "Discount cannot be more than the gross amount." }, 400);
-
-  const payments = await supabaseAdmin
-    .from("payments")
-    .select("amount, mode")
-    .eq("invoice_id", invoice.id);
-  if (payments.error) return c.json({ error: "Could not check bill payments." }, 500);
-  const collectedCents = Math.round(
-    (payments.data ?? [])
-      .filter((payment) => !isPendingPayment(payment.mode))
-      .reduce((sum, payment) => sum + Number(payment.amount), 0) * 100,
-  );
-  const netCents = grossTotalCents - discountCents;
-  if (collectedCents > netCents)
+  if (outcome === "below_collected")
     return c.json(
       { error: "The new total cannot be less than the amount already collected." },
       400,
     );
-
-  let allocatedCents = 0;
-  const updates = lines.data.map((line, index) => {
-    const amountCents =
-      index === lines.data!.length - 1
-        ? netCents - allocatedCents
-        : grossTotalCents > 0
-          ? Math.round((netCents * (grossCents[index] ?? 0)) / grossTotalCents)
-          : 0;
-    allocatedCents += amountCents;
-    return { id: line.id, previous: Number(line.amount), amount: amountCents / 100 };
-  });
-
-  const changed: typeof updates = [];
-  for (const row of updates) {
-    const saved = await supabaseAdmin
-      .from("invoice_lines")
-      .update({ amount: row.amount })
-      .eq("id", row.id);
-    if (saved.error) {
-      for (const prior of changed) {
-        await supabaseAdmin
-          .from("invoice_lines")
-          .update({ amount: prior.previous })
-          .eq("id", prior.id);
-      }
-      return c.json({ error: "Could not save the bill discount. No change was kept." }, 500);
-    }
-    changed.push(row);
-  }
-
-  await syncInvoiceStatus(invoice.id);
-  const detail = await loadDetail(invoice.id);
+  const detail = await loadDetail(id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
 });
@@ -682,26 +630,20 @@ sales.post("/:id/payments", async (c) => {
 sales.post("/:id/payments/:paymentId/remove", async (c) => {
   const parsed = removePaymentSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
-  const invoice = await findInvoice(c.req.param("id"));
-  if (!invoice) return c.json({ error: "Bill not found." }, 404);
-  if (invoice.status === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
-  const payment = await supabaseAdmin
-    .from("payments")
-    .select("id, amount, paid_on, mode")
-    .eq("id", c.req.param("paymentId"))
-    .eq("invoice_id", invoice.id)
-    .maybeSingle();
-  if (payment.error) return c.json({ error: "Could not check this payment." }, 500);
-  if (!payment.data) return c.json({ error: "Payment not found." }, 404);
-  if (payment.data.paid_on !== shopToday())
+  const id = c.req.param("id");
+  const { data: outcome, error } = await supabaseAdmin.rpc("shop_remove_invoice_payment", {
+    p_invoice_id: id,
+    p_payment_id: c.req.param("paymentId"),
+    p_today: shopToday(),
+    p_reason: parsed.data.reason,
+  });
+  if (error || !outcome) return c.json({ error: "Could not remove the payment." }, 500);
+  if (outcome === "not_found") return c.json({ error: "Bill not found." }, 404);
+  if (outcome === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
+  if (outcome === "payment_not_found") return c.json({ error: "Payment not found." }, 404);
+  if (outcome === "older_payment")
     return c.json({ error: "Only a payment taken today can be removed." }, 400);
-  const removed = await supabaseAdmin.from("payments").delete().eq("id", payment.data.id);
-  if (removed.error) return c.json({ error: "Could not remove the payment." }, 500);
-  const note = `Payment removed ${payment.data.paid_on} ${payment.data.amount} ${payment.data.mode ?? "Not recorded"}: ${parsed.data.reason}`;
-  const remarks = [invoice.remarks, note].filter(Boolean).join("\n");
-  await supabaseAdmin.from("invoices").update({ remarks }).eq("id", invoice.id);
-  await syncInvoiceStatus(invoice.id);
-  const detail = await loadDetail(invoice.id);
+  const detail = await loadDetail(id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
 });
@@ -871,31 +813,6 @@ async function loadDetail(
       payments: paymentRows,
     },
   };
-}
-
-async function syncInvoiceStatus(id: string): Promise<void> {
-  const invoice = await findInvoice(id);
-  if (!invoice || invoice.status === "cancelled") return;
-  const [lines, payments] = await Promise.all([
-    supabaseAdmin.from("invoice_lines").select("amount").eq("invoice_id", id),
-    supabaseAdmin.from("payments").select("amount, mode").eq("invoice_id", id),
-  ]);
-  if (lines.error || payments.error) return;
-  const lineCount = (lines.data ?? []).length;
-  const net = round2((lines.data ?? []).reduce((sum, row) => sum + Number(row.amount), 0));
-  const collected = round2(
-    (payments.data ?? [])
-      .filter((row) => !isPendingPayment(row.mode))
-      .reduce((sum, row) => sum + Number(row.amount), 0),
-  );
-  const next =
-    lineCount === 0 && collected <= 0.001 ? "draft" : paymentStatus(net, collected, "open");
-  if (next === invoice.status) return;
-  await supabaseAdmin
-    .from("invoices")
-    .update({ status: next })
-    .eq("id", id)
-    .neq("status", "cancelled");
 }
 
 async function pieceAlreadyBilled(itemId: string): Promise<string[] | "error"> {

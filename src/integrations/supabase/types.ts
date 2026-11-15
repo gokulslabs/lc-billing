@@ -476,6 +476,15 @@ export type Database = {
       };
     };
     Functions: {
+      shop_set_invoice_discount: {
+        Args: { p_invoice_id: string; p_discount: number };
+        Returns:
+          "ok" | "not_found" | "cancelled" | "no_lines" | "invalid_discount" | "below_collected";
+      };
+      shop_remove_invoice_payment: {
+        Args: { p_invoice_id: string; p_payment_id: string; p_today: string; p_reason: string };
+        Returns: "ok" | "not_found" | "cancelled" | "payment_not_found" | "older_payment";
+      };
       shop_add_invoice_line: {
         Args: {
           p_invoice_id: string;
