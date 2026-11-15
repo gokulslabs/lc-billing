@@ -33,6 +33,10 @@ vi.mock("@/integrations/supabase/client.server", () => ({
 }));
 
 import { denyUnlessAdmin, requireShop } from "./guard";
+import { customerRoutes } from "./customers";
+import { inventoryRoutes } from "./inventory";
+import { salesRoutes } from "./sales";
+import { stitchingRoutes } from "./stitching";
 
 function shopApp() {
   const app = new Hono<{ Variables: { userId: string } }>();
@@ -79,5 +83,25 @@ describe("shop role guards", () => {
 
     expect((await app.request("/shop")).status).toBe(200);
     expect((await app.request("/admin-export")).status).toBe(200);
+  });
+
+  it.each([
+    "/sales?export=1",
+    "/sales/due?export=1",
+    "/sales/unrecorded?export=1",
+    "/inventory?export=1",
+    "/stitching?export=1&q=search",
+    "/customers/00000000-0000-0000-0000-000000000000/history?export=1",
+  ])("rejects staff exports at %s before querying shop records", async (path) => {
+    setRoleRows([{ role: "staff" }]);
+    const app = shopApp();
+    app.route("/sales", salesRoutes);
+    app.route("/inventory", inventoryRoutes);
+    app.route("/stitching", stitchingRoutes);
+    app.route("/customers", customerRoutes);
+
+    const response = await app.request(path);
+    expect(response.status).toBe(403);
+    expect(from.mock.calls).toEqual([["user_roles"], ["user_roles"]]);
   });
 });

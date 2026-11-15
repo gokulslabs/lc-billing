@@ -92,6 +92,11 @@ customers.get("/", async (c) => {
 });
 
 customers.get("/:id/history", async (c) => {
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
   const id = c.req.param("id");
   const billPage = readPage(c.req.query("billsPage"));
   const orderPage = readPage(c.req.query("ordersPage"));
@@ -103,9 +108,7 @@ customers.get("/:id/history", async (c) => {
   if (error) return c.json({ error: "Could not load this customer." }, 500);
   if (!data) return c.json({ error: "Customer not found." }, 404);
 
-  if (c.req.query("export") === "1") {
-    const denied = await denyUnlessAdmin(c);
-    if (denied) return denied;
+  if (exporting) {
     const [billLoaded, orderLoaded, totals] = await Promise.all([
       readAll<BillRow>((from, to) =>
         supabaseAdmin

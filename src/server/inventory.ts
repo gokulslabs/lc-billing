@@ -401,6 +401,11 @@ inventory.get("/verification", async (c) => {
 });
 
 inventory.get("/", async (c) => {
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
   const groupId = c.req.query("groupId") ?? "";
   const productId = c.req.query("productId") ?? "";
@@ -421,11 +426,6 @@ inventory.get("/", async (c) => {
         .map((product) => product.id)
     : [];
 
-  const exporting = c.req.query("export") === "1";
-  if (exporting) {
-    const denied = await denyUnlessAdmin(c);
-    if (denied) return denied;
-  }
   const stockQuery = () => {
     const selected = supabaseAdmin
       .from("inventory_items")

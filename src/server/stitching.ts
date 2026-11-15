@@ -43,6 +43,11 @@ stitching.get("/products", async (c) => {
 });
 
 stitching.get("/", async (c) => {
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
   const status = (c.req.query("status") ?? "").trim();
   const due = c.req.query("due") ?? "";
@@ -63,11 +68,6 @@ stitching.get("/", async (c) => {
   if (namedCustomers.error) return c.json({ error: "Could not search customers." }, 500);
   const customerIds = ((namedCustomers.data ?? []) as { id: string }[]).map((row) => row.id);
   const today = shopToday();
-  const exporting = c.req.query("export") === "1";
-  if (exporting) {
-    const denied = await denyUnlessAdmin(c);
-    if (denied) return denied;
-  }
   const ordersQuery = () => {
     const ranked = supabaseAdmin
       .from("stitching_orders")
