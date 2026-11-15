@@ -286,59 +286,12 @@ sales.get("/pending", async (c) => {
 sales.get("/close", async (c) => {
   const date = (c.req.query("date") ?? shopToday()).trim();
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return c.json({ error: "Enter a valid date." }, 400);
-  const [invoices, payments] = await Promise.all([
-    readAll<InvoiceRow>((start, end) =>
-      supabaseAdmin
-        .from("invoices")
-        .select("id, bill_no, customer_id, billed_on, status, remarks")
-        .eq("billed_on", date)
-        .neq("status", "cancelled")
-        .neq("status", "draft")
-        .order("id")
-        .range(start, end),
-    ),
-    readAll<{ amount: number | string; mode: string | null; invoice_id: string }>((start, end) =>
-      supabaseAdmin
-        .from("payments")
-        .select("amount, mode, invoice_id")
-        .eq("paid_on", date)
-        .order("id")
-        .range(start, end),
-    ),
-  ]);
-  if (!invoices || !payments) return c.json({ error: "Could not close the day." }, 500);
-  const summaries = await summarize(invoices.rows);
-  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
-  const billed = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.total, 0));
-  const stillDue = round2(summaries.invoices.reduce((sum, invoice) => sum + invoice.balance, 0));
-  const modes = PAYMENT_MODES.filter((mode) => !isPendingPayment(mode)).map((mode) => ({
-    mode,
-    amount: round2(
-      payments.rows
-        .filter((row) => row.mode === mode)
-        .reduce((sum, row) => sum + Number(row.amount), 0),
-    ),
-  }));
-  const pending = round2(
-    payments.rows
-      .filter((row) => isPendingPayment(row.mode))
-      .reduce((sum, row) => sum + Number(row.amount), 0),
-  );
-  const collected = round2(
-    payments.rows
-      .filter((row) => !isPendingPayment(row.mode))
-      .reduce((sum, row) => sum + Number(row.amount), 0),
-  );
-  return c.json({
-    date,
-    bills: summaries.invoices.length,
-    billed,
-    collected,
-    due: stillDue,
-    pending,
-    unpaid: summaries.invoices.filter((invoice) => invoice.balance > 0.001).length,
-    modes,
+  const { data, error } = await supabaseAdmin.rpc("shop_day_close", {
+    p_day: date,
+    p_modes: PAYMENT_MODES.filter((mode) => !isPendingPayment(mode)),
   });
+  if (error || !data) return c.json({ error: "Could not close the day." }, 500);
+  return c.json(data);
 });
 
 sales.get("/", async (c) => {
@@ -717,45 +670,24 @@ async function summarize(
   rows: InvoiceRow[],
 ): Promise<{ invoices: InvoiceSummary[] } | { error: string }> {
   if (rows.length === 0) return { invoices: [] };
-  const ids = rows.map((row) => row.id);
-  const [lines, payments, names] = await Promise.all([
-    readIn<{
-      invoice_id: string;
-      quantity: number | string;
-      rate: number | string;
-      amount: number | string;
-    }>(ids, (chunk, start, end) =>
-      supabaseAdmin
-        .from("invoice_lines")
-        .select("invoice_id, quantity, rate, amount")
-        .in("invoice_id", chunk)
-        .order("id")
-        .range(start, end),
-    ),
-    readIn<{ invoice_id: string; amount: number | string; mode: string | null }>(
-      ids,
-      (chunk, start, end) =>
-        supabaseAdmin
-          .from("payments")
-          .select("invoice_id, amount, mode")
-          .in("invoice_id", chunk)
-          .order("id")
-          .range(start, end),
+  const [amounts, names] = await Promise.all([
+    readIn(
+      rows.map((row) => row.id),
+      (ids, start, end) => supabaseAdmin.rpc("shop_bill_amounts", { p_ids: ids }).range(start, end),
     ),
     customerNames(rows.map((row) => row.customer_id)),
   ]);
-  if (!lines || !payments || !names) return { error: "Could not total the bills." };
-  const totals = sumFigures(lines);
-  const collected = sumAmounts(payments);
+  if (!amounts || !names) return { error: "Could not total the bills." };
+  const totals = new Map(amounts.map((row) => [row.invoice_id, row]));
   return {
     invoices: rows.map((row) => {
-      const money = totals.get(row.id) ?? { gross: 0, net: 0 };
+      const money = totals.get(row.id);
       return toSummary(
         row,
         names.get(row.customer_id) ?? "",
-        money.net,
-        collected.get(row.id) ?? 0,
-        money.gross,
+        Number(money?.net ?? 0),
+        Number(money?.collected ?? 0),
+        Number(money?.gross ?? 0),
       );
     }),
   };
@@ -935,35 +867,6 @@ async function customerNames(ids: string[]): Promise<Map<string, string> | null>
   );
   if (!rows) return null;
   return new Map(rows.map((row) => [row.id, row.name]));
-}
-
-function sumFigures(
-  rows: {
-    invoice_id: string;
-    quantity: number | string;
-    rate: number | string;
-    amount: number | string;
-  }[],
-): Map<string, { gross: number; net: number }> {
-  const totals = new Map<string, { gross: number; net: number }>();
-  for (const row of rows) {
-    const current = totals.get(row.invoice_id) ?? { gross: 0, net: 0 };
-    current.gross = round2(current.gross + lineAmount(Number(row.quantity), Number(row.rate)));
-    current.net = round2(current.net + Number(row.amount));
-    totals.set(row.invoice_id, current);
-  }
-  return totals;
-}
-
-function sumAmounts(
-  rows: { invoice_id: string; amount: number | string; mode: string | null }[],
-): Map<string, number> {
-  const totals = new Map<string, number>();
-  for (const row of rows) {
-    if (isPendingPayment(row.mode)) continue;
-    totals.set(row.invoice_id, round2((totals.get(row.invoice_id) ?? 0) + Number(row.amount)));
-  }
-  return totals;
 }
 
 function toSummary(

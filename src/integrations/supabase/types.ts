@@ -476,6 +476,23 @@ export type Database = {
       };
     };
     Functions: {
+      shop_bill_amounts: {
+        Args: { p_ids: string[] };
+        Returns: { invoice_id: string; gross: number; net: number; collected: number }[];
+      };
+      shop_day_close: {
+        Args: { p_day: string; p_modes: string[] };
+        Returns: {
+          date: string;
+          bills: number;
+          billed: number;
+          collected: number;
+          due: number;
+          pending: number;
+          unpaid: number;
+          modes: { mode: string; amount: number }[];
+        };
+      };
       shop_set_invoice_discount: {
         Args: { p_invoice_id: string; p_discount: number };
         Returns:
