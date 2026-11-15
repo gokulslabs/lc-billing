@@ -47,21 +47,59 @@ function isH3SwallowedErrorBody(body: string): boolean {
   }
 }
 
+function protectResponse(response: Response, noStore: boolean, denyFraming: boolean): Response {
+  if (!noStore && !denyFraming) return response;
+
+  const headers = new Headers(response.headers);
+  if (noStore) headers.set("Cache-Control", "private, no-store");
+  if (denyFraming) {
+    headers.append("Content-Security-Policy", "frame-ancestors 'none'");
+    headers.set("X-Frame-Options", "DENY");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+function securityPath(pathname: string): string {
+  // The router accepts percent-encoded letters in static route segments.
+  return pathname
+    .replace(/%([\da-f]{2})/gi, (_, hex: string) => String.fromCharCode(parseInt(hex, 16)))
+    .toLowerCase()
+    .replace(/\/+$/, "");
+}
+
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
+    const { hostname, pathname } = new URL(request.url);
+    const path = securityPath(pathname);
+    const isApi = path === "/api" || path.startsWith("/api/");
+    const isStaffPage = path === "/admin" || path.startsWith("/admin/") || path === "/admin-login";
+    // The Lovable editor embeds its own preview. Railway serves the live staff app.
+    const denyFraming = isStaffPage && hostname.endsWith(".up.railway.app");
+    const noStore = isApi || isStaffPage;
+
     try {
-      const path = new URL(request.url).pathname;
-      if (path === trialRoomApiPath) return trialRoomApi.fetch(request);
-      if (path === "/api" || path.startsWith("/api/")) return api.fetch(request);
+      if (pathname === trialRoomApiPath) return trialRoomApi.fetch(request);
+      if (pathname === "/api" || pathname.startsWith("/api/")) {
+        return protectResponse(await api.fetch(request), noStore, denyFraming);
+      }
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
-      return await normalizeCatastrophicSsrResponse(response);
+      return protectResponse(
+        await normalizeCatastrophicSsrResponse(response),
+        noStore,
+        denyFraming,
+      );
     } catch (error) {
       console.error(error);
-      return new Response(renderErrorPage(), {
+      const response = new Response(renderErrorPage(), {
         status: 500,
         headers: { "content-type": "text/html; charset=utf-8" },
       });
+      return protectResponse(response, noStore, denyFraming);
     }
   },
 };
