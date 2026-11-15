@@ -476,6 +476,32 @@ export type Database = {
       };
     };
     Functions: {
+      shop_add_invoice_line: {
+        Args: {
+          p_invoice_id: string;
+          p_customer_id: string;
+          p_stock_id: string;
+          p_product_id: string;
+          p_inventory_no: string;
+          p_expected_stock: number;
+          p_quantity: number;
+          p_rate: number;
+          p_amount: number;
+          p_is_piece: boolean;
+        };
+        Returns: string;
+      };
+      shop_return_invoice_line: {
+        Args: {
+          p_invoice_id: string;
+          p_line_id: string;
+          p_expected_quantity: number;
+          p_expected_amount: number;
+          p_new_quantity: number;
+          p_new_amount: number;
+        };
+        Returns: undefined;
+      };
       shop_add_stock: {
         Args: {
           p_product_id: string;

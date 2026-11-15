@@ -6,7 +6,7 @@ import {
   UNRECORDED_BILL_ERROR,
   UNRECORDED_NAME,
 } from "@/lib/customers";
-import { quantityAfterReturn, quantityAfterSale, quantityForUnit } from "@/lib/inventory";
+import { quantityForUnit } from "@/lib/inventory";
 import type { Unit } from "@/lib/products";
 import {
   BILL_PAYS,
@@ -496,18 +496,6 @@ sales.post("/:id/lines", async (c) => {
   if (parsed.data.quantity > available + 0.0001)
     return c.json({ error: "Not enough stock on this inventory number." }, 400);
 
-  const left = quantityAfterSale(available, parsed.data.quantity);
-  const moved = await supabaseAdmin
-    .from("inventory_items")
-    .update({ quantity: left, status: left > 0 ? "available" : "sold" })
-    .eq("id", stock.id)
-    .eq("quantity", available)
-    .eq("status", "available")
-    .select("id")
-    .maybeSingle();
-  if (moved.error || !moved.data)
-    return c.json({ error: "Stock changed. Try the line again." }, 409);
-
   const priced = priceLine(
     parsed.data.quantity,
     product.price,
@@ -516,37 +504,25 @@ sales.post("/:id/lines", async (c) => {
     parsed.data.extraOff,
     parsed.data.discountPercent,
   );
-  const amount = priced.amount;
-  const { data, error } = await supabaseAdmin
-    .from("invoice_lines")
-    .insert({
-      invoice_id: invoice.id,
-      inventory_item_id: stock.id,
-      product_id: product.id,
-      inventory_no: stock.inventory_no,
-      quantity: parsed.data.quantity,
-      rate: priced.rate,
-      amount,
-    })
-    .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
-    .single();
-  if (error || !data) {
-    await supabaseAdmin
-      .from("inventory_items")
-      .update({ quantity: available, status: stock.status })
-      .eq("id", stock.id);
-    return c.json({ error: "Could not add the line." }, 500);
-  }
-  await syncInvoiceStatus(invoice.id);
+  const { data: lineId, error } = await supabaseAdmin.rpc("shop_add_invoice_line", {
+    p_invoice_id: invoice.id,
+    p_customer_id: invoice.customer_id,
+    p_stock_id: stock.id,
+    p_product_id: stock.product_id,
+    p_inventory_no: stock.inventory_no,
+    p_expected_stock: available,
+    p_quantity: parsed.data.quantity,
+    p_rate: priced.rate,
+    p_amount: priced.amount,
+    p_is_piece: product.unit === "NO",
+  });
+  if (error?.code === "PT409") return c.json({ error: error.message }, 409);
+  if (error || !lineId) return c.json({ error: "Could not add the line." }, 500);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
-  return c.json(
-    {
-      invoice: detail.invoice,
-      line: toLine(data as LineRow, product, left > 0 ? "available" : "sold"),
-    },
-    201,
-  );
+  const savedLine = detail.invoice.lines.find((line) => line.id === lineId);
+  if (!savedLine) return c.json({ error: "The saved line could not be loaded." }, 500);
+  return c.json({ invoice: detail.invoice, line: savedLine }, 201);
 });
 
 sales.post("/:id/lines/:lineId/return", async (c) => {
@@ -571,21 +547,16 @@ sales.post("/:id/lines/:lineId/return", async (c) => {
   if (quantityError) return c.json({ error: quantityError }, 400);
   const next = returnQuantity(Number(row.quantity), Number(row.amount), parsed.data.quantity);
   if (typeof next === "string") return c.json({ error: next }, 400);
-  if (row.inventory_item_id) {
-    const restored = await restoreStock(row.inventory_item_id, parsed.data.quantity);
-    if (!restored) return c.json({ error: "Could not return this quantity to stock." }, 500);
-  }
-  if (next.quantity === 0) {
-    const removed = await supabaseAdmin.from("invoice_lines").delete().eq("id", row.id);
-    if (removed.error) return c.json({ error: "Could not remove the line." }, 500);
-  } else {
-    const updated = await supabaseAdmin
-      .from("invoice_lines")
-      .update({ quantity: next.quantity, amount: next.amount })
-      .eq("id", row.id);
-    if (updated.error) return c.json({ error: "Could not update the line." }, 500);
-  }
-  await syncInvoiceStatus(invoice.id);
+  const { error } = await supabaseAdmin.rpc("shop_return_invoice_line", {
+    p_invoice_id: invoice.id,
+    p_line_id: row.id,
+    p_expected_quantity: Number(row.quantity),
+    p_expected_amount: Number(row.amount),
+    p_new_quantity: next.quantity,
+    p_new_amount: next.amount,
+  });
+  if (error?.code === "PT409") return c.json({ error: error.message }, 409);
+  if (error) return c.json({ error: "Could not return this line." }, 500);
   const detail = await loadDetail(invoice.id);
   if ("error" in detail) return c.json({ error: detail.error }, detail.status);
   return c.json({ invoice: detail.invoice });
@@ -972,28 +943,6 @@ async function findStock(inventoryNo: string): Promise<StockRow | null> {
     .maybeSingle();
   if (error || !data) return null;
   return data as StockRow;
-}
-
-async function restoreStock(id: string, quantity: number): Promise<boolean> {
-  for (let attempt = 0; attempt < 2; attempt += 1) {
-    const current = await supabaseAdmin
-      .from("inventory_items")
-      .select("id, quantity")
-      .eq("id", id)
-      .maybeSingle();
-    if (current.error || !current.data) return false;
-    const next = quantityAfterReturn(Number(current.data.quantity), quantity);
-    const saved = await supabaseAdmin
-      .from("inventory_items")
-      .update({ quantity: next, status: next > 0 ? "available" : "sold" })
-      .eq("id", id)
-      .eq("quantity", current.data.quantity)
-      .select("id")
-      .maybeSingle();
-    if (saved.error) return false;
-    if (saved.data) return true;
-  }
-  return false;
 }
 
 async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | null> {
