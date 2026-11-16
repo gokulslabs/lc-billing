@@ -100,3 +100,35 @@ export function cleanMeasurements(
 export function zodMessage(error: z.ZodError): string {
   return error.issues[0]?.message ?? "Check the form and try again.";
 }
+
+export function whatsAppNumber(phone: string): string | null {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `91${digits}`;
+  if (digits.length === 11 && digits.startsWith("0")) return `91${digits.slice(1)}`;
+  if (digits.length === 12 && digits.startsWith("91")) return digits;
+  return null;
+}
+
+export function measurementWhatsAppUrl(input: {
+  customerName: string;
+  phone: string;
+  orderNo: string;
+  garment: string;
+  measurements: readonly StitchingMeasurement[];
+}): string | null {
+  const number = whatsAppNumber(input.phone);
+  const lines = input.measurements
+    .map((row) => ({ label: row.label.trim().toUpperCase(), value: row.value.trim() }))
+    .filter((row) => row.label && row.value)
+    .map((row) => `${row.label}: ${row.value}`);
+  if (!number || lines.length === 0) return null;
+  const text = [
+    "Ladies Collections",
+    input.customerName.trim(),
+    `Order ${input.orderNo}`,
+    input.garment.trim(),
+    "",
+    ...lines,
+  ].join("\n");
+  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+}
