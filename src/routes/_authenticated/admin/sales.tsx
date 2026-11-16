@@ -70,11 +70,17 @@ function SalesPage() {
   const opening = search?.get("view") ?? null;
   const books = search?.get("books") === "old" ? "old" : "new";
   const [billId, setBillId] = useState<string | null>(search?.get("bill") ?? null);
+  const [newEntry, setNewEntry] = useState(false);
   const [list, setList] = useState(true);
+  function openBill(id: string, entry = false) {
+    setNewEntry(entry);
+    setBillId(id);
+  }
   if (billId) {
     return (
       <BillScreen
         id={billId}
+        newEntry={newEntry}
         onBack={() => {
           setBillId(null);
           setList(true);
@@ -86,25 +92,25 @@ function SalesPage() {
   }
   if (!list) {
     return (
-      <div className="mx-auto max-w-xl space-y-6 p-6 md:p-10">
+      <div className="mx-auto w-full min-w-0 max-w-5xl space-y-6 p-6 md:p-10">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-semibold">New bill</h1>
+            <h1 className="text-4xl font-semibold">New bill entry</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Search for a customer and click their name to open a bill.
+              Find the customer, then choose Open bill.
             </p>
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
             Bill list
           </Button>
         </div>
-        <NewBillForm onCreated={setBillId} />
+        <NewBillForm onCreated={(id) => openBill(id, true)} />
       </div>
     );
   }
   return (
     <SalesHome
-      onOpen={setBillId}
+      onOpen={openBill}
       onNew={() => setList(false)}
       startTab={
         opening === "due"
@@ -126,7 +132,7 @@ function SalesHome({
   startTab,
   books,
 }: {
-  onOpen: (id: string) => void;
+  onOpen: (id: string, newEntry?: boolean) => void;
   onNew: () => void;
   startTab: string;
   books: "new" | "old";
@@ -173,7 +179,7 @@ function SalesHome({
         method: "POST",
         body: JSON.stringify({ customerId }),
       }),
-    onSuccess: (result) => onOpen(result.invoice.id),
+    onSuccess: (result) => onOpen(result.invoice.id, true),
     onError: (error: Error) => toast.error(error.message),
   });
   const openExact = useMutation({
@@ -658,9 +664,19 @@ function SalesHome({
   );
 }
 
-function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
+function BillScreen({
+  id,
+  newEntry,
+  onBack,
+}: {
+  id: string;
+  newEntry: boolean;
+  onBack: () => void;
+}) {
   const queryClient = useQueryClient();
   const [receiptOpen, setReceiptOpen] = useState(false);
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [discountOpen, setDiscountOpen] = useState(false);
   const receiptFrame = useRef<HTMLIFrameElement>(null);
   const bill = useQuery({
     queryKey: ["invoice", id],
@@ -729,7 +745,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             <ChangeBillCustomer invoice={invoice} onSaved={refresh} />
           ) : null}
         </div>
-        {invoice ? (
+        {invoice && !newEntry ? (
           <div className="flex w-full max-w-sm shrink-0 flex-col items-stretch gap-3 print:hidden">
             <div className="flex items-end justify-between gap-3">
               <div>
@@ -766,9 +782,9 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
         <p className="text-sm text-muted-foreground">Reason: {invoice.remarks}</p>
       ) : null}
       {invoice && invoice.status !== "cancelled" ? (
-        <LineForm invoiceId={invoice.id} onSaved={refresh} />
+        <LineForm invoiceId={invoice.id} onSaved={refresh} newEntry={newEntry} />
       ) : null}
-      {invoice && invoice.status !== "cancelled" ? (
+      {invoice && invoice.status !== "cancelled" && !newEntry ? (
         <InvoiceDiscountForm invoice={invoice} onSaved={refresh} />
       ) : null}
       {invoice ? (
@@ -776,6 +792,7 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
           <Table>
             <TableHeader>
               <TableRow>
+                {newEntry ? <TableHead>No.</TableHead> : null}
                 <TableHead>Inventory no.</TableHead>
                 <TableHead>Code</TableHead>
                 <TableHead>Group</TableHead>
@@ -791,13 +808,14 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             <TableBody>
               {invoice.lines.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="text-muted-foreground">
+                  <TableCell colSpan={newEntry ? 11 : 10} className="text-muted-foreground">
                     No lines yet.
                   </TableCell>
                 </TableRow>
               ) : null}
-              {invoice.lines.map((line) => (
+              {invoice.lines.map((line, index) => (
                 <TableRow key={line.id}>
+                  {newEntry ? <TableCell>{index + 1}</TableCell> : null}
                   <TableCell className="font-medium">{line.inventoryNo}</TableCell>
                   <TableCell>{line.productCode}</TableCell>
                   <TableCell>{line.groupName}</TableCell>
@@ -809,7 +827,12 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
                   <TableCell>{formatRupees(line.amount)}</TableCell>
                   <TableCell className="text-right">
                     {invoice.status !== "cancelled" ? (
-                      <ReturnLine line={line} invoiceId={invoice.id} onSaved={refresh} />
+                      <ReturnLine
+                        line={line}
+                        invoiceId={invoice.id}
+                        onSaved={refresh}
+                        removeFromBill={newEntry && invoice.collected === 0}
+                      />
                     ) : null}
                   </TableCell>
                 </TableRow>
@@ -817,6 +840,80 @@ function BillScreen({ id, onBack }: { id: string; onBack: () => void }) {
             </TableBody>
           </Table>
         </div>
+      ) : null}
+      {invoice && newEntry ? (
+        <>
+          <section
+            className="flex flex-wrap items-center justify-between gap-4"
+            aria-label="Bill total"
+          >
+            <p className="flex flex-wrap gap-x-6 gap-y-2 tabular-nums">
+              <span>
+                Total <strong>{formatRupees(invoice.total)}</strong>
+              </span>
+              <span>
+                Paid <strong>{formatRupees(invoice.collected)}</strong>
+              </span>
+              <span>
+                Balance <strong>{formatRupees(invoice.balance)}</strong>
+              </span>
+            </p>
+            {invoice.lines.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {invoice.status !== "cancelled" ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setDiscountOpen(!discountOpen)}
+                  >
+                    {discountOpen ? "Close discount" : "Edit discount"}
+                  </Button>
+                ) : null}
+                {invoice.status !== "cancelled" && invoice.balance > 0 ? (
+                  <Button type="button" onClick={() => setPaymentOpen(true)}>
+                    Add payment
+                  </Button>
+                ) : null}
+                <Button type="button" variant="outline" onClick={() => setReceiptOpen(true)}>
+                  Print bill
+                </Button>
+              </div>
+            ) : null}
+          </section>
+          {discountOpen && invoice.status !== "cancelled" ? (
+            <InvoiceDiscountForm
+              invoice={invoice}
+              onSaved={() => {
+                setDiscountOpen(false);
+                refresh();
+              }}
+            />
+          ) : null}
+          <Dialog open={paymentOpen} onOpenChange={setPaymentOpen}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto">
+              <DialogHeader>
+                <DialogTitle>Add payment</DialogTitle>
+                <DialogDescription>
+                  Bill {invoice.billNo} · {invoice.customerName} · Balance{" "}
+                  {formatRupees(invoice.balance)}
+                </DialogDescription>
+              </DialogHeader>
+              {invoice.balance > 0 ? (
+                <CollectForm
+                  key={invoice.balance}
+                  invoiceId={invoice.id}
+                  billNo={invoice.billNo}
+                  balance={invoice.balance}
+                  onSaved={() => {
+                    setPaymentOpen(false);
+                    refresh();
+                  }}
+                  newEntry
+                />
+              ) : null}
+            </DialogContent>
+          </Dialog>
+        </>
       ) : null}
       {invoice ? (
         <div className="grid gap-6 md:grid-cols-2">
@@ -1062,7 +1159,15 @@ function ChangeBillCustomer({ invoice, onSaved }: { invoice: InvoiceDetail; onSa
   );
 }
 
-function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => void }) {
+function LineForm({
+  invoiceId,
+  onSaved,
+  newEntry,
+}: {
+  invoiceId: string;
+  onSaved: () => void;
+  newEntry: boolean;
+}) {
   const [inventoryNo, setInventoryNo] = useState("");
   const [lookup, setLookup] = useState("");
   const [quantity, setQuantity] = useState("1");
@@ -1102,8 +1207,15 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
         const fast = scanned.length >= 4 && now - last <= 80;
         buffer = "";
         if (!fast) return;
+        if (newEntry && event.target !== inputRef.current) return;
         event.preventDefault();
         event.stopPropagation();
+        if (newEntry) {
+          valueRef.current = scanned;
+          setInventoryNo(scanned);
+          setLookup(scanned);
+          return;
+        }
         if (event.target instanceof HTMLInputElement && event.target.id === "line-qty")
           setQuantity("1");
         void addRef.current(scanned);
@@ -1117,7 +1229,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
     }
     window.addEventListener("keydown", onKey, true);
     return () => window.removeEventListener("keydown", onKey, true);
-  }, []);
+  }, [newEntry]);
   const preview = useQuery({
     queryKey: ["invoice-preview", lookup],
     enabled: lookup.length > 0,
@@ -1135,16 +1247,19 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       }>(`/api/invoices/preview?inventoryNo=${encodeURIComponent(lookup)}`),
     retry: false,
   });
+  const stock = lookup === inventoryNo.trim() ? preview.data?.preview : undefined;
   const waiting = useRef<string[]>([]);
   const adding = useRef(false);
   const [busy, setBusy] = useState(false);
   addRef.current = async (raw: string) => {
     const number = raw.replace(/[\r\n]/g, "").trim();
-    if (!number) return;
+    if (!number || (newEntry && adding.current)) return;
     waiting.current.push(number);
-    valueRef.current = "";
-    setInventoryNo("");
-    setLookup("");
+    if (!newEntry) {
+      valueRef.current = "";
+      setInventoryNo("");
+      setLookup("");
+    }
     if (adding.current) return;
     adding.current = true;
     setBusy(true);
@@ -1173,10 +1288,20 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
             ...(typedExtra === undefined ? {} : { extraOff: typedExtra }),
           }),
         });
+        if (newEntry) {
+          valueRef.current = "";
+          setInventoryNo("");
+          setLookup("");
+        }
         toast.success(`${next} added.`);
         onSaved();
       } catch (error) {
         toast.error(error instanceof Error ? error.message : "Could not add that piece.");
+        if (newEntry) {
+          adding.current = false;
+          setBusy(false);
+          return;
+        }
       }
     }
     adding.current = false;
@@ -1193,7 +1318,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
 
   return (
     <form
-      className="grid w-full min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-3 xl:grid-cols-[minmax(12rem,1.5fr)_repeat(4,minmax(6rem,1fr))_auto]"
+      className={`grid w-full min-w-0 grid-cols-2 items-end gap-3 sm:grid-cols-3 ${newEntry ? "xl:grid-cols-[minmax(10rem,1fr)_5rem_repeat(2,minmax(6rem,1fr))_minmax(8rem,1.5fr)_6rem_minmax(6rem,1fr)_auto]" : "xl:grid-cols-[minmax(12rem,1.5fr)_repeat(4,minmax(6rem,1fr))_auto]"}`}
       onSubmit={(event) => {
         event.preventDefault();
         void addRef.current(valueRef.current);
@@ -1212,6 +1337,7 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           autoComplete="off"
           className="w-full min-w-0 font-mono"
           placeholder="Scan or type"
+          readOnly={newEntry && busy}
           required
         />
       </Field>
@@ -1221,40 +1347,61 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
           value={quantity}
           onChange={(event) => setQuantity(event.target.value)}
           className="w-full min-w-0"
+          readOnly={newEntry && busy}
           required
         />
       </Field>
-      <Field label="Rate" id="line-rate">
-        <Input
-          id="line-rate"
-          value={rate}
-          onChange={(event) => setRate(event.target.value)}
-          className="w-full min-w-0"
-          placeholder={preview.data ? String(preview.data.preview.rate) : "Catalogue"}
-        />
-      </Field>
-      <Field label="Discount %" id="line-discount">
-        <Input
-          id="line-discount"
-          value={discountPercent}
-          onChange={(event) => setDiscountPercent(event.target.value)}
-          className="w-full min-w-0"
-          placeholder={preview.data ? String(preview.data.preview.discountPercent) : "Group"}
-        />
-      </Field>
-      <Field label="Extra off" id="line-extra">
-        <Input
-          id="line-extra"
-          value={extraOff}
-          onChange={(event) => setExtraOff(event.target.value)}
-          className="w-full min-w-0"
-          placeholder="₹"
-        />
-      </Field>
+      {newEntry ? (
+        <>
+          {(
+            [
+              ["code", "Product code", stock?.productCode],
+              ["group", "Product group", stock?.groupName],
+              ["name", "Product name", stock?.productName],
+              ["catalogue-rate", "Rate", stock ? formatRupees(stock.rate) : ""],
+              ["status", "Status", stock ? `${stock.status} · ${stock.available} left` : ""],
+            ] as const
+          ).map(([field, label, value]) => (
+            <Field key={field} label={label} id={`line-${field}`}>
+              <Input id={`line-${field}`} value={value ?? ""} readOnly />
+            </Field>
+          ))}
+        </>
+      ) : (
+        <>
+          <Field label="Rate" id="line-rate">
+            <Input
+              id="line-rate"
+              value={rate}
+              onChange={(event) => setRate(event.target.value)}
+              className="w-full min-w-0"
+              placeholder={preview.data ? String(preview.data.preview.rate) : "Catalogue"}
+            />
+          </Field>
+          <Field label="Discount %" id="line-discount">
+            <Input
+              id="line-discount"
+              value={discountPercent}
+              onChange={(event) => setDiscountPercent(event.target.value)}
+              className="w-full min-w-0"
+              placeholder={preview.data ? String(preview.data.preview.discountPercent) : "Group"}
+            />
+          </Field>
+          <Field label="Extra off" id="line-extra">
+            <Input
+              id="line-extra"
+              value={extraOff}
+              onChange={(event) => setExtraOff(event.target.value)}
+              className="w-full min-w-0"
+              placeholder="₹"
+            />
+          </Field>
+        </>
+      )}
       <Button type="submit" className="w-fit rounded-full" disabled={busy}>
         {busy ? "Adding…" : "Add"}
       </Button>
-      {preview.data ? (
+      {!newEntry && preview.data ? (
         <p className="col-span-full pb-2 text-sm text-muted-foreground">
           {preview.data.preview.productCode} · {preview.data.preview.groupName} ·{" "}
           {preview.data.preview.productName} · {formatRupees(preview.data.preview.rate)}
@@ -1267,10 +1414,16 @@ function LineForm({ invoiceId, onSaved }: { invoiceId: string; onSaved: () => vo
       {preview.error instanceof Error && lookup === inventoryNo.trim() ? (
         <p className="col-span-full pb-2 text-sm text-destructive">{preview.error.message}</p>
       ) : null}
-      <p className="col-span-full w-full text-sm text-muted-foreground">
-        Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the
-        group percent. Extra off comes off after that.
-      </p>
+      {newEntry ? (
+        <p className="col-span-full text-sm text-muted-foreground">
+          Scan or type the inventory number, check the item and quantity, then choose Add.
+        </p>
+      ) : (
+        <p className="col-span-full w-full text-sm text-muted-foreground">
+          Scan the sticker. Leave rate blank for the catalogue price. Leave discount % blank for the
+          group percent. Extra off comes off after that.
+        </p>
+      )}
     </form>
   );
 }
@@ -1294,13 +1447,15 @@ function ReturnLine({
   line,
   invoiceId,
   onSaved,
+  removeFromBill = false,
 }: {
   line: { id: string; inventoryNo: string; quantity: number };
   invoiceId: string;
   onSaved: () => void;
+  removeFromBill?: boolean;
 }) {
   const [qty, setQty] = useState(String(line.quantity));
-  const whole = line.quantity <= 1;
+  const whole = removeFromBill || line.quantity <= 1;
   return (
     <div className="flex items-center justify-end gap-2">
       {whole ? null : (
@@ -1321,10 +1476,10 @@ function ReturnLine({
             toast.error("Enter a quantity to return.");
             return;
           }
-          if (
-            !window.confirm(`Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`)
-          )
-            return;
+          const prompt = removeFromBill
+            ? `Remove ${line.inventoryNo} from this bill and put it back in stock?`
+            : `Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`;
+          if (!window.confirm(prompt)) return;
           void apiFetch(`/api/invoices/${invoiceId}/lines/${line.id}/return`, {
             method: "POST",
             body: JSON.stringify({ quantity }),
@@ -1340,7 +1495,7 @@ function ReturnLine({
             .catch((reason: Error) => toast.error(reason.message));
         }}
       >
-        Return
+        {removeFromBill ? "Remove" : "Return"}
       </Button>
     </div>
   );
@@ -1411,16 +1566,23 @@ function CollectForm({
   billNo,
   balance,
   onSaved,
+  newEntry = false,
 }: {
   invoiceId: string;
   billNo: string;
   balance: number;
   onSaved: () => void;
+  newEntry?: boolean;
 }) {
   const [amount, setAmount] = useState(String(balance));
   const [paidOn, setPaidOn] = useState(shopToday());
   const [mode, setMode] = useState<(typeof PAYMENT_MODES)[number]>("CASH");
   const [showroom, setShowroom] = useState("");
+  function chooseMode(item: (typeof PAYMENT_MODES)[number]) {
+    setMode(item);
+    if (item === "PENDING") setPaidOn(monthEndDate(shopToday()));
+    else if (mode === "PENDING") setPaidOn(shopToday());
+  }
   useUnsavedWork(
     "bill-collect",
     amount !== String(balance) ||
@@ -1477,24 +1639,35 @@ function CollectForm({
         />
       </Field>
       <div className="space-y-2">
-        <Label>Payment method or pay later</Label>
-        <div className="flex flex-wrap gap-2">
-          {PAYMENT_MODES.map((item) => (
-            <Button
-              key={item}
-              type="button"
-              variant={mode === item ? "default" : "outline"}
-              className="rounded-full"
-              onClick={() => {
-                setMode(item);
-                if (item === "PENDING") setPaidOn(monthEndDate(shopToday()));
-                else if (mode === "PENDING") setPaidOn(shopToday());
-              }}
-            >
-              {paymentLabel(item)}
-            </Button>
-          ))}
-        </div>
+        <Label htmlFor={newEntry ? "collect-mode" : undefined}>Payment method or pay later</Label>
+        {newEntry ? (
+          <Select value={mode} onValueChange={(value) => chooseMode(value as typeof mode)}>
+            <SelectTrigger id="collect-mode">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAYMENT_MODES.map((item) => (
+                <SelectItem key={item} value={item}>
+                  {paymentLabel(item)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {PAYMENT_MODES.map((item) => (
+              <Button
+                key={item}
+                type="button"
+                variant={mode === item ? "default" : "outline"}
+                className="rounded-full"
+                onClick={() => chooseMode(item)}
+              >
+                {paymentLabel(item)}
+              </Button>
+            ))}
+          </div>
+        )}
       </div>
       <Field label={mode === "PENDING" ? "Note (optional)" : "Note"} id="collect-showroom">
         <Input
@@ -1511,7 +1684,13 @@ function CollectForm({
         </p>
       ) : null}
       <Button type="submit" className="rounded-full" disabled={save.isPending}>
-        {save.isPending ? "Saving…" : mode === "PENDING" ? "Record pending" : "Collect"}
+        {save.isPending
+          ? "Saving…"
+          : mode === "PENDING"
+            ? "Record pending"
+            : newEntry
+              ? "Add payment"
+              : "Collect"}
       </Button>
     </form>
   );
@@ -1604,18 +1783,18 @@ function CancelForm({
 
 function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
   const [walkIn, setWalkIn] = useState("");
   const [phone, setPhone] = useState("");
   useUnsavedWork(
     "new-bill",
     q.trim().length > 0 || walkIn.trim().length > 0 || phone.trim().length > 0,
   );
-  const search = q.trim();
+  const search = useDeferredValue(q.trim());
   const customers = useQuery({
-    queryKey: ["customers", "bill", search],
-    enabled: Boolean(search),
+    queryKey: ["customers", "bill", search, page],
     queryFn: () => {
-      const params = new URLSearchParams({ q: search, picker: "1" });
+      const params = new URLSearchParams({ q: search, page: String(page) });
       return apiFetch<{ customers: Customer[]; total: number }>(
         `/api/customers?${params.toString()}`,
       );
@@ -1624,7 +1803,9 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const matches = (customers.data?.customers ?? []).filter(
     (customer) => !isUnrecordedName(customer.name),
   );
-  const canAddCustomer = !search || (customers.isSuccess && matches.length === 0);
+  const searching = q.trim() !== search || customers.isPending;
+  const singleMatch = search && !searching && customers.data?.total === 1 ? matches[0] : undefined;
+  const canAddCustomer = !q.trim() || (!searching && customers.isSuccess && matches.length === 0);
   const create = useMutation({
     mutationFn: async (selectedId: string | undefined) => {
       let id = selectedId;
@@ -1666,7 +1847,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       onSubmit={(event) => {
         event.preventDefault();
         if (create.isPending) return;
-        if (matches.length === 1) create.mutate(matches[0]?.id);
+        if (singleMatch) create.mutate(singleMatch.id);
         else if (canAddCustomer && walkIn.trim()) create.mutate(undefined);
       }}
     >
@@ -1676,48 +1857,74 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
           value={q}
           onChange={(event) => {
             setQ(event.target.value);
+            setPage(1);
             create.reset();
           }}
-          placeholder="Name, phone or book no."
+          placeholder="Name, phone, address or book no."
           autoFocus
           disabled={create.isPending}
         />
       </Field>
-      {!search ? (
-        <p className="text-sm text-muted-foreground">Type a name, phone, or book number.</p>
-      ) : null}
-      {search && customers.isPending ? (
+      {searching ? (
         <p role="status" className="text-sm text-muted-foreground">
           Searching customers…
         </p>
       ) : null}
-      {search && customers.error instanceof Error ? (
+      {customers.error instanceof Error ? (
         <p role="alert" className="text-sm text-destructive">
           {customers.error.message}
         </p>
       ) : null}
-      <div className="max-h-48 space-y-1 overflow-auto">
-        {matches.map((customer) => (
-          <button
-            key={customer.id}
-            type="button"
-            className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
-            disabled={create.isPending}
-            onClick={() => create.mutate(customer.id)}
-          >
-            {customerMatchLabel(customer)}
-          </button>
-        ))}
-        {search && customers.isSuccess && matches.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No match. Add them below.</p>
-        ) : null}
-        {customers.data && customers.data.total > customers.data.customers.length ? (
-          <p className="text-sm text-muted-foreground">
-            Showing {customers.data.customers.length} of {customers.data.total}. Type more of the
-            name or phone.
-          </p>
-        ) : null}
-      </div>
+      {!searching && matches.length > 0 ? (
+        <div className="max-h-96 overflow-auto rounded-xl border border-border bg-card">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Name</TableHead>
+                <TableHead>Address</TableHead>
+                <TableHead>Phone no.</TableHead>
+                <TableHead>Book no.</TableHead>
+                <TableHead className="text-right">Action</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {matches.map((customer) => (
+                <TableRow key={customer.id}>
+                  <TableCell className="font-medium">{customer.name}</TableCell>
+                  <TableCell>{customer.address}</TableCell>
+                  <TableCell>{customer.phone}</TableCell>
+                  <TableCell>{customer.bookNo}</TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`Open bill for ${customerMatchLabel(customer)}`}
+                      disabled={create.isPending}
+                      onClick={() => create.mutate(customer.id)}
+                    >
+                      Open bill
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      ) : null}
+      {!searching && customers.isSuccess && matches.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No matching customers.</p>
+      ) : null}
+      {!searching && customers.data ? (
+        <ListFooter
+          page={page}
+          total={customers.data.total}
+          shown={matches.length}
+          onPage={(nextPage) => {
+            if (!create.isPending) setPage(nextPage);
+          }}
+        />
+      ) : null}
       <p className="text-sm text-muted-foreground">
         Name and phone, only when the search has no match.
       </p>
@@ -1757,7 +1964,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       <Button
         type="submit"
         className="rounded-full"
-        disabled={create.isPending || (matches.length !== 1 && (!canAddCustomer || !walkIn.trim()))}
+        disabled={create.isPending || (!singleMatch && (!canAddCustomer || !walkIn.trim()))}
       >
         {create.isPending ? "Opening…" : "Open bill"}
       </Button>
