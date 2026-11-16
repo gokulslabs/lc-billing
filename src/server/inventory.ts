@@ -76,87 +76,59 @@ inventory.get("/barcodes", async (c) => {
     quantity = parsedQuantity.data.quantity;
   }
   const starting = parsedStarting.data.starting;
+  const code = starting.toUpperCase();
   const catalogue = await loadCatalogue();
   if (!catalogue) return c.json({ error: "Could not load product prices." }, 500);
+
+  const { data: stockRows, error: stockError } = await supabaseAdmin
+    .from("inventory_items")
+    .select("inventory_no, product_id, quantity, received_quantity")
+    .in("inventory_no", [starting, code]);
+  if (stockError) return c.json({ error: "Could not look up that inventory number." }, 500);
+  const stock =
+    stockRows?.find((row) => row.inventory_no === starting) ??
+    stockRows?.find((row) => row.inventory_no === code);
+
+  if (stock) {
+    const product = catalogue.get(stock.product_id);
+    if (!product) return c.json({ error: "Could not load selling prices for these labels." }, 500);
+    const stockQuantity = Number(stock.quantity);
+    const isPiece = product.unit === "NO" && Number.isInteger(stockQuantity);
+    const labelCount = quantity ?? (isPiece ? stockQuantity : 1);
+    if (labelCount === 0) {
+      return c.json(
+        { error: "No pieces remain. Enter a manual label count to reprint this barcode." },
+        400,
+      );
+    }
+    if (labelCount > 200) {
+      return c.json(
+        {
+          error: `This inventory number has ${labelCount} pieces. Enter up to 200 labels at a time.`,
+        },
+        400,
+      );
+    }
+    // A stock row holding several pieces has one scannable inventory number.
+    const sharesBarcode =
+      stockQuantity > 1 ||
+      Number(stock.received_quantity) > 1 ||
+      !isPiece ||
+      barcodeNumbers(stock.inventory_no, 1).length === 0;
+    if (quantity === undefined || labelCount === 1 || sharesBarcode) {
+      const numbers = Array.from({ length: labelCount }, () => stock.inventory_no);
+      return c.json({
+        numbers,
+        labels: numbers.map((number) => ({ number, price: product.price })),
+      });
+    }
+  }
+
   let numbers: string[] = [];
   let items = new Map<string, string>();
-  if (quantity === undefined) {
-    const normalizedStarting = starting.toUpperCase();
-    const exact = await supabaseAdmin
-      .from("inventory_items")
-      .select("inventory_no, product_id, quantity")
-      .eq("inventory_no", normalizedStarting)
-      .maybeSingle();
-    if (exact.error) return c.json({ error: "Could not look up that inventory number." }, 500);
-    const matchedInventory = exact.data;
-    if (matchedInventory) {
-      const product = catalogue.get(matchedInventory.product_id);
-      const stockQuantity = Number(matchedInventory.quantity);
-      const labelCount =
-        product?.unit === "NO" && Number.isInteger(stockQuantity) ? Math.max(1, stockQuantity) : 1;
-      if (labelCount > 200) {
-        return c.json(
-          {
-            error: `This inventory number has ${labelCount} pieces. Preview is limited to 200 labels at a time.`,
-          },
-          400,
-        );
-      }
-      const sequence = barcodeNumbers(matchedInventory.inventory_no, labelCount);
-      numbers = sequence.length > 0 ? sequence : [matchedInventory.inventory_no];
-      const { data: existing, error } = await supabaseAdmin
-        .from("inventory_items")
-        .select("inventory_no, product_id")
-        .in("inventory_no", numbers);
-      if (error) return c.json({ error: "Could not verify these inventory labels." }, 500);
-      if ((existing ?? []).some((row) => row.product_id !== matchedInventory.product_id)) {
-        return c.json({ error: "The consecutive inventory numbers include another product." }, 409);
-      }
-      items = new Map(numbers.map((number) => [number, matchedInventory.product_id]));
-    } else {
-      const code = normalizedStarting;
-      const { data: product, error: productError } = await supabaseAdmin
-        .from("products")
-        .select("id")
-        .eq("code", code)
-        .maybeSingle();
-      if (productError) return c.json({ error: "Could not look up that product code." }, 500);
-      if (!product)
-        return c.json({ error: "Enter a valid product code or inventory number." }, 404);
-      const loaded = await readAll<{ inventory_no: string; product_id: string }>((from, to) =>
-        supabaseAdmin
-          .from("inventory_items")
-          .select("inventory_no, product_id")
-          .eq("product_id", product.id)
-          .eq("status", "available")
-          .gt("quantity", 0)
-          .order("inventory_no")
-          .order("id")
-          .range(from, to),
-      );
-      if (!loaded) return c.json({ error: "Could not load this product's inventory labels." }, 500);
-      if (loaded.truncated)
-        return c.json({ error: "This product has too many labels to preview at once." }, 413);
-      if (loaded.rows.length === 0) {
-        return c.json(
-          { error: `No available inventory labels found for product code ${code}.` },
-          404,
-        );
-      }
-      if (loaded.rows.length > 200) {
-        return c.json(
-          {
-            error: `This product has ${loaded.rows.length} available labels. Preview is limited to 200 at a time.`,
-          },
-          400,
-        );
-      }
-      numbers = loaded.rows.map((row) => row.inventory_no);
-      items = new Map(loaded.rows.map((row) => [row.inventory_no, row.product_id]));
-    }
-  } else {
-    numbers = barcodeNumbers(starting, quantity);
-    let exactInventorySequence = false;
+  // Manual ranges starting at an individual piece still print distinct existing barcodes.
+  if (quantity !== undefined) {
+    numbers = barcodeNumbers(stock?.inventory_no ?? starting, quantity);
     if (numbers.length === quantity) {
       const { data, error } = await supabaseAdmin
         .from("inventory_items")
@@ -164,48 +136,47 @@ inventory.get("/barcodes", async (c) => {
         .in("inventory_no", numbers);
       if (error) return c.json({ error: "Could not load inventory for these labels." }, 500);
       items = new Map((data ?? []).map((item) => [item.inventory_no, item.product_id]));
-      exactInventorySequence = numbers.every((number) => items.has(number));
     }
+  }
 
-    if (!exactInventorySequence) {
-      const code = starting.toUpperCase();
-      const { data: product, error: productError } = await supabaseAdmin
-        .from("products")
-        .select("id")
-        .eq("code", code)
-        .maybeSingle();
-      if (productError) return c.json({ error: "Could not look up that product code." }, 500);
-      if (product) {
-        const { data, error } = await supabaseAdmin
-          .from("inventory_items")
-          .select("inventory_no, product_id")
-          .eq("product_id", product.id)
-          .order("inventory_no")
-          .order("id")
-          .limit(quantity);
-        if (error) return c.json({ error: "Could not load this product's inventory labels." }, 500);
-        const rows = data ?? [];
-        if (rows.length === 0) {
-          return c.json({ error: `No inventory labels found for product code ${code}.` }, 404);
-        }
-        numbers = rows.map((item) => item.inventory_no);
-        items = new Map(rows.map((item) => [item.inventory_no, item.product_id]));
-      } else if (numbers.length === quantity) {
-        const missing = numbers.filter((number) => !items.has(number));
-        const sample = missing.slice(0, 5).join(", ");
-        const more = missing.length > 5 ? ` and ${missing.length - 5} more` : "";
-        return c.json({ error: `Inventory numbers not found: ${sample}${more}.` }, 400);
-      } else {
-        return c.json(
-          { error: "Enter an inventory number such as IN0021288 or a product code." },
-          400,
-        );
-      }
+  if (numbers.length === 0 || numbers.some((number) => !items.has(number))) {
+    const { data: product, error: productError } = await supabaseAdmin
+      .from("products")
+      .select("id")
+      .eq("code", code)
+      .maybeSingle();
+    if (productError) return c.json({ error: "Could not look up that product code." }, 500);
+    if (product) {
+      const inventory = supabaseAdmin
+        .from("inventory_items")
+        .select("inventory_no, product_id")
+        .eq("product_id", product.id)
+        .order("inventory_no")
+        .order("id");
+      const { data, error } =
+        quantity === undefined
+          ? await inventory.eq("status", "available").gt("quantity", 0).limit(201)
+          : await inventory.limit(quantity);
+      if (error) return c.json({ error: "Could not load this product's inventory labels." }, 500);
+      const rows = data ?? [];
+      if (rows.length === 0)
+        return c.json({ error: `No inventory labels found for product code ${code}.` }, 404);
+      if (rows.length > 200)
+        return c.json({ error: "Enter up to 200 labels at a time for this product." }, 400);
+      numbers = rows.map((item) => item.inventory_no);
+      items = new Map(rows.map((item) => [item.inventory_no, item.product_id]));
+    } else if (numbers.length > 0) {
+      const missing = numbers.filter((number) => !items.has(number));
+      const sample = missing.slice(0, 5).join(", ");
+      const more = missing.length > 5 ? ` and ${missing.length - 5} more` : "";
+      return c.json({ error: `Inventory numbers not found: ${sample}${more}.` }, 400);
+    } else {
+      return c.json({ error: "Enter a valid product code or inventory number." }, 404);
     }
   }
 
   const labels = numbers.flatMap((number) => {
-    const product = catalogue?.get(items.get(number) ?? "");
+    const product = catalogue.get(items.get(number) ?? "");
     return product ? [{ number, price: product.price }] : [];
   });
   if (labels.length !== numbers.length) {

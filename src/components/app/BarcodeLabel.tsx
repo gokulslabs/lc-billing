@@ -36,11 +36,11 @@ export function LabelSheet({ labels }: { labels: BarcodeLabel[] }) {
     <div className="barcode-print-area labels w-[500px] bg-white text-black">
       <table className="w-full border-collapse text-center">
         <tbody>
-          {rows.map((row) => (
-            <tr key={row.map((label) => label.number).join("-")}>
-              {row.map((label) => (
+          {rows.map((row, rowIndex) => (
+            <tr key={rowIndex}>
+              {row.map((label, columnIndex) => (
                 <td
-                  key={label.number}
+                  key={columnIndex}
                   className="w-1/3 break-inside-avoid px-2 py-2 align-top font-bold"
                 >
                   <p className="text-xs">LADIES COLLECTION</p>

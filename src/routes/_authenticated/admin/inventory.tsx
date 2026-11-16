@@ -625,40 +625,35 @@ function StockDialog({
 
 function BarcodePanel() {
   const [starting, setStarting] = useState("");
+  const [quantity, setQuantity] = useState("");
   const [labels, setLabels] = useState<BarcodeLabel[]>([]);
-  const printAfterLoad = useRef(false);
   const print = useMutation({
-    mutationFn: () => {
+    mutationFn: (_shouldPrint: boolean) => {
       const params = new URLSearchParams({ starting: starting.trim() });
+      if (quantity) params.set("quantity", quantity);
       return apiFetch<{ numbers: string[]; labels: BarcodeLabel[] }>(
         `/api/inventory/barcodes?${params.toString()}`,
       );
     },
-    onSuccess: (result) => {
-      const shouldPrint = printAfterLoad.current;
-      printAfterLoad.current = false;
+    onSuccess: (result, shouldPrint) => {
       flushSync(() => setLabels(result.labels));
       if (shouldPrint) printBarcodeSheet(result.labels);
     },
-    onError: (error: Error) => {
-      printAfterLoad.current = false;
-      toast.error(error.message);
-    },
+    onError: (error: Error) => toast.error(error.message),
   });
 
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Enter a product code to show a label for every available inventory number for that product,
-        or an inventory number to show labels based on that stock's quantity. Review the inventory
-        numbers and prices below, then click Print. Showing labels does not add or change stock.
+        Leave label count blank to use the inventory quantity or show all available labels for a
+        product code. Enter a count to print a specific number of labels.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
         onSubmit={(event) => {
           event.preventDefault();
           setLabels([]);
-          print.mutate();
+          print.mutate(false);
         }}
       >
         <Field label="Product code or inventory no." id="barcode-start">
@@ -671,7 +666,25 @@ function BarcodePanel() {
             }}
             className="w-48"
             placeholder="SR-0002 or IN0021288"
+            disabled={print.isPending}
             required
+          />
+        </Field>
+        <Field label="Label count (optional)" id="barcode-quantity">
+          <Input
+            id="barcode-quantity"
+            type="number"
+            min={1}
+            max={200}
+            step={1}
+            value={quantity}
+            onChange={(event) => {
+              setQuantity(event.target.value);
+              setLabels([]);
+            }}
+            className="w-36"
+            placeholder="Auto"
+            disabled={print.isPending}
           />
         </Field>
         <Button type="submit" className="rounded-full" disabled={print.isPending}>
@@ -682,10 +695,10 @@ function BarcodePanel() {
           variant="outline"
           className="rounded-full"
           disabled={print.isPending}
-          onClick={() => {
+          onClick={(event) => {
+            if (!event.currentTarget.form?.reportValidity()) return;
             if (labels.length === 0) {
-              printAfterLoad.current = true;
-              print.mutate();
+              print.mutate(true);
               return;
             }
             printBarcodeSheet(labels);
