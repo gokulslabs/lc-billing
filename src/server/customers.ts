@@ -43,12 +43,13 @@ customers.get("/lookup", async (c) => {
 
 customers.get("/", async (c) => {
   const q = (c.req.query("q") ?? "").trim().slice(0, 80);
-  const safe = q.replace(/[%_,]/g, "");
+  const escaped = q.replace(/[\\%_]/g, "\\$&");
+  const pattern = `"%${escaped.replace(/[\\"]/g, "\\$&")}%"`;
   const page = readPage(c.req.query("page"));
   const sort = c.req.query("sort");
   const column = sort === "address" || sort === "phone" || sort === "book_no" ? sort : "name";
   const ascending = c.req.query("dir") !== "desc";
-  const picker = c.req.query("picker") === "1" && Boolean(safe);
+  const picker = c.req.query("picker") === "1" && Boolean(q);
   const exporting = c.req.query("export") === "1";
   const notRecorded = c.req.query("filter") === "not-recorded";
   if (exporting) {
@@ -61,9 +62,9 @@ customers.get("/", async (c) => {
         .order(column, { ascending, nullsFirst: false })
         .order("id");
       if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
-      const filtered = safe
+      const filtered = q
         ? ranked.or(
-            `name.ilike.%${safe}%,phone.ilike.%${safe}%,book_no.ilike.%${safe}%,address.ilike.%${safe}%`,
+            `name.ilike.${pattern},phone.ilike.${pattern},book_no.ilike.${pattern},address.ilike.${pattern}`,
           )
         : ranked;
       return filtered.range(from, to);
@@ -79,8 +80,8 @@ customers.get("/", async (c) => {
     .order("id");
   if (notRecorded) ranked.eq("name", UNRECORDED_NAME);
   const fields = picker ? ["name", "phone", "book_no"] : ["name", "phone", "book_no", "address"];
-  const filtered = safe
-    ? ranked.or(fields.map((field) => `${field}.ilike.%${safe}%`).join(","))
+  const filtered = q
+    ? ranked.or(fields.map((field) => `${field}.ilike.${pattern}`).join(","))
     : ranked;
   const { data, error, count } = await filtered.range(from, to);
   if (error) return c.json({ error: "Could not load customers." }, 500);

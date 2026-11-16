@@ -91,7 +91,7 @@ function SalesPage() {
           <div>
             <h1 className="text-4xl font-semibold">New bill</h1>
             <p className="mt-2 text-sm text-muted-foreground">
-              Search for someone who has already been in. A new name is only for a first visit.
+              Search for a customer and click their name to open a bill.
             </p>
           </div>
           <Button variant="outline" className="rounded-full" onClick={() => setList(true)}>
@@ -1604,21 +1604,18 @@ function CancelForm({
 
 function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [q, setQ] = useState("");
-  const [customerId, setCustomerId] = useState("");
   const [walkIn, setWalkIn] = useState("");
   const [phone, setPhone] = useState("");
   useUnsavedWork(
     "new-bill",
-    q.trim().length > 0 ||
-      customerId.length > 0 ||
-      walkIn.trim().length > 0 ||
-      phone.trim().length > 0,
+    q.trim().length > 0 || walkIn.trim().length > 0 || phone.trim().length > 0,
   );
+  const search = q.trim();
   const customers = useQuery({
-    queryKey: ["customers", "bill", q],
-    enabled: q.trim().length > 0,
+    queryKey: ["customers", "bill", search],
+    enabled: Boolean(search),
     queryFn: () => {
-      const params = new URLSearchParams({ q: q.trim(), picker: "1" });
+      const params = new URLSearchParams({ q: search, picker: "1" });
       return apiFetch<{ customers: Customer[]; total: number }>(
         `/api/customers?${params.toString()}`,
       );
@@ -1627,10 +1624,10 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
   const matches = (customers.data?.customers ?? []).filter(
     (customer) => !isUnrecordedName(customer.name),
   );
+  const canAddCustomer = !search || (customers.isSuccess && matches.length === 0);
   const create = useMutation({
-    mutationFn: async () => {
-      let id = customerId || (matches.length === 1 ? (matches[0]?.id ?? "") : "");
-      if (!id && matches.length > 1) throw new Error("Tap the customer in the list.");
+    mutationFn: async (selectedId: string | undefined) => {
+      let id = selectedId;
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
         if (phone.trim()) {
@@ -1660,14 +1657,7 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
         body: JSON.stringify({ customerId: id }),
       });
     },
-    onSuccess: (result) => {
-      setQ("");
-      setCustomerId("");
-      setWalkIn("");
-      setPhone("");
-      onCreated(result.invoice.id);
-    },
-    onError: (error: Error) => toast.error(error.message),
+    onSuccess: (result) => onCreated(result.invoice.id),
   });
 
   return (
@@ -1675,7 +1665,9 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       className="space-y-4"
       onSubmit={(event) => {
         event.preventDefault();
-        create.mutate();
+        if (create.isPending) return;
+        if (matches.length === 1) create.mutate(matches[0]?.id);
+        else if (canAddCustomer && walkIn.trim()) create.mutate(undefined);
       }}
     >
       <Field label="Find customer" id="bill-customer-search">
@@ -1684,31 +1676,39 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
           value={q}
           onChange={(event) => {
             setQ(event.target.value);
-            setCustomerId("");
+            create.reset();
           }}
           placeholder="Name, phone or book no."
           autoFocus
+          disabled={create.isPending}
         />
       </Field>
-      {!q.trim() ? (
+      {!search ? (
         <p className="text-sm text-muted-foreground">Type a name, phone, or book number.</p>
+      ) : null}
+      {search && customers.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Searching customers…
+        </p>
+      ) : null}
+      {search && customers.error instanceof Error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {customers.error.message}
+        </p>
       ) : null}
       <div className="max-h-48 space-y-1 overflow-auto">
         {matches.map((customer) => (
           <button
             key={customer.id}
             type="button"
-            className={`block w-full rounded-lg px-3 py-2 text-left text-sm ${customerId === customer.id ? "bg-accent" : "hover:bg-muted"}`}
-            onClick={() => {
-              setCustomerId(customer.id);
-              setWalkIn("");
-              setPhone("");
-            }}
+            className="block w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted disabled:opacity-50"
+            disabled={create.isPending}
+            onClick={() => create.mutate(customer.id)}
           >
             {customerMatchLabel(customer)}
           </button>
         ))}
-        {q.trim() && customers.data && matches.length === 0 ? (
+        {search && customers.isSuccess && matches.length === 0 ? (
           <p className="text-sm text-muted-foreground">No match. Add them below.</p>
         ) : null}
         {customers.data && customers.data.total > customers.data.customers.length ? (
@@ -1727,11 +1727,11 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
           value={walkIn}
           onChange={(event) => {
             setWalkIn(event.target.value);
-            setCustomerId("");
+            create.reset();
           }}
           placeholder="Name"
           maxLength={120}
-          disabled={Boolean(customerId) || matches.length > 0}
+          disabled={!canAddCustomer || create.isPending}
         />
       </Field>
       <Field label="Phone" id="bill-walk-in-phone">
@@ -1741,10 +1741,24 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
           onChange={(event) => setPhone(event.target.value)}
           placeholder="Optional"
           maxLength={20}
-          disabled={Boolean(customerId) || matches.length > 0}
+          disabled={!canAddCustomer || create.isPending}
         />
       </Field>
-      <Button type="submit" className="rounded-full" disabled={create.isPending}>
+      {create.isPending ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Opening bill…
+        </p>
+      ) : null}
+      {create.error instanceof Error ? (
+        <p role="alert" className="text-sm text-destructive">
+          {create.error.message}
+        </p>
+      ) : null}
+      <Button
+        type="submit"
+        className="rounded-full"
+        disabled={create.isPending || (matches.length !== 1 && (!canAddCustomer || !walkIn.trim()))}
+      >
         {create.isPending ? "Opening…" : "Open bill"}
       </Button>
     </form>
