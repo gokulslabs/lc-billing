@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useRef, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -176,6 +176,7 @@ function ExpenseTable({
   const columns = expenseColumns(sheet);
   const [editing, setEditing] = useState<string | null>(null);
   const [date, setDate] = useState(entryDate);
+  const dateInput = useRef<HTMLInputElement>(null);
   const inputColumns = sheet === "target" ? columns.slice(2) : columns;
   const [cells, setCells] = useState<string[]>(Array(inputColumns.length).fill(""));
   const totals = sheet === "ledger" ? expenseLedgerTotals(records) : null;
@@ -212,57 +213,19 @@ function ExpenseTable({
   function edit(r: ExpenseRecord) {
     setEditing(r.id);
     setDate(r.entryDate);
-    setCells([...r.details, ...Array(inputColumns.length).fill("")].slice(0, inputColumns.length));
+    setCells(inputColumns.map((_, index) => r.details[index] ?? ""));
+    dateInput.current?.focus();
   }
   return (
     <section className="space-y-4">
-      <form onSubmit={submit} className="rounded-2xl border bg-card p-4">
-        <div className="mb-3 flex flex-wrap items-center gap-3">
-          <h2 className="text-lg font-semibold">{editing ? "Edit row" : "Add row"}</h2>
-          <label className="text-sm">
-            Date
-            <Input
-              type="date"
-              required
-              value={date}
-              onChange={(e) => setDate(e.target.value)}
-              className="mt-1"
-            />
-          </label>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {inputColumns.map((label, i) => (
-            <label key={`${label}-${i}`} className="text-sm">
-              {label}
-              <Input
-                className="mt-1"
-                value={cells[i] ?? ""}
-                onChange={(e) =>
-                  setCells((prev) => prev.map((v, n) => (n === i ? e.target.value : v)))
-                }
-              />
-            </label>
-          ))}
-        </div>
-        <div className="mt-4 flex gap-2">
-          <Button type="submit" disabled={save.isPending}>
-            {save.isPending ? "Saving…" : editing ? "Save changes" : "Add row"}
-          </Button>
-          {editing ? (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setEditing(null);
-                setCells(Array(inputColumns.length).fill(""));
-              }}
-            >
-              Cancel
-            </Button>
-          ) : null}
-        </div>
-      </form>
-      <div className="overflow-x-auto rounded-2xl border bg-card">
+      <h2 className="text-lg font-semibold" id={`${sheet}-entry-heading`}>
+        {editing ? "Edit row" : "Add row"}
+      </h2>
+      <form
+        onSubmit={submit}
+        aria-labelledby={`${sheet}-entry-heading`}
+        className="min-w-0 overflow-x-auto rounded-2xl border bg-card"
+      >
         <table className="w-full min-w-max text-sm">
           <thead className="bg-muted/50">
             <tr>
@@ -276,6 +239,59 @@ function ExpenseTable({
             </tr>
           </thead>
           <tbody>
+            <tr className="border-t bg-muted/20">
+              {sheet === "target" ? <td className="p-2" /> : null}
+              <td className="p-2">
+                <Input
+                  ref={dateInput}
+                  aria-label="Entry date"
+                  type="date"
+                  required
+                  value={date}
+                  onChange={(e) => setDate(e.target.value)}
+                  className="min-w-36"
+                />
+              </td>
+              {inputColumns.map((label, index) => (
+                <td key={`${label}-${index}`} className="p-2">
+                  <Input
+                    aria-label={
+                      sheet === "ledger" && label === "CASH"
+                        ? index === 2
+                          ? "Cash expenses"
+                          : "Cash receipts"
+                        : label
+                    }
+                    className="min-w-24"
+                    value={cells[index] ?? ""}
+                    onChange={(e) =>
+                      setCells((previous) =>
+                        previous.map((value, cell) => (cell === index ? e.target.value : value)),
+                      )
+                    }
+                  />
+                </td>
+              ))}
+              <td className="whitespace-nowrap p-2">
+                <div className="flex gap-2">
+                  <Button type="submit" disabled={save.isPending}>
+                    {save.isPending ? "Saving…" : editing ? "Save changes" : "Add row"}
+                  </Button>
+                  {editing ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => {
+                        setEditing(null);
+                        setCells(Array(inputColumns.length).fill(""));
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  ) : null}
+                </div>
+              </td>
+            </tr>
             {records.map((r, index) => (
               <tr key={r.id} className="border-t">
                 {sheet === "ledger" ? <td className="p-3">{r.entryDate}</td> : null}
@@ -288,10 +304,11 @@ function ExpenseTable({
                   </td>
                 ))}
                 <td className="whitespace-nowrap p-3">
-                  <Button size="sm" variant="outline" onClick={() => edit(r)}>
+                  <Button type="button" size="sm" variant="outline" onClick={() => edit(r)}>
                     Edit
                   </Button>{" "}
                   <Button
+                    type="button"
                     size="sm"
                     variant="outline"
                     onClick={() => remove.mutate(r.id)}
@@ -347,7 +364,7 @@ function ExpenseTable({
         {!records.length ? (
           <p className="border-t p-6 text-sm text-muted-foreground">{emptyLabel}</p>
         ) : null}
-      </div>
+      </form>
     </section>
   );
 }
