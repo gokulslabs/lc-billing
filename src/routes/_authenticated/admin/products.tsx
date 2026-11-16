@@ -182,8 +182,9 @@ function ProductPanel({
           <Input
             value={q}
             onChange={(event) => onQ(event.target.value)}
-            placeholder="Search name or code"
-            className="w-full sm:w-56"
+            placeholder="Name, product code or inventory no."
+            aria-label="Search products by name, product code or inventory number"
+            className="w-full sm:w-72"
           />
           <Select
             value={groupId || "all"}

@@ -158,19 +158,34 @@ products.get("/", async (c) => {
   const safe = q.replace(/[%_,]/g, "");
   const picker = c.req.query("picker") === "1";
   const sort = c.req.query("sort");
+  const searchInventory = q.length > 0 && q.length <= 40;
+  const columns =
+    "id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)";
+
+  function matchingProducts() {
+    let query = supabaseAdmin
+      .from("products")
+      .select(
+        searchInventory ? `${columns},matching_stock:inventory_items()` : columns,
+        picker ? undefined : { count: "exact" },
+      );
+    if (groupId) query = query.eq("group_id", groupId);
+
+    const filters = safe ? [`name.ilike.%${safe}%`, `code.ilike.%${safe}%`] : [];
+    if (searchInventory) {
+      query = query.in("matching_stock.inventory_no", [q, q.toUpperCase()]);
+      filters.push("matching_stock.not.is.null");
+    }
+    return filters.length ? query.or(filters.join(",")) : query;
+  }
+
   if (picker) {
     const loaded = await readAll<ProductRow>((from, to) => {
-      const source = supabaseAdmin
-        .from("products")
-        .select(
-          "id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)",
-        );
+      const source = matchingProducts();
       const ranked = sort
         ? rankProducts(source, sort)
         : source.order("created_at", { ascending: false }).order("id", { ascending: false });
-      const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;
-      const filtered = safe ? grouped.or(`name.ilike.%${safe}%,code.ilike.%${safe}%`) : grouped;
-      return filtered.range(from, to);
+      return ranked.range(from, to).overrideTypes<ProductRow[], { merge: false }>();
     });
     if (!loaded) return c.json({ error: "Could not load products." }, 500);
     const rows = loaded.rows.flatMap((row) => {
@@ -182,21 +197,12 @@ products.get("/", async (c) => {
 
   const page = readPage(c.req.query("page"));
   const { from, to } = pageRange(page);
-  const ranked = rankProducts(
-    supabaseAdmin
-      .from("products")
-      .select(
-        "id, group_id, code, name, unit, price, product_groups!inner(name, discount_percent)",
-        { count: "exact" },
-      ),
-    sort,
-  );
-  const grouped = groupId ? ranked.eq("group_id", groupId) : ranked;
-  const filtered = safe ? grouped.or(`name.ilike.%${safe}%,code.ilike.%${safe}%`) : grouped;
-  const { data, error, count } = await filtered.range(from, to);
+  const { data, error, count } = await rankProducts(matchingProducts(), sort)
+    .range(from, to)
+    .overrideTypes<ProductRow[], { merge: false }>();
   if (error) return c.json({ error: "Could not load products." }, 500);
 
-  const rows = ((data ?? []) as ProductRow[]).flatMap((row) => {
+  const rows = (data ?? []).flatMap((row) => {
     const group = byId.get(row.group_id);
     if (!group) return [];
     return [toProduct(row, group)];
