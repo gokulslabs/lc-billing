@@ -94,17 +94,17 @@ inventory.get("/barcodes", async (c) => {
     if (!product) return c.json({ error: "Could not load selling prices for these labels." }, 500);
     const stockQuantity = Number(stock.quantity);
     const isPiece = product.unit === "NO" && Number.isInteger(stockQuantity);
-    const labelCount = quantity ?? (isPiece ? stockQuantity : 1);
+    const labelCount = quantity ?? (Number.isInteger(stockQuantity) ? stockQuantity : 1);
     if (labelCount === 0) {
       return c.json(
-        { error: "No pieces remain. Enter a manual label count to reprint this barcode." },
+        { error: "No stock remains. Enter a manual label count to reprint this barcode." },
         400,
       );
     }
     if (labelCount > 200) {
       return c.json(
         {
-          error: `This inventory number has ${labelCount} pieces. Enter up to 200 labels at a time.`,
+          error: `This inventory number defaults to ${labelCount} labels. Enter up to 200 at a time.`,
         },
         400,
       );
