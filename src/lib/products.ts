@@ -47,7 +47,7 @@ export const productSchema = z.object({
     .trim()
     .max(40, "Product code is too long.")
     .transform((value) => value.toUpperCase()),
-  unit: z.enum(UNITS, { message: "Choose pieces or metres." }),
+  unit: z.enum(UNITS, { message: "Choose NO or MT." }),
   price: z.number().min(0, "Price cannot be negative.").max(9_999_999, "Price is too large."),
 });
 
@@ -83,8 +83,8 @@ export function productSort(value: string | undefined): {
 }
 
 export function unitLabel(unit: string): string {
-  if (unit === "NO") return "Piece";
-  if (unit === "MT") return "Metre";
+  if (unit === "NO") return "NO";
+  if (unit === "MT") return "MT";
   return unit;
 }
 

@@ -40,7 +40,7 @@ describe("slipPlan", () => {
 describe("quantityForUnit", () => {
   it("keeps metres fractional and pieces whole", () => {
     expect(quantityForUnit("MT", 2.5)).toBeNull();
-    expect(quantityForUnit("NO", 2.5)).toBe("Pieces must be a whole number.");
+    expect(quantityForUnit("NO", 2.5)).toBe("NO must be a whole number.");
   });
 });
 

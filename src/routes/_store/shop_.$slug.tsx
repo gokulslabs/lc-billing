@@ -95,7 +95,7 @@ function ProductDetail({ product }: { product: StoreProduct }) {
           )}
           <div className="mt-6">
             <p className="mb-2 text-sm font-medium">
-              {product.unit === "MT" ? "Metres" : "Quantity"}
+              {product.unit === "MT" ? "MT" : "NO"}
             </p>
             <Quantity value={selected} onChange={setQuantity} max={remaining} />
           </div>

@@ -15,7 +15,7 @@ export function Price({ product }: { product: StoreProduct }) {
       {product.discountPercent > 0 && (
         <del className="text-sm text-muted-foreground">{formatRupees(product.price)}</del>
       )}
-      {product.unit === "MT" && <span className="text-xs text-muted-foreground">/ metre</span>}
+      <span className="text-xs text-muted-foreground">/ {product.unit === "MT" ? "MT" : "NO"}</span>
     </div>
   );
 }

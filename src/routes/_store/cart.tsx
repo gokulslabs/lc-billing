@@ -60,7 +60,7 @@ function CartPage() {
                   </Link>
                   <p className="mb-2 text-sm text-muted-foreground">
                     {formatRupees(salePrice(product))}
-                    {product.unit === "MT" ? " / metre" : " each"}
+                    {product.unit === "MT" ? " / MT" : " / NO"}
                   </p>
                   <Quantity
                     value={quantity}

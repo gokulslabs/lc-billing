@@ -124,7 +124,7 @@ inventory.get("/barcodes", async (c) => {
     if (labelCount > 200) {
       return c.json(
         {
-          error: `This inventory number has ${labelCount} pieces. Enter up to 200 labels at a time.`,
+          error: `This inventory number has ${labelCount} NO. Enter up to 200 labels at a time.`,
         },
         400,
       );

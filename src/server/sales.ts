@@ -453,10 +453,10 @@ sales.post("/:id/lines", async (c) => {
   if (quantityError) return c.json({ error: quantityError }, 400);
   if (product.unit === "NO") {
     const already = await pieceAlreadyBilled(stock.id);
-    if (already === "error") return c.json({ error: "Could not check this piece." }, 500);
+    if (already === "error") return c.json({ error: "Could not check this NO." }, 500);
     if (already.length > 0) {
       const label = already.length === 1 ? `bill ${already[0]}` : `bills ${already.join(", ")}`;
-      return c.json({ error: `This piece is already on ${label}.` }, 400);
+      return c.json({ error: `This NO is already on ${label}.` }, 400);
     }
   }
   const available = Number(stock.quantity);
