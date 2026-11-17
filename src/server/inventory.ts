@@ -63,6 +63,25 @@ function sortInventoryQuery<
 const inventory = new Hono<Env>();
 inventory.use("*", requireShop);
 
+async function pricesForNumbers(
+  numbers: string[],
+  fallbackPrice: number,
+  catalogue: Map<string, CatalogueProduct>,
+): Promise<{ number: string; price: number }[] | null> {
+  const { data, error } = await supabaseAdmin
+    .from("inventory_items")
+    .select("inventory_no, product_id")
+    .in("inventory_no", numbers);
+  if (error) return null;
+  const prices = new Map(
+    (data ?? []).flatMap((row) => {
+      const product = catalogue.get(row.product_id);
+      return product ? [[row.inventory_no, product.price] as const] : [];
+    }),
+  );
+  return numbers.map((number) => ({ number, price: prices.get(number) ?? fallbackPrice }));
+}
+
 inventory.get("/barcodes", async (c) => {
   const rawQuantity = c.req.query("quantity");
   const parsedStarting = barcodeStartingSchema.safeParse({
@@ -82,7 +101,7 @@ inventory.get("/barcodes", async (c) => {
 
   const { data: stockRows, error: stockError } = await supabaseAdmin
     .from("inventory_items")
-    .select("inventory_no, product_id, quantity, received_quantity")
+    .select("inventory_no, product_id, quantity")
     .in("inventory_no", [starting, code]);
   if (stockError) return c.json({ error: "Could not look up that inventory number." }, 500);
   const stock =
@@ -93,9 +112,10 @@ inventory.get("/barcodes", async (c) => {
     const product = catalogue.get(stock.product_id);
     if (!product) return c.json({ error: "Could not load selling prices for these labels." }, 500);
     const stockQuantity = Number(stock.quantity);
-    const isPiece = product.unit === "NO" && Number.isInteger(stockQuantity);
-    const labelCount = quantity ?? (Number.isInteger(stockQuantity) ? stockQuantity : 1);
-    if (labelCount === 0) {
+    // Fabric quantity is metres on one roll. Counting those up would reuse other items' numbers.
+    const countsUp = Number.isInteger(stockQuantity) && product.groupName !== "FABRICS";
+    const labelCount = quantity ?? (countsUp ? stockQuantity : stockQuantity > 0 ? 1 : 0);
+    if (labelCount <= 0) {
       return c.json(
         { error: "No stock remains. Enter a manual label count to reprint this barcode." },
         400,
@@ -104,24 +124,24 @@ inventory.get("/barcodes", async (c) => {
     if (labelCount > 200) {
       return c.json(
         {
-          error: `This inventory number defaults to ${labelCount} labels. Enter up to 200 at a time.`,
+          error: `This inventory number has ${labelCount} pieces. Enter up to 200 labels at a time.`,
         },
         400,
       );
     }
-    // A stock row holding several pieces has one scannable inventory number.
-    const sharesBarcode =
-      stockQuantity > 1 ||
-      Number(stock.received_quantity) > 1 ||
-      !isPiece ||
-      barcodeNumbers(stock.inventory_no, 1).length === 0;
-    if (quantity === undefined || labelCount === 1 || sharesBarcode) {
-      const numbers = Array.from({ length: labelCount }, () => stock.inventory_no);
+    if (labelCount === 1) {
       return c.json({
-        numbers,
-        labels: numbers.map((number) => ({ number, price: product.price })),
+        numbers: [stock.inventory_no],
+        labels: [{ number: stock.inventory_no, price: product.price }],
       });
     }
+    const numbers = barcodeNumbers(stock.inventory_no, labelCount);
+    if (numbers.length !== labelCount) {
+      return c.json({ error: "This inventory number cannot count up for more labels." }, 400);
+    }
+    const labels = await pricesForNumbers(numbers, product.price, catalogue);
+    if (!labels) return c.json({ error: "Could not load selling prices for these labels." }, 500);
+    return c.json({ numbers, labels });
   }
 
   let numbers: string[] = [];

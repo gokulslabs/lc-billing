@@ -645,8 +645,9 @@ function BarcodePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Leave label count blank to use the inventory quantity or show all available labels for a
-        product code. Enter a count to print a specific number of labels.
+        Any inventory number prints one label for each piece still in stock, counting up from that
+        number. Quantity 1 prints that number once. Fabric prints once, because its quantity is
+        metres. A product code lists every number for that code.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
