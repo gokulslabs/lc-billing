@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { expenseLedgerTotals, type ExpenseRecord } from "./expenses";
+import { expenseLedgerTotals, expenseWhatsAppUrl, type ExpenseRecord } from "./expenses";
 
 describe("expenseLedgerTotals", () => {
   it("calculates the Excel hand-cash footer from detail rows only", () => {
@@ -56,6 +56,15 @@ describe("expenseLedgerTotals", () => {
       },
       { id: "4", sheet: "target", entryDate: "2026-11-14", details: ["", "", "", "", "", "9999"] },
     ];
+    const url = expenseWhatsAppUrl(records, "14-11-2026");
+    const text = decodeURIComponent(url!.split("text=")[1]!);
+    expect(text).toContain("Ladies Collections\nExpenses 14-11-2026");
+    expect(text).toContain("TEA\nCash: 150\nCash receipts: 11,880");
+    expect(text).toContain("CHEQUE\nMam GPay / Cheque: 221891 , CHEQUE NO : 106646");
+    expect(text).not.toContain("TOT EXPENSES\n");
+    expect(text).toContain("Hand cash: 14,253");
+    expect(url!.startsWith("https://wa.me/?text=")).toBe(true);
+
     expect(expenseLedgerTotals(records)).toEqual({
       gpayCheque: 223891,
       cashExpenses: 2950,

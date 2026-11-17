@@ -3,7 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { expenseColumns, expenseLedgerTotals, type ExpenseRecord } from "@/lib/expenses";
+import {
+  expenseColumns,
+  expenseLedgerTotals,
+  expenseWhatsAppUrl,
+  type ExpenseRecord,
+} from "@/lib/expenses";
 import { expenseExportSheets } from "@/lib/expenses-export";
 import { shopToday } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
@@ -97,6 +102,26 @@ function ExpensesPage() {
             className="mt-1 w-full"
           />
         </label>
+        <Button
+          type="button"
+          variant="outline"
+          className="rounded-full"
+          onClick={() => {
+            const period = viewMode === "day" ? slashDate(viewDate) : month;
+            const url = expenseWhatsAppUrl(rows("ledger"), period);
+            if (!url) {
+              toast.error(
+                viewMode === "day"
+                  ? "No expenses for this day to share."
+                  : "No expenses for this month to share.",
+              );
+              return;
+            }
+            window.open(url, "_blank", "noopener,noreferrer");
+          }}
+        >
+          WhatsApp
+        </Button>
         <ExportExcelButton
           filename={`expenses-${exportFrom}-to-${exportTo}`}
           load={async () => {
@@ -143,6 +168,10 @@ function ExpensesPage() {
   );
 }
 
+function slashDate(date: string): string {
+  const [year, month, day] = date.split("-");
+  return day && month && year ? `${day}-${month}-${year}` : date;
+}
 function lastDay(month: string): string {
   const [year = "1970", number = "1"] = month.split("-");
   return new Date(Date.UTC(Number(year), Number(number), 0)).toISOString().slice(0, 10);
