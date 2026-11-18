@@ -148,7 +148,7 @@ function Checkout() {
                     {product.name}{" "}
                     <span className="text-muted-foreground">
                       × {quantity}
-                      {product.unit === "MT" ? " m" : ""}
+                      {product.unit === "MT" ? " MT" : " NO"}
                     </span>
                   </span>
                   <span className="shrink-0 font-medium">{formatRupees(amount)}</span>

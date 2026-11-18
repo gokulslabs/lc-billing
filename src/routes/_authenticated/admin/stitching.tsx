@@ -15,6 +15,7 @@ import {
   type StitchingOrder,
   type StitchingProduct,
   type StitchingStatus,
+  measurementWhatsAppUrl,
 } from "@/lib/stitching";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import {
@@ -509,6 +510,7 @@ function OrderScreen({
   const [customerQuery, setCustomerQuery] = useState("");
   const [customerId, setCustomerId] = useState("");
   const [customerName, setCustomerName] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
   const [productId, setProductId] = useState("");
   const [bagNo, setBagNo] = useState("");
   const [orderedOn, setOrderedOn] = useState(localToday());
@@ -553,6 +555,7 @@ function OrderScreen({
     setSeen(order.id);
     setCustomerId(order.customerId);
     setCustomerName(order.customerName);
+    setCustomerPhone(order.customerPhone);
     setProductId(order.productId);
     setBagNo(order.bagNo ?? "");
     setOrderedOn(order.orderedOn);
@@ -727,6 +730,7 @@ function OrderScreen({
                   onClick={() => {
                     setCustomerId(customer.id);
                     setCustomerName(customer.name);
+                    setCustomerPhone(customer.phone ?? "");
                   }}
                 >
                   {customer.name}
@@ -850,16 +854,50 @@ function OrderScreen({
           ))}
         </fieldset>
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="text-lg font-semibold">Measurements</h2>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-full"
-              onClick={() => setMeasurements((current) => [...current, { label: "", value: "" }])}
-            >
-              Add row
-            </Button>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => {
+                  const garment =
+                    order?.productName ??
+                    products.data?.products.find((item) => item.id === productId)?.name ??
+                    "";
+                  const filled = measurements.some(
+                    (row) => row.label.trim().length > 0 && row.value.trim().length > 0,
+                  );
+                  const url = measurementWhatsAppUrl({
+                    customerName,
+                    phone: customerPhone,
+                    orderNo: order?.orderNo ?? "New",
+                    garment,
+                    measurements,
+                  });
+                  if (!url) {
+                    toast.error(
+                      filled
+                        ? "This customer has no mobile number."
+                        : "Enter this customer's measurements before sharing.",
+                    );
+                    return;
+                  }
+                  window.open(url, "_blank", "noopener,noreferrer");
+                }}
+              >
+                WhatsApp
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-full"
+                onClick={() => setMeasurements((current) => [...current, { label: "", value: "" }])}
+              >
+                Add row
+              </Button>
+            </div>
           </div>
           {measurements.map((row, index) => (
             <div key={index} className="grid grid-cols-2 gap-3">

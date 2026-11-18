@@ -229,7 +229,7 @@ function ProductPanel({
               return [
                 {
                   name: "Products",
-                  columns: ["Code", "Group", "Name", "Unit", "Price", "Group discount %"],
+                  columns: ["Code", "Group", "Name", "Measurement", "Price", "Group discount %"],
                   rows: data.products.map((product) => [
                     product.code,
                     product.groupName,
@@ -313,7 +313,7 @@ function ProductPanel({
                   <TableHead>Code</TableHead>
                   <TableHead>Name</TableHead>
                   <TableHead>Group</TableHead>
-                  <TableHead>Unit</TableHead>
+                  <TableHead>Measurement</TableHead>
                   <TableHead>Price</TableHead>
                   <TableHead>Discount</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
@@ -695,7 +695,7 @@ function ProductDialog({
               maxLength={40}
             />
           </Field>
-          <Field label="Unit" id="product-unit">
+          <Field label="Measurement" id="product-unit">
             <Select value={unit} onValueChange={(value) => setUnit(value as Unit)}>
               <SelectTrigger id="product-unit">
                 <SelectValue />

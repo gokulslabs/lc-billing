@@ -39,7 +39,66 @@ function amount(value: string): number {
   return match ? Number(match[0].replace(/,/g, "")) : 0;
 }
 
-export function expenseLedgerTotals(records: ExpenseRecord[]) {
+function isImportedFooter(record: ExpenseRecord): boolean {
+  const cells = record.details;
+  const label = (cells[0] ?? "").trim().toUpperCase();
+  const summaryLabel = (cells[5] ?? "").trim().toUpperCase();
+  return (
+    label === "TOT EXPENSES" ||
+    ["CASH RECIPETS", "CASH RECEIPTS", "CASH EXPENSES", "HAND CASH"].includes(summaryLabel)
+  );
+}
+
+const money = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+const shareLabels = [
+  "Mam GPay / Cheque",
+  "Cash",
+  "Income",
+  "Sales bill no",
+  "Stitching bill no",
+  "Cash receipts",
+  "Card",
+  "Savings account",
+  "Current account",
+  "Bill pending",
+  "Payment status",
+];
+
+export function expenseWhatsAppUrl(records: readonly ExpenseRecord[], period: string): string | null {
+  const rows = records.filter((record) => record.sheet === "ledger" && !isImportedFooter(record));
+  if (rows.length === 0) return null;
+  const lines = ["Ladies Collections", `Expenses ${period}`];
+  let previousDate = "";
+  for (const record of rows) {
+    if (record.entryDate !== previousDate) {
+      lines.push("", record.entryDate.split("-").reverse().join("-"));
+      previousDate = record.entryDate;
+    }
+    lines.push("", (record.details[0] ?? "").trim() || "Entry");
+    record.details.slice(1).forEach((value, index) => {
+      const text = value.trim();
+      if (!text) return;
+      lines.push(`${shareLabels[index]}: ${text}`);
+    });
+  }
+  const totals = expenseLedgerTotals(records);
+  lines.push(
+    "",
+    "Tot expenses",
+    `Mam GPay / Cheque: ${money.format(totals.gpayCheque)}`,
+    `Cash: ${money.format(totals.cashExpenses)}`,
+    `Cash receipts: ${money.format(totals.cashReceipts)}`,
+    `Card: ${money.format(totals.card)}`,
+    `Savings account: ${money.format(totals.savingsAccount)}`,
+    `Current account: ${money.format(totals.currentAccount)}`,
+    `Bill pending: ${money.format(totals.billPending)}`,
+    `Cash expenses: ${money.format(totals.cashExpenses)}`,
+    `Hand cash: ${money.format(totals.handCash)}`,
+  );
+  return `https://wa.me/?text=${encodeURIComponent(lines.join("\n"))}`;
+}
+
+export function expenseLedgerTotals(records: readonly ExpenseRecord[]) {
   const totals = {
     gpayCheque: 0,
     cashExpenses: 0,
@@ -51,16 +110,8 @@ export function expenseLedgerTotals(records: ExpenseRecord[]) {
     handCash: 0,
   };
   for (const record of records) {
-    if (record.sheet !== "ledger") continue;
+    if (record.sheet !== "ledger" || isImportedFooter(record)) continue;
     const cells = record.details;
-    const label = (cells[0] ?? "").trim().toUpperCase();
-    const summaryLabel = (cells[5] ?? "").trim().toUpperCase();
-    // Imported Excel footers contain pre-calculated totals; including them would count rows twice.
-    if (
-      label === "TOT EXPENSES" ||
-      ["CASH RECIPETS", "CASH RECEIPTS", "CASH EXPENSES", "HAND CASH"].includes(summaryLabel)
-    )
-      continue;
     totals.gpayCheque += amount(cells[1] ?? "");
     totals.cashExpenses += amount(cells[2] ?? "");
     totals.cashReceipts += amount(cells[6] ?? "");

@@ -183,7 +183,7 @@ function StockPanel() {
                 "Code",
                 "Product",
                 "Group",
-                "Unit",
+                "Measurement",
                 "Price",
                 "Quantity",
                 "Status",
@@ -353,7 +353,7 @@ function StockPanel() {
                   <TableHead>Code</TableHead>
                   <TableHead>Group</TableHead>
                   <TableHead>Product</TableHead>
-                  <TableHead>Unit</TableHead>
+                  <TableHead>Measurement</TableHead>
                   <TableHead>Rate</TableHead>
                   <TableHead>Qty</TableHead>
                   <TableHead>Status</TableHead>
@@ -515,7 +515,7 @@ function StockDialog({
         item
           ? "Stock updated."
           : created.length > 1
-            ? `${created.length} pieces added.`
+            ? `${created.length} ${created[0]?.unit === "MT" ? "MT" : "NO"} added.`
             : "Stock added.",
       );
       onSaved(created);
@@ -531,7 +531,7 @@ function StockDialog({
           <DialogDescription>
             {item
               ? "Quantity zero marks the number sold."
-              : "Choose an existing product, then enter its cost and quantity. The product code is shown for confirmation, and inventory numbers are assigned automatically. Pieces get one number each; metres stay on one number."}
+              : "Choose an existing product, then enter its cost and quantity. The product code is shown for confirmation, and inventory numbers are assigned automatically. NO gets one number each; MT stays on one number."}
           </DialogDescription>
         </DialogHeader>
         <form
@@ -645,8 +645,9 @@ function BarcodePanel() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
-        Leave label count blank to use the inventory quantity or show all available labels for a
-        product code. Enter a count to print a specific number of labels.
+        Any inventory number prints one label for each NO still in stock, counting up from that
+        number. Quantity 1 prints that number once. Fabric prints once, because its quantity is
+        MT. A product code lists every number for that code.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
@@ -867,8 +868,8 @@ function CurrentStockPanel() {
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
             {formatQty(totalQuantity)} on the shelf across{" "}
-            {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. A piece counts as 1 and
-            fabric counts as metres, so this is not the number of rows on the stock list. Sold
+            {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. NO counts as 1 and
+            fabric counts as MT, so this is not the number of rows on the stock list. Sold
             numbers stay on that list and are not in this total. Total stock value:{" "}
             <strong>{formatRupees(totalValue)}</strong>.
           </p>
@@ -1009,7 +1010,7 @@ function PurchasesPanel() {
                 "Supplier bill",
                 "Cost",
                 "Quantity",
-                "Unit",
+                "Measurement",
                 "Inventory nos.",
               ],
               rows: rows.map((row) => [

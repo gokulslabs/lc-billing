@@ -1296,7 +1296,7 @@ function LineForm({
         toast.success(`${next} added.`);
         onSaved();
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "Could not add that piece.");
+        toast.error(error instanceof Error ? error.message : "Could not add that NO.");
         if (newEntry) {
           adding.current = false;
           setBusy(false);

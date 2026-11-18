@@ -359,7 +359,7 @@ function VerificationList({ view }: { view: "verified" | "shortage" }) {
                   "Product",
                   "Group",
                   "Quantity",
-                  "Unit",
+                  "Measurement",
                   "Status",
                   "Rate",
                   ...(view === "verified" ? ["Quantity at verification", "Recorded at"] : []),

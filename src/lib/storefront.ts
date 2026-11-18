@@ -255,7 +255,7 @@ export const storeProducts = [
     520,
     0,
     4.8,
-    "Cream cotton with a dusty rose floral block print and a soft, visible weave. Sold by the metre for your own tailoring projects.",
+    "Cream cotton with a dusty rose floral block print and a soft, visible weave. Sold by MT for your own tailoring projects.",
   ),
   sample(
     categories[5],

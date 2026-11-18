@@ -93,7 +93,7 @@ export const INVENTORY_SORTS = [
 export type InventorySort = (typeof INVENTORY_SORTS)[number]["id"];
 
 export function quantityForUnit(unit: Unit, value: number): string | null {
-  if (unit === "NO" && !Number.isInteger(value)) return "Pieces must be a whole number.";
+  if (unit === "NO" && !Number.isInteger(value)) return "NO must be a whole number.";
   const decimals = value.toString().split(".")[1]?.length ?? 0;
   if (decimals > 3) return "Quantity can have at most 3 decimal places.";
   return null;
