@@ -94,9 +94,7 @@ function ProductDetail({ product }: { product: StoreProduct }) {
             </Link>
           )}
           <div className="mt-6">
-            <p className="mb-2 text-sm font-medium">
-              {product.unit === "MT" ? "MT" : "NO"}
-            </p>
+            <p className="mb-2 text-sm font-medium">{product.unit === "MT" ? "MT" : "NO"}</p>
             <Quantity value={selected} onChange={setQuantity} max={remaining} />
           </div>
           <div className="mt-5 flex flex-wrap gap-2">

@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { expenseColumns, expenseLedgerTotals, type ExpenseRecord } from "@/lib/expenses";
 import { expenseExportSheets } from "@/lib/expenses-export";
-import { downloadExcel } from "@/lib/excel";
+import { downloadExcel, shareExcelFile } from "@/lib/excel";
 import { shopToday } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,7 @@ function ExpensesPage() {
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
   const [exportFrom, setExportFrom] = useState(shopToday());
   const [exportTo, setExportTo] = useState(shopToday());
+  const [sharing, setSharing] = useState(false);
   const month = viewDate.slice(0, 7);
   const query = useQuery({
     queryKey: ["expenses", month, viewMode, viewDate],
@@ -102,6 +103,7 @@ function ExpensesPage() {
           type="button"
           variant="outline"
           className="rounded-full"
+          disabled={sharing}
           onClick={() => {
             const period = viewMode === "day" ? slashDate(viewDate) : month;
             const selected = records.filter(
@@ -122,16 +124,33 @@ function ExpensesPage() {
             const filename = `expenses-${from}-to-${to}`;
             const sheets = expenseExportSheets(selected, from, to);
             const shareText = `Expenses workbook for ${period}`;
-            downloadExcel(filename, sheets);
-            window.open(
-              `https://wa.me/?text=${encodeURIComponent(`${shareText}. The Excel file has been downloaded; attach it to this WhatsApp message.`)}`,
-              "_blank",
-              "noopener,noreferrer",
+            const share = shareExcelFile(
+              filename,
+              sheets,
+              `Ladies Collections expenses ${period}`,
+              shareText,
             );
-            toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
+            if (!share) {
+              downloadExcel(filename, sheets);
+              window.open(
+                `https://wa.me/?text=${encodeURIComponent(`${shareText}. The Excel file has been downloaded; attach it to this WhatsApp message.`)}`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+              toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
+              return;
+            }
+            setSharing(true);
+            void share
+              .catch((error: unknown) => {
+                if (error instanceof DOMException && error.name === "AbortError") return;
+                downloadExcel(filename, sheets);
+                toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
+              })
+              .finally(() => setSharing(false));
           }}
         >
-          WhatsApp Excel
+          {sharing ? "Sharing Excel…" : "WhatsApp Excel"}
         </Button>
         <ExportExcelButton
           filename={`expenses-${exportFrom}-to-${exportTo}`}

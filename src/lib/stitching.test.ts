@@ -46,7 +46,9 @@ describe("measurementWhatsAppUrl", () => {
     });
     expect(url?.startsWith("https://wa.me/919876543210?text=")).toBe(true);
     const text = decodeURIComponent(url!.split("text=")[1]!);
-    expect(text).toBe("Ladies Collections\nPriya\nOrder 2445\nBLOUSE\n\nFRONT NECK: 8\nBACK NECK: 3");
+    expect(text).toBe(
+      "Ladies Collections\nPriya\nOrder 2445\nBLOUSE\n\nFRONT NECK: 8\nBACK NECK: 3",
+    );
   });
 
   it("does not open WhatsApp without a mobile number or a measurement", () => {

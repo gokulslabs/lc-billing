@@ -64,7 +64,10 @@ const shareLabels = [
   "Payment status",
 ];
 
-export function expenseWhatsAppUrl(records: readonly ExpenseRecord[], period: string): string | null {
+export function expenseWhatsAppUrl(
+  records: readonly ExpenseRecord[],
+  period: string,
+): string | null {
   const rows = records.filter((record) => record.sheet === "ledger" && !isImportedFooter(record));
   if (rows.length === 0) return null;
   const lines = ["Ladies Collections", `Expenses ${period}`];

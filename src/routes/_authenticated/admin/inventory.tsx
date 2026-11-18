@@ -646,8 +646,8 @@ function BarcodePanel() {
     <div className="space-y-4">
       <p className="text-sm text-muted-foreground">
         Any inventory number prints one label for each NO still in stock, counting up from that
-        number. Quantity 1 prints that number once. Fabric prints once, because its quantity is
-        MT. A product code lists every number for that code.
+        number. Quantity 1 prints that number once. Fabric prints once, because its quantity is MT.
+        A product code lists every number for that code.
       </p>
       <form
         className="flex flex-wrap items-end gap-3"
@@ -869,8 +869,8 @@ function CurrentStockPanel() {
           <p className="text-sm text-muted-foreground">
             {formatQty(totalQuantity)} on the shelf across{" "}
             {summary.data?.slips.toLocaleString("en-IN")} inventory numbers. NO counts as 1 and
-            fabric counts as MT, so this is not the number of rows on the stock list. Sold
-            numbers stay on that list and are not in this total. Total stock value:{" "}
+            fabric counts as MT, so this is not the number of rows on the stock list. Sold numbers
+            stay on that list and are not in this total. Total stock value:{" "}
             <strong>{formatRupees(totalValue)}</strong>.
           </p>
           <ExportExcelButton
