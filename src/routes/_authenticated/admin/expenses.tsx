@@ -359,7 +359,7 @@ function ExpenseTable({
       <form
         onSubmit={submit}
         aria-labelledby={`${sheet}-entry-heading`}
-        className="min-w-0 overflow-x-auto rounded-2xl border bg-card"
+        className="min-w-0 overflow-x-auto rounded-2xl border border-border bg-card dark:border-[#806773]"
       >
         {sheet === "ledger" ? (
           <label className="block w-48 p-3 text-sm">
@@ -442,11 +442,13 @@ function ExpenseTable({
             {sheet === "ledger"
               ? [...dailyGroups.entries()].map(([day, dayRecords]) => (
                   <Fragment key={day}>
-                    <tr className="border-t bg-muted/30 font-semibold">
-                      <td colSpan={3} className="border-x border-border" />
-                      <td className="border-x border-border p-3 text-center">{excelDate(day)}</td>
-                      <td colSpan={8} className="border-x border-border" />
-                      <td className="border-x border-border" />
+                    <tr className="border-t border-border bg-muted/30 font-semibold dark:border-[#806773]">
+                      <td colSpan={3} className="border-x border-border dark:border-[#806773]" />
+                      <td className="border-x border-border p-3 text-center dark:border-[#806773]">
+                        {excelDate(day)}
+                      </td>
+                      <td colSpan={8} className="border-x border-border dark:border-[#806773]" />
+                      <td className="border-x border-border dark:border-[#806773]" />
                     </tr>
                     <tr className="bg-muted/50">
                       <ExpenseColumnHeaders sheet="ledger" columns={columns} />
@@ -455,9 +457,19 @@ function ExpenseTable({
                     {dayRecords.map((r) => {
                       const generated = r.id.startsWith("opening-");
                       return (
-                        <tr key={r.id} className={generated ? "border-t bg-muted/20" : "border-t"}>
+                        <tr
+                          key={r.id}
+                          className={
+                            generated
+                              ? "border-t border-border bg-muted/20 dark:border-[#806773]"
+                              : "border-t border-border dark:border-[#806773]"
+                          }
+                        >
                           {r.details.map((value, index) => (
-                            <td key={index} className="border-x border-border p-3 text-center">
+                            <td
+                              key={index}
+                              className="border-x border-border p-3 text-center dark:border-[#806773]"
+                            >
                               <span className={expenseCellColor(index, value)}>{value || "—"}</span>
                             </td>
                           ))}
@@ -502,10 +514,17 @@ function ExpenseTable({
                 ))
               : records.map((r, index) => (
                   <tr key={r.id} className="border-t">
-                    <td className="border-x border-border p-3 text-center">{String(index + 1)}</td>
-                    <td className="border-x border-border p-3 text-center">{r.entryDate}</td>
+                    <td className="border-x border-border p-3 text-center dark:border-[#806773]">
+                      {String(index + 1)}
+                    </td>
+                    <td className="border-x border-border p-3 text-center dark:border-[#806773]">
+                      {r.entryDate}
+                    </td>
                     {r.details.map((value, i) => (
-                      <td key={i} className="border-x border-border p-3 text-center">
+                      <td
+                        key={i}
+                        className="border-x border-border p-3 text-center dark:border-[#806773]"
+                      >
                         {formatExpenseValue(sheet, i, value) || "—"}
                       </td>
                     ))}
@@ -537,16 +556,16 @@ function ExpenseTable({
 
 function LedgerFooterRow({ cells }: { cells: (string | number)[] }) {
   return (
-    <tr className="border-t bg-[#FFC000] font-medium text-black">
+    <tr className="border-y border-[#8a6500] bg-[#FFC000] font-medium text-black">
       {cells.map((value, index) => (
         <td
           key={index}
-          className="whitespace-nowrap border-x border-border p-3 text-center tabular-nums"
+          className="whitespace-nowrap border border-[#8a6500] p-3 text-center tabular-nums"
         >
           {typeof value === "number" ? amountFormat.format(value) : value}
         </td>
       ))}
-      <td className="p-3" />
+      <td className="border border-[#8a6500] p-3" />
     </tr>
   );
 }
@@ -614,7 +633,7 @@ function ExpenseColumnHeaders({
         return (
           <th
             key={`${column}-${index}`}
-            className={`border border-border p-3 text-center font-semibold ${color}`}
+            className={`border border-border p-3 text-center font-semibold dark:border-[#806773] ${color}`}
           >
             {column}
           </th>
