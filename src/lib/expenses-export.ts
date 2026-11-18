@@ -7,8 +7,17 @@ import {
 import type { ExcelCell, ExcelSheet } from "@/lib/excel";
 
 const amountColumns = new Set([1, 2, 6, 7, 8, 9, 10]);
-const minimumDailyLines = 40;
-const betweenDaysBlankLines = 8;
+const blankLinesBetweenDays = 1;
+
+function isLedgerSummary(record: ExpenseRecord): boolean {
+  const label = (record.details[0] ?? "").trim().toUpperCase();
+  const summaryLabel = (record.details[5] ?? "").trim().toUpperCase();
+  return (
+    label === "TOT EXPENSES" ||
+    label === "SHREEDEVI MAM" ||
+    ["CASH RECIPETS", "CASH RECEIPTS", "CASH EXPENSES", "HAND CASH"].includes(summaryLabel)
+  );
+}
 
 function numberOrText(value: string, numeric: boolean): ExcelCell {
   return numeric && /^-?\d+(?:\.\d+)?$/.test(value.trim()) ? Number(value) : value;
@@ -23,7 +32,12 @@ export function expenseExportSheets(
   const rowStyles: Record<number, "total" | "handCash"> = {};
   const grouped = new Map<string, ExpenseRecord[]>();
   for (const record of records
-    .filter((row) => row.sheet === "ledger")
+    .filter(
+      (row) =>
+        row.sheet === "ledger" &&
+        row.details.some((cell) => cell.trim() !== "") &&
+        !isLedgerSummary(row),
+    )
     .sort((a, b) => a.entryDate.localeCompare(b.entryDate))) {
     const group = grouped.get(record.entryDate) ?? [];
     group.push(record);
@@ -31,7 +45,7 @@ export function expenseExportSheets(
   }
   for (const [date, group] of grouped) {
     if (ledger.length) {
-      for (let index = 0; index < betweenDaysBlankLines; index += 1) ledger.push([]);
+      for (let index = 0; index < blankLinesBetweenDays; index += 1) ledger.push([]);
       ledger.push(["", "", "", { date }]);
     }
     ledger.push([]);
@@ -41,7 +55,6 @@ export function expenseExportSheets(
           numberOrText(record.details[index] ?? "", amountColumns.has(index)),
         ),
       );
-    for (let index = group.length; index < minimumDailyLines; index += 1) ledger.push([]);
     const totals = expenseLedgerTotals(group);
     const footerRow = 5 + ledger.length;
     rowStyles[ledger.length] = "total";
