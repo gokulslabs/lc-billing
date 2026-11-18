@@ -9,6 +9,7 @@ import type { ExcelCell, ExcelSheet } from "@/lib/excel";
 
 const amountColumns = new Set([1, 2, 6, 7, 8, 9, 10]);
 const blankLinesBetweenDays = 8;
+const blankLinesBeforeDailyTotals = 3;
 
 function isLedgerSummary(record: ExpenseRecord): boolean {
   const label = (record.details[0] ?? "").trim().toUpperCase();
@@ -80,6 +81,7 @@ export function expenseExportSheets(
       else if (status.includes("NOT PAID") || status.includes("NOT CLEARED"))
         cellStyles[dataRow] = { ...cellStyles[dataRow], 11: "redText" };
     }
+    for (let index = 0; index < blankLinesBeforeDailyTotals; index += 1) ledger.push([]);
     const totals = expenseLedgerTotals(group);
     const footerRow = 5 + ledger.length;
     rowStyles[ledger.length] = "total";
