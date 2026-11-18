@@ -237,7 +237,8 @@ function AuthenticatedLayout() {
             <SidebarTrigger className="md:hidden" />
           </div>
         </header>
-        {pathname.replace(/\/$/, "") !== "/admin/dashboard" ? (
+        {pathname.replace(/\/$/, "") !== "/admin/dashboard" &&
+        pathname.replace(/\/$/, "") !== "/admin/sales" ? (
           <div className="mx-auto flex w-full max-w-[100rem] justify-end px-4 pt-4 print:hidden md:px-10">
             <BackButton />
           </div>

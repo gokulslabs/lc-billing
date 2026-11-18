@@ -1,9 +1,15 @@
-import { useRef, useState, type FormEvent } from "react";
+import { Fragment, useRef, useState, type FormEvent } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import { expenseColumns, expenseLedgerTotals, type ExpenseRecord } from "@/lib/expenses";
+import {
+  expenseColumns,
+  expenseLedgerTotals,
+  expenseOpeningBalanceBefore,
+  expenseOpeningBalanceRows,
+  type ExpenseRecord,
+} from "@/lib/expenses";
 import { expenseExportSheets } from "@/lib/expenses-export";
 import { downloadExcel, shareExcelFile } from "@/lib/excel";
 import { shopToday } from "@/lib/sales";
@@ -25,12 +31,10 @@ function ExpensesPage() {
   const [sharing, setSharing] = useState(false);
   const month = viewDate.slice(0, 7);
   const query = useQuery({
-    queryKey: ["expenses", month, viewMode, viewDate],
+    queryKey: ["expenses", month],
     queryFn: () =>
-      apiFetch<{ records: ExpenseRecord[] }>(
-        viewMode === "day"
-          ? `/api/expenses?from=${viewDate}&to=${viewDate}`
-          : `/api/expenses?month=${month}`,
+      apiFetch<{ records: ExpenseRecord[]; previousClosingBalance: number | null }>(
+        `/api/expenses?month=${month}`,
       ),
   });
   const records = query.data?.records ?? [];
@@ -109,6 +113,7 @@ function ExpensesPage() {
             const selected = records.filter(
               (record) =>
                 (record.sheet === "ledger" || record.sheet === "target") &&
+                (viewMode === "month" || record.entryDate === viewDate) &&
                 record.details.some((cell) => cell.trim() !== ""),
             );
             if (selected.length === 0) {
@@ -122,7 +127,12 @@ function ExpensesPage() {
             const from = viewMode === "day" ? viewDate : `${month}-01`;
             const to = viewMode === "day" ? viewDate : lastDay(month);
             const filename = `expenses-${from}-to-${to}`;
-            const sheets = expenseExportSheets(selected, from, to);
+            const startingBalance = expenseOpeningBalanceBefore(
+              records,
+              from,
+              query.data?.previousClosingBalance ?? null,
+            );
+            const sheets = expenseExportSheets(selected, from, to, startingBalance);
             const shareText = `Expenses workbook for ${period}`;
             const share = shareExcelFile(
               filename,
@@ -150,17 +160,24 @@ function ExpensesPage() {
               .finally(() => setSharing(false));
           }}
         >
-          {sharing ? "Sharing Excel…" : "WhatsApp Excel"}
+          {sharing
+            ? "Preparing Excel…"
+            : viewMode === "day"
+              ? "Send daily Excel to owner"
+              : "WhatsApp Excel"}
         </Button>
         <ExportExcelButton
           filename={`expenses-${exportFrom}-to-${exportTo}`}
           load={async () => {
             if (!exportFrom || !exportTo || exportFrom > exportTo)
               throw new Error("Choose a valid export date range.");
-            const { records: selected } = await apiFetch<{ records: ExpenseRecord[] }>(
+            const { records: selected, previousClosingBalance } = await apiFetch<{
+              records: ExpenseRecord[];
+              previousClosingBalance: number | null;
+            }>(
               `/api/expenses?from=${encodeURIComponent(exportFrom)}&to=${encodeURIComponent(exportTo)}`,
             );
-            return expenseExportSheets(selected, exportFrom, exportTo);
+            return expenseExportSheets(selected, exportFrom, exportTo, previousClosingBalance);
           }}
         />
       </div>
@@ -178,9 +195,11 @@ function ExpensesPage() {
             key={`ledger-${viewDate}-${viewMode}`}
             sheet="ledger"
             month={month}
+            viewMode={viewMode}
             entryDate={viewDate}
             emptyLabel={viewMode === "day" ? "No rows for this day." : "No rows for this month."}
-            records={rows("ledger")}
+            records={records.filter((record) => record.sheet === "ledger")}
+            startingBalance={query.data?.previousClosingBalance ?? null}
           />
         </TabsContent>
         <TabsContent value="target" className="mt-5">
@@ -188,9 +207,11 @@ function ExpensesPage() {
             key={`target-${viewDate}-${viewMode}`}
             sheet="target"
             month={month}
+            viewMode={viewMode}
             entryDate={viewDate}
             emptyLabel={viewMode === "day" ? "No rows for this day." : "No rows for this month."}
             records={rows("target")}
+            startingBalance={null}
           />
         </TabsContent>
       </Tabs>
@@ -213,19 +234,29 @@ function shiftDay(date: string, days: number): string {
 }
 
 const amountFormat = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
+const currencyFormat = new Intl.NumberFormat("en-IN", {
+  style: "currency",
+  currency: "INR",
+  minimumFractionDigits: 2,
+  maximumFractionDigits: 2,
+});
 
 function ExpenseTable({
   sheet,
   month,
+  viewMode,
   entryDate,
   emptyLabel,
   records,
+  startingBalance,
 }: {
   sheet: "ledger" | "target";
   month: string;
+  viewMode: "day" | "month";
   entryDate: string;
   emptyLabel: string;
   records: ExpenseRecord[];
+  startingBalance: number | null;
 }) {
   const client = useQueryClient();
   const columns = expenseColumns(sheet);
@@ -234,12 +265,43 @@ function ExpenseTable({
   const dateInput = useRef<HTMLInputElement>(null);
   const inputColumns = sheet === "target" ? columns.slice(2) : columns;
   const [cells, setCells] = useState<string[]>(Array(inputColumns.length).fill(""));
-  const totals = sheet === "ledger" ? expenseLedgerTotals(records) : null;
+  const openingRows = sheet === "ledger" ? expenseOpeningBalanceRows(records, startingBalance) : [];
+  if (
+    sheet === "ledger" &&
+    viewMode === "day" &&
+    !records.some((record) => record.entryDate === entryDate) &&
+    expenseOpeningBalanceBefore(records, entryDate, startingBalance) !== null
+  ) {
+    const cells = Array(columns.length).fill("") as string[];
+    cells[3] = "OPENING BALANCES";
+    cells[6] = String(expenseOpeningBalanceBefore(records, entryDate, startingBalance));
+    openingRows.push({
+      id: `opening-${entryDate}`,
+      sheet: "ledger",
+      entryDate,
+      details: cells,
+    });
+  }
+  const displayRecords = [...records, ...openingRows]
+    .filter((record) => viewMode === "month" || record.entryDate === entryDate)
+    .sort((a, b) => {
+      const dayOrder = a.entryDate.localeCompare(b.entryDate);
+      if (dayOrder) return dayOrder;
+      return Number(b.id.startsWith("opening-")) - Number(a.id.startsWith("opening-"));
+    });
+  const dailyGroups = new Map<string, ExpenseRecord[]>();
+  if (sheet === "ledger") {
+    for (const record of displayRecords) {
+      const group = dailyGroups.get(record.entryDate) ?? [];
+      group.push(record);
+      dailyGroups.set(record.entryDate, group);
+    }
+  }
   const save = useMutation({
     mutationFn: () =>
       apiFetch(`/api/expenses${editing ? `/${editing}` : ""}`, {
         method: editing ? "PATCH" : "POST",
-        body: JSON.stringify({ sheet, entryDate: date, details: cells }),
+        body: JSON.stringify({ sheet, entryDate: date, details: savedExpenseCells(sheet, cells) }),
       }),
     onSuccess: async () => {
       setEditing(null);
@@ -257,6 +319,18 @@ function ExpenseTable({
     },
     onError: (e: Error) => toast.error(e.message),
   });
+  const saveOpening = useMutation({
+    mutationFn: (row: ExpenseRecord) =>
+      apiFetch("/api/expenses", {
+        method: "POST",
+        body: JSON.stringify({ sheet: "ledger", entryDate: row.entryDate, details: row.details }),
+      }),
+    onSuccess: async () => {
+      toast.success("Opening balance saved.");
+      await client.invalidateQueries({ queryKey: ["expenses", month] });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!cells.some((v) => v.trim())) {
@@ -268,7 +342,13 @@ function ExpenseTable({
   function edit(r: ExpenseRecord) {
     setEditing(r.id);
     setDate(r.entryDate);
-    setCells(inputColumns.map((_, index) => r.details[index] ?? ""));
+    setCells(
+      inputColumns.map((_, index) =>
+        sheet === "target" && index === 4
+          ? targetPercentageForInput(r.details[index] ?? "")
+          : (r.details[index] ?? ""),
+      ),
+    );
     dateInput.current?.focus();
   }
   return (
@@ -281,32 +361,43 @@ function ExpenseTable({
         aria-labelledby={`${sheet}-entry-heading`}
         className="min-w-0 overflow-x-auto rounded-2xl border bg-card"
       >
+        {sheet === "ledger" ? (
+          <label className="block w-48 p-3 text-sm">
+            Entry date
+            <Input
+              ref={dateInput}
+              aria-label="Entry date"
+              type="date"
+              required
+              value={date}
+              onChange={(event) => setDate(event.target.value)}
+              className="mt-1 w-full"
+            />
+          </label>
+        ) : null}
         <table className="w-full min-w-max text-sm">
           <thead className="bg-muted/50">
             <tr>
-              {sheet === "ledger" ? <th className="p-3 text-left">Date</th> : null}
-              {columns.map((c, i) => (
-                <th key={`${c}-${i}`} className="p-3 text-left font-semibold">
-                  {c}
-                </th>
-              ))}
+              <ExpenseColumnHeaders sheet={sheet} columns={columns} />
               <th className="p-3 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
             <tr className="border-t bg-muted/20">
               {sheet === "target" ? <td className="p-2" /> : null}
-              <td className="p-2">
-                <Input
-                  ref={dateInput}
-                  aria-label="Entry date"
-                  type="date"
-                  required
-                  value={date}
-                  onChange={(e) => setDate(e.target.value)}
-                  className="min-w-36"
-                />
-              </td>
+              {sheet === "target" ? (
+                <td className="p-2">
+                  <Input
+                    ref={dateInput}
+                    aria-label="Entry date"
+                    type="date"
+                    required
+                    value={date}
+                    onChange={(event) => setDate(event.target.value)}
+                    className="min-w-36"
+                  />
+                </td>
+              ) : null}
               {inputColumns.map((label, index) => (
                 <td key={`${label}-${index}`} className="p-2">
                   <Input
@@ -318,6 +409,7 @@ function ExpenseTable({
                         : label
                     }
                     className="min-w-24"
+                    placeholder={sheet === "target" && index === 4 ? "e.g. 1" : undefined}
                     value={cells[index] ?? ""}
                     onChange={(e) =>
                       setCells((previous) =>
@@ -347,76 +439,95 @@ function ExpenseTable({
                 </div>
               </td>
             </tr>
-            {records.map((r, index) => (
-              <tr key={r.id} className="border-t">
-                {sheet === "ledger" ? <td className="p-3">{r.entryDate}</td> : null}
-                {(sheet === "target"
-                  ? [String(index + 1), r.entryDate, ...r.details]
-                  : r.details
-                ).map((v, i) => (
-                  <td key={i} className="p-3">
-                    {v || "—"}
-                  </td>
+            {sheet === "ledger"
+              ? [...dailyGroups.entries()].map(([day, dayRecords]) => (
+                  <Fragment key={day}>
+                    <tr className="border-t bg-muted/30 font-semibold">
+                      <td colSpan={3} className="border-x border-border" />
+                      <td className="border-x border-border p-3 text-center">{excelDate(day)}</td>
+                      <td colSpan={8} className="border-x border-border" />
+                      <td className="border-x border-border" />
+                    </tr>
+                    <tr className="bg-muted/50">
+                      <ExpenseColumnHeaders sheet="ledger" columns={columns} />
+                      <th className="p-3 text-left">Actions</th>
+                    </tr>
+                    {dayRecords.map((r) => {
+                      const generated = r.id.startsWith("opening-");
+                      return (
+                        <tr key={r.id} className={generated ? "border-t bg-muted/20" : "border-t"}>
+                          {r.details.map((value, index) => (
+                            <td key={index} className="border-x border-border p-3 text-center">
+                              <span className={expenseCellColor(index, value)}>{value || "—"}</span>
+                            </td>
+                          ))}
+                          <td className="whitespace-nowrap p-3">
+                            {generated ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                onClick={() => saveOpening.mutate(r)}
+                                disabled={saveOpening.isPending}
+                              >
+                                Save opening balance
+                              </Button>
+                            ) : (
+                              <>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => edit(r)}
+                                >
+                                  Edit
+                                </Button>{" "}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => remove.mutate(r.id)}
+                                  disabled={remove.isPending}
+                                >
+                                  Remove
+                                </Button>
+                              </>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    <LedgerFooterRows totals={expenseLedgerTotals(dayRecords)} />
+                  </Fragment>
+                ))
+              : records.map((r, index) => (
+                  <tr key={r.id} className="border-t">
+                    <td className="border-x border-border p-3 text-center">{String(index + 1)}</td>
+                    <td className="border-x border-border p-3 text-center">{r.entryDate}</td>
+                    {r.details.map((value, i) => (
+                      <td key={i} className="border-x border-border p-3 text-center">
+                        {formatExpenseValue(sheet, i, value) || "—"}
+                      </td>
+                    ))}
+                    <td className="whitespace-nowrap p-3">
+                      <Button type="button" size="sm" variant="outline" onClick={() => edit(r)}>
+                        Edit
+                      </Button>{" "}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => remove.mutate(r.id)}
+                        disabled={remove.isPending}
+                      >
+                        Remove
+                      </Button>
+                    </td>
+                  </tr>
                 ))}
-                <td className="whitespace-nowrap p-3">
-                  <Button type="button" size="sm" variant="outline" onClick={() => edit(r)}>
-                    Edit
-                  </Button>{" "}
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => remove.mutate(r.id)}
-                    disabled={remove.isPending}
-                  >
-                    Remove
-                  </Button>
-                </td>
-              </tr>
-            ))}
           </tbody>
-          {totals ? (
-            <tfoot className="border-t-2 border-foreground/20 bg-muted/40 font-semibold">
-              <LedgerFooterRow
-                cells={[
-                  "TOT EXPENSES",
-                  totals.gpayCheque,
-                  totals.cashExpenses,
-                  "",
-                  "",
-                  "CASH RECIPETS",
-                  totals.cashReceipts,
-                  "",
-                  totals.savingsAccount,
-                  totals.currentAccount,
-                  totals.billPending,
-                  "",
-                ]}
-              />
-              <LedgerFooterRow
-                cells={[
-                  "SHREEDEVI MAM",
-                  "",
-                  "",
-                  "",
-                  "",
-                  "CASH EXPENSES",
-                  totals.cashExpenses,
-                  "",
-                  "",
-                  "",
-                  "",
-                  "",
-                ]}
-              />
-              <LedgerFooterRow
-                cells={["", "", "", "", "", "HAND CASH", totals.handCash, "", "", "", "", ""]}
-                highlight
-              />
-            </tfoot>
-          ) : null}
         </table>
-        {!records.length ? (
+        {!displayRecords.length ? (
           <p className="border-t p-6 text-sm text-muted-foreground">{emptyLabel}</p>
         ) : null}
       </form>
@@ -424,22 +535,134 @@ function ExpenseTable({
   );
 }
 
-function LedgerFooterRow({
-  cells,
-  highlight = false,
-}: {
-  cells: (string | number)[];
-  highlight?: boolean;
-}) {
+function LedgerFooterRow({ cells }: { cells: (string | number)[] }) {
   return (
-    <tr className={highlight ? "border-t bg-primary/10" : "border-t"}>
-      <td className="p-3" />
+    <tr className="border-t bg-[#FFC000] font-medium text-black">
       {cells.map((value, index) => (
-        <td key={index} className="whitespace-nowrap p-3 tabular-nums">
+        <td
+          key={index}
+          className="whitespace-nowrap border-x border-border p-3 text-center tabular-nums"
+        >
           {typeof value === "number" ? amountFormat.format(value) : value}
         </td>
       ))}
       <td className="p-3" />
     </tr>
   );
+}
+
+function LedgerFooterRows({ totals }: { totals: ReturnType<typeof expenseLedgerTotals> }) {
+  return (
+    <>
+      <LedgerFooterRow
+        cells={[
+          "TOT EXPENSES",
+          totals.gpayCheque,
+          totals.cashExpenses,
+          "",
+          "",
+          "CASH RECIPETS",
+          totals.cashReceipts,
+          "",
+          totals.savingsAccount,
+          totals.currentAccount,
+          totals.billPending,
+          "",
+        ]}
+      />
+      <LedgerFooterRow
+        cells={[
+          "SHREEDEVI MAM",
+          "",
+          "",
+          "",
+          "",
+          "CASH EXPENSES",
+          totals.cashExpenses,
+          "",
+          "",
+          "",
+          "",
+          "",
+        ]}
+      />
+      <LedgerFooterRow
+        cells={["", "", "", "", "", "HAND CASH", totals.handCash, "", "", "", "", ""]}
+      />
+    </>
+  );
+}
+
+function ExpenseColumnHeaders({
+  sheet,
+  columns,
+}: {
+  sheet: "ledger" | "target";
+  columns: readonly string[];
+}) {
+  return (
+    <>
+      {columns.map((column, index) => {
+        const color =
+          sheet === "ledger"
+            ? index < 2 || index === columns.length - 1
+              ? "text-[#FF0000]"
+              : index === 2
+                ? "text-foreground"
+                : "text-[#00B050]"
+            : "text-foreground";
+        return (
+          <th
+            key={`${column}-${index}`}
+            className={`border border-border p-3 text-center font-semibold ${color}`}
+          >
+            {column}
+          </th>
+        );
+      })}
+    </>
+  );
+}
+
+function expenseCellColor(index: number, value: string): string {
+  const text = value.trim().toUpperCase();
+  if (index === 10 && ["NILL", "BILL PENDING"].includes(text)) return "text-[#00B050]";
+  if (index !== 11) return "";
+  if (["PAID", "CLEARED", "ADVANCE", "ADVANCE (2)"].includes(text)) return "text-[#00B050]";
+  if (text.includes("NOT PAID") || text.includes("NOT CLEARED")) return "text-[#FF0000]";
+  return "";
+}
+
+function excelDate(date: string): string {
+  const [year = "", month = "", day = ""] = date.split("-");
+  return `${month}-${day}-${year.slice(-2)}`;
+}
+
+function targetPercentageForInput(value: string): string {
+  const parsed = Number(value.replace("%", "").trim());
+  return value.trim() && Number.isFinite(parsed) ? String(parsed * 100) : value;
+}
+
+function savedExpenseCells(sheet: "ledger" | "target", cells: string[]): string[] {
+  if (sheet !== "target") return cells;
+  return cells.map((value, index) => {
+    if (index !== 4 || !value.trim()) return value;
+    const parsed = Number(value.replace("%", "").trim());
+    return Number.isFinite(parsed) ? String(parsed / 100) : value;
+  });
+}
+
+function formatExpenseValue(sheet: "ledger" | "target", index: number, value: string): string {
+  if (sheet !== "target") return value;
+  if (index === 4) {
+    const parsed = Number(value.replace("%", "").trim());
+    return Number.isFinite(parsed)
+      ? `${new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 }).format(parsed * 100)}%`
+      : value;
+  }
+  if (index === 3 || index === 5) {
+    const parsed = Number(value.replace(/[₹,\s]/g, ""));
+    return Number.isFinite(parsed) ? currencyFormat.format(parsed) : value;
+  }
+  return value;
 }

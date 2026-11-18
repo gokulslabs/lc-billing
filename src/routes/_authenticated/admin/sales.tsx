@@ -696,6 +696,9 @@ function BillScreen({
       <div className="flex flex-wrap items-start justify-start gap-8">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-3">
+            <Button variant="outline" className="rounded-full" onClick={onBack}>
+              Bill list
+            </Button>
             <h1 className="text-4xl font-semibold">
               {invoice ? `Bill ${invoice.billNo}` : "Bill"}
             </h1>

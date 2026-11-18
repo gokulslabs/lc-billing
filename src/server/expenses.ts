@@ -4,6 +4,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireShop } from "@/server/guard";
 import { readAll } from "@/server/read-all";
 import type { Json } from "@/integrations/supabase/types";
+import { expenseLedgerTotals, type ExpenseRecord } from "@/lib/expenses";
 
 type Env = { Variables: { userId: string } };
 type Row = { id: string; sheet: string; entry_date: string; details: Json };
@@ -36,7 +37,8 @@ expenses.get("/", async (c) => {
     return request.order("entry_date").order("sort_order").range(from, to);
   });
   if (!loaded) return c.json({ error: "Could not load expenses." }, 500);
-  return c.json({ records: loaded.rows.map(record) });
+  const previousClosingBalance = await closingBalanceBefore(range ? fromDate : `${month}-01`);
+  return c.json({ records: loaded.rows.map(record), previousClosingBalance });
 });
 expenses.post("/", async (c) => {
   const parsed = input.safeParse(await c.req.json().catch(() => null));
@@ -95,5 +97,44 @@ function validDate(value: string) {
     !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
     new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value
   );
+}
+
+async function closingBalanceBefore(date: string): Promise<number | null> {
+  let cursor = date;
+  const laterDays: ExpenseRecord[][] = [];
+  for (let attempt = 0; attempt < 370; attempt += 1) {
+    const { data: previous, error: previousError } = await supabaseAdmin
+      .from("expense_records")
+      .select("entry_date")
+      .eq("sheet", "ledger")
+      .lt("entry_date", cursor)
+      .order("entry_date", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (previousError || !previous) return null;
+    const day = previous.entry_date;
+    const loaded = await readAll<Row>((from, to) =>
+      supabaseAdmin
+        .from("expense_records")
+        .select("id,sheet,entry_date,details")
+        .eq("sheet", "ledger")
+        .eq("entry_date", day)
+        .order("sort_order")
+        .range(from, to),
+    );
+    if (!loaded) return null;
+    const rows = loaded.rows.map(record) as ExpenseRecord[];
+    const opening = rows.find(
+      (row) => (row.details[3] ?? "").trim().toUpperCase() === "OPENING BALANCES",
+    );
+    if (opening) {
+      let balance = expenseLedgerTotals(rows).handCash;
+      for (const laterDay of laterDays.reverse()) balance += expenseLedgerTotals(laterDay).handCash;
+      return balance;
+    }
+    laterDays.push(rows);
+    cursor = day;
+  }
+  return null;
 }
 export { expenses as expenseRoutes };

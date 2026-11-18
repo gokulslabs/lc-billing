@@ -49,6 +49,70 @@ function isImportedFooter(record: ExpenseRecord): boolean {
   );
 }
 
+export function isOpeningBalance(record: ExpenseRecord): boolean {
+  return (record.details[3] ?? "").trim().toUpperCase() === "OPENING BALANCES";
+}
+
+function ledgerDays(records: readonly ExpenseRecord[]) {
+  const grouped = new Map<string, ExpenseRecord[]>();
+  for (const record of records) {
+    if (record.sheet !== "ledger" || isImportedFooter(record)) continue;
+    const day = grouped.get(record.entryDate) ?? [];
+    day.push(record);
+    grouped.set(record.entryDate, day);
+  }
+  return [...grouped.entries()].sort(([a], [b]) => a.localeCompare(b));
+}
+
+/** Returns the cash balance carried into a date, or null until a starting balance exists. */
+export function expenseOpeningBalanceBefore(
+  records: readonly ExpenseRecord[],
+  date: string,
+  startingBalance: number | null = null,
+): number | null {
+  let balance = startingBalance;
+  for (const [day, rows] of ledgerDays(records)) {
+    if (day >= date) break;
+    const opening = rows.find(isOpeningBalance);
+    if (opening) balance = amount(opening.details[6] ?? "");
+    if (balance === null) continue;
+    const expenses = rows.reduce((sum, row) => sum + amount(row.details[2] ?? ""), 0);
+    const receipts = rows.reduce(
+      (sum, row) => sum + (isOpeningBalance(row) ? 0 : amount(row.details[6] ?? "")),
+      0,
+    );
+    balance += receipts - expenses;
+  }
+  return balance;
+}
+
+/** Adds a display/export-only opening row where a day has no saved opening row. */
+export function expenseOpeningBalanceRows(
+  records: readonly ExpenseRecord[],
+  startingBalance: number | null = null,
+): ExpenseRecord[] {
+  let balance = startingBalance;
+  const generated: ExpenseRecord[] = [];
+  for (const [day, rows] of ledgerDays(records)) {
+    const opening = rows.find(isOpeningBalance);
+    if (opening) balance = amount(opening.details[6] ?? "");
+    else if (balance !== null) {
+      const details = Array(LEDGER_COLUMNS.length).fill("") as string[];
+      details[3] = "OPENING BALANCES";
+      details[6] = String(balance);
+      generated.push({ id: `opening-${day}`, sheet: "ledger", entryDate: day, details });
+    }
+    if (balance === null) continue;
+    const expenses = rows.reduce((sum, row) => sum + amount(row.details[2] ?? ""), 0);
+    const receipts = rows.reduce(
+      (sum, row) => sum + (isOpeningBalance(row) ? 0 : amount(row.details[6] ?? "")),
+      0,
+    );
+    balance += receipts - expenses;
+  }
+  return generated;
+}
+
 const money = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2 });
 const shareLabels = [
   "Mam GPay / Cheque",

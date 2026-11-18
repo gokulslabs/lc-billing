@@ -14,8 +14,13 @@ export type ExcelSheet = {
     titleEndColumn?: number;
     titleEndRow?: number;
     columnWidths?: number[];
-    headerStyles?: ("red" | "green" | "default")[];
-    rowStyles?: Record<number, "total" | "handCash">;
+    headerStyles?: ("red" | "green" | "bold" | "boldLeft" | "boldRight" | "default")[];
+    rowStyles?: Record<number, "total" | "handCash" | "header" | "dateMarker">;
+    cellStyles?: Record<
+      number,
+      Record<number, "greenText" | "redText" | "bold" | "boldLeft" | "boldRight">
+    >;
+    bodyColumnStyles?: Record<number, "currency" | "percent" | "roster" | "date" | "softFill">;
     grid?: boolean;
   };
 };
@@ -85,27 +90,17 @@ function worksheet(sheet: ExcelSheet): string {
   const width = Math.max(sheet.columns.length, ...sheet.rows.map((row) => row.length), 1);
   const columns = Array.from({ length: width }, (_, index) => sheet.columns[index] ?? "");
   const header = columns
-    .map((column, index) =>
-      stringCell(
-        headerRow,
-        start + index,
-        column,
-        sheet.layout?.headerStyles?.[index] === "red"
-          ? 4
-          : sheet.layout?.headerStyles?.[index] === "green"
-            ? 5
-            : 1,
-      ),
-    )
+    .map((column, index) => stringCell(headerRow, start + index, column, headerStyle(sheet, index)))
     .join("");
   const body = sheet.rows
     .map((row, rowIndex) => {
       const rowNumber = headerRow + rowIndex + 1;
       const rowStyle = sheet.layout?.rowStyles?.[rowIndex];
-      const style =
-        rowStyle === "total" ? 2 : rowStyle === "handCash" ? 3 : sheet.layout?.grid ? 6 : 0;
       const cells = columns
-        .map((_, index) => cell(rowNumber, start + index, row[index] ?? null, style))
+        .map((_, index) => {
+          const style = bodyCellStyle(sheet, rowIndex, index, rowStyle);
+          return cell(rowNumber, start + index, row[index] ?? null, style);
+        })
         .join("");
       return `<row r="${rowNumber}">${cells}</row>`;
     })
@@ -122,7 +117,7 @@ function worksheet(sheet: ExcelSheet): string {
   const preHeader = Array.from({ length: headerRow - 1 }, (_, index) => index + 1)
     .map((row) =>
       row === titleRow && sheet.layout?.title
-        ? `<row r="${row}">${cell(row, titleColumn, sheet.layout.title, 7)}</row>`
+        ? `<row r="${row}">${cell(row, titleColumn, sheet.layout.title, sheet.layout.title && typeof sheet.layout.title === "object" && "date" in sheet.layout.title ? 10 : 7)}</row>`
         : `<row r="${row}"/>`,
     )
     .join("");
@@ -146,13 +141,52 @@ function cell(row: number, index: number, value: ExcelCell, style = 0): string {
       (Date.parse(`${value.date}T00:00:00Z`) - Date.UTC(1899, 11, 30)) / 86400000,
     );
     return Number.isFinite(serial)
-      ? `<c r="${address(row, index)}" s="8"><v>${serial}</v></c>`
+      ? `<c r="${address(row, index)}" s="${style || 8}"><v>${serial}</v></c>`
       : stringCell(row, index, value.date, style);
   }
   if (typeof value === "number" && Number.isFinite(value)) {
     return `<c r="${address(row, index)}"${style ? ` s="${style}"` : ""}><v>${value}</v></c>`;
   }
   return stringCell(row, index, value == null ? "" : String(value), style);
+}
+
+function headerStyle(sheet: ExcelSheet, index: number): number {
+  const kind = sheet.layout?.headerStyles?.[index];
+  const last = sheet.columns.length - 1;
+  if (kind === "red") return index === 0 ? 22 : index === last ? 23 : 4;
+  if (kind === "green") return 5;
+  if (kind === "boldLeft") return 25;
+  if (kind === "boldRight") return 26;
+  if (kind === "bold") return index === 0 ? 25 : index === last ? 26 : 24;
+  return kind === "default" ? 9 : 1;
+}
+
+function bodyCellStyle(
+  sheet: ExcelSheet,
+  rowIndex: number,
+  columnIndex: number,
+  rowStyle: "total" | "handCash" | "header" | "dateMarker" | undefined,
+): number {
+  const specific = sheet.layout?.cellStyles?.[rowIndex]?.[columnIndex];
+  if (specific === "greenText") return 20;
+  if (specific === "redText") return 21;
+  if (specific === "bold") return 24;
+  if (specific === "boldLeft") return 25;
+  if (specific === "boldRight") return 26;
+  if (rowStyle === "header") return headerStyle(sheet, columnIndex);
+  if (rowStyle === "dateMarker") return 10;
+  if (rowStyle === "total")
+    return columnIndex === 0 ? 14 : columnIndex === sheet.columns.length - 1 ? 15 : 2;
+  if (rowStyle === "handCash")
+    return columnIndex === 0 ? 16 : columnIndex === sheet.columns.length - 1 ? 17 : 3;
+  const columnStyle = sheet.layout?.bodyColumnStyles?.[columnIndex];
+  if (columnStyle === "currency") return 11;
+  if (columnStyle === "percent") return 12;
+  if (columnStyle === "roster") return 13;
+  if (columnStyle === "softFill") return 27;
+  if (columnStyle === "date") return 8;
+  if (!sheet.layout?.grid) return 0;
+  return columnIndex === 0 ? 18 : columnIndex === sheet.columns.length - 1 ? 19 : 6;
 }
 
 function stringCell(row: number, index: number, value: string, style = 0): string {
@@ -236,12 +270,12 @@ ${sheets}${styles}
 function styles(): string {
   return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
-<numFmts count="1"><numFmt numFmtId="164" formatCode="dd-mmm-yy"/></numFmts>
-<fonts count="5"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FFFF0000"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FF00B050"/><name val="Calibri"/></font><font><b/><sz val="20"/><name val="Calibri"/></font></fonts>
-<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill></fills>
-<borders count="2"><border/><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border></borders>
+<numFmts count="3"><numFmt numFmtId="164" formatCode="mm-dd-yy"/><numFmt numFmtId="165" formatCode="[$₹-449]\\ #,##0.00"/><numFmt numFmtId="166" formatCode="0%"/></numFmts>
+<fonts count="7"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FFFF0000"/><name val="Calibri"/></font><font><sz val="12"/><color rgb="FF00B050"/><name val="Calibri"/></font><font><b/><sz val="20"/><name val="Calibri"/></font><font><sz val="11"/><color rgb="FF00B050"/><name val="Calibri"/></font><font><sz val="11"/><color rgb="FFFF0000"/><name val="Calibri"/></font></fonts>
+<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFFFC000"/><bgColor indexed="64"/></patternFill></fill><fill><patternFill patternType="solid"><fgColor rgb="FFE2F0D9"/><bgColor indexed="64"/></patternFill></fill></fills>
+<borders count="8"><border/><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border><border><left style="medium"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="medium"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="medium"><color auto="1"/></bottom><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="medium"><color auto="1"/></top><bottom style="thin"><color auto="1"/></bottom><diagonal/></border><border><left style="medium"><color auto="1"/></left><right style="thin"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="medium"><color auto="1"/></bottom><diagonal/></border><border><left style="thin"><color auto="1"/></left><right style="medium"><color auto="1"/></right><top style="thin"><color auto="1"/></top><bottom style="medium"><color auto="1"/></bottom><diagonal/></border></borders>
 <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
-<cellXfs count="9"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="2" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>
+<cellXfs count="28"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/><xf numFmtId="0" fontId="0" fillId="2" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="2" borderId="4" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="3" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="4" fillId="0" borderId="0" xfId="0" applyFont="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="164" fontId="0" fillId="0" borderId="5" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="165" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="166" fontId="0" fillId="0" borderId="1" xfId="0" applyNumberFormat="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="3" borderId="1" xfId="0" applyFont="1" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="2" borderId="2" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="2" borderId="3" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="2" borderId="6" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="2" borderId="7" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="2" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="3" xfId="0" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="5" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="6" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="2" fillId="0" borderId="3" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="1" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="2" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="1" fillId="0" borderId="3" xfId="0" applyFont="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="1" xfId="0" applyFill="1" applyBorder="1" applyAlignment="1"><alignment horizontal="center" vertical="center"/></xf></cellXfs>
 <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
 </styleSheet>`;
 }
