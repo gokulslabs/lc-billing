@@ -866,28 +866,20 @@ function OrderScreen({
                     order?.productName ??
                     products.data?.products.find((item) => item.id === productId)?.name ??
                     "";
-                  const filled = measurements.some(
-                    (row) => row.label.trim().length > 0 && row.value.trim().length > 0,
-                  );
                   const url = measurementWhatsAppUrl({
                     customerName,
-                    phone: customerPhone,
                     orderNo: order?.orderNo ?? "New",
                     garment,
                     measurements,
                   });
                   if (!url) {
-                    toast.error(
-                      filled
-                        ? "This customer has no mobile number."
-                        : "Enter this customer's measurements before sharing.",
-                    );
+                    toast.error("Enter measurements before sharing.");
                     return;
                   }
                   window.open(url, "_blank", "noopener,noreferrer");
                 }}
               >
-                WhatsApp
+                Share on WhatsApp
               </Button>
               <Button
                 type="button"

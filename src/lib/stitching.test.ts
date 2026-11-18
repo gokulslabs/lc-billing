@@ -32,10 +32,9 @@ describe("cleanMeasurements", () => {
 });
 
 describe("measurementWhatsAppUrl", () => {
-  it("opens that customer's chat with only their measurements", () => {
+  it("opens WhatsApp's recipient chooser with the measurement details", () => {
     const url = measurementWhatsAppUrl({
       customerName: "Priya",
-      phone: "9876543210",
       orderNo: "2445",
       garment: "BLOUSE",
       measurements: [
@@ -44,27 +43,17 @@ describe("measurementWhatsAppUrl", () => {
         { label: "Back neck", value: "3" },
       ],
     });
-    expect(url?.startsWith("https://wa.me/919876543210?text=")).toBe(true);
+    expect(url?.startsWith("https://wa.me/?text=")).toBe(true);
     const text = decodeURIComponent(url!.split("text=")[1]!);
     expect(text).toBe(
       "Ladies Collections\nPriya\nOrder 2445\nBLOUSE\n\nFRONT NECK: 8\nBACK NECK: 3",
     );
   });
 
-  it("does not open WhatsApp without a mobile number or a measurement", () => {
+  it("does not open WhatsApp without a measurement", () => {
     expect(
       measurementWhatsAppUrl({
         customerName: "Priya",
-        phone: "",
-        orderNo: "2445",
-        garment: "BLOUSE",
-        measurements: [{ label: "BUST", value: "36" }],
-      }),
-    ).toBeNull();
-    expect(
-      measurementWhatsAppUrl({
-        customerName: "Priya",
-        phone: "9876543210",
         orderNo: "2445",
         garment: "BLOUSE",
         measurements: [{ label: "BUST", value: "" }],

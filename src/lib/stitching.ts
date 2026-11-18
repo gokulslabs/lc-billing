@@ -111,17 +111,15 @@ export function whatsAppNumber(phone: string): string | null {
 
 export function measurementWhatsAppUrl(input: {
   customerName: string;
-  phone: string;
   orderNo: string;
   garment: string;
   measurements: readonly StitchingMeasurement[];
 }): string | null {
-  const number = whatsAppNumber(input.phone);
   const lines = input.measurements
     .map((row) => ({ label: row.label.trim().toUpperCase(), value: row.value.trim() }))
     .filter((row) => row.label && row.value)
     .map((row) => `${row.label}: ${row.value}`);
-  if (!number || lines.length === 0) return null;
+  if (lines.length === 0) return null;
   const text = [
     "Ladies Collections",
     input.customerName.trim(),
@@ -130,5 +128,5 @@ export function measurementWhatsAppUrl(input: {
     "",
     ...lines,
   ].join("\n");
-  return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  return `https://wa.me/?text=${encodeURIComponent(text)}`;
 }
