@@ -3,13 +3,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
-import {
-  expenseColumns,
-  expenseLedgerTotals,
-  expenseWhatsAppUrl,
-  type ExpenseRecord,
-} from "@/lib/expenses";
+import { expenseColumns, expenseLedgerTotals, type ExpenseRecord } from "@/lib/expenses";
 import { expenseExportSheets } from "@/lib/expenses-export";
+import { downloadExcel, shareExcelFile } from "@/lib/excel";
 import { shopToday } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
@@ -26,6 +22,7 @@ function ExpensesPage() {
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
   const [exportFrom, setExportFrom] = useState(shopToday());
   const [exportTo, setExportTo] = useState(shopToday());
+  const [sharing, setSharing] = useState(false);
   const month = viewDate.slice(0, 7);
   const query = useQuery({
     queryKey: ["expenses", month, viewMode, viewDate],
@@ -106,21 +103,55 @@ function ExpensesPage() {
           type="button"
           variant="outline"
           className="rounded-full"
-          onClick={() => {
+          disabled={sharing}
+          onClick={async () => {
             const period = viewMode === "day" ? slashDate(viewDate) : month;
-            const url = expenseWhatsAppUrl(rows("ledger"), period);
-            if (!url) {
+            const selected = records.filter(
+              (record) =>
+                (record.sheet === "ledger" || record.sheet === "target") &&
+                record.details.some((cell) => cell.trim() !== ""),
+            );
+            if (selected.length === 0) {
               toast.error(
                 viewMode === "day"
-                  ? "No expenses for this day to share."
-                  : "No expenses for this month to share.",
+                  ? "No expense records for this day to share."
+                  : "No expense records for this month to share.",
               );
               return;
             }
-            window.open(url, "_blank", "noopener,noreferrer");
+            const from = viewMode === "day" ? viewDate : `${month}-01`;
+            const to = viewMode === "day" ? viewDate : lastDay(month);
+            const filename = `expenses-${from}-to-${to}`;
+            const sheets = expenseExportSheets(selected, from, to);
+            const shareTitle = `Ladies Collections expenses ${period}`;
+            const shareText = `Expenses workbook for ${period}`;
+            setSharing(true);
+            try {
+              const shared = await shareExcelFile(filename, sheets, shareTitle, shareText);
+              if (!shared) {
+                downloadExcel(filename, sheets);
+                window.open(
+                  `https://wa.me/?text=${encodeURIComponent(`${shareText}. The Excel file has been downloaded; attach it to this WhatsApp message.`)}`,
+                  "_blank",
+                  "noopener,noreferrer",
+                );
+                toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
+              }
+            } catch (error) {
+              if (error instanceof DOMException && error.name === "AbortError") return;
+              downloadExcel(filename, sheets);
+              window.open(
+                `https://wa.me/?text=${encodeURIComponent(`${shareText}. The Excel file has been downloaded; attach it to this WhatsApp message.`)}`,
+                "_blank",
+                "noopener,noreferrer",
+              );
+              toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
+            } finally {
+              setSharing(false);
+            }
           }}
         >
-          WhatsApp
+          {sharing ? "Preparing…" : "WhatsApp Excel"}
         </Button>
         <ExportExcelButton
           filename={`expenses-${exportFrom}-to-${exportTo}`}

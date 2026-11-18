@@ -62,6 +62,24 @@ export function downloadExcel(filename: string, sheets: ExcelSheet[]) {
   URL.revokeObjectURL(url);
 }
 
+export async function shareExcelFile(
+  filename: string,
+  sheets: ExcelSheet[],
+  title: string,
+  text: string,
+): Promise<boolean> {
+  if (typeof navigator === "undefined" || typeof File === "undefined") return false;
+  const bytes = excelFile(sheets);
+  const buffer = new ArrayBuffer(bytes.byteLength);
+  new Uint8Array(buffer).set(bytes);
+  const file = new File([buffer], filename.endsWith(".xlsx") ? filename : `${filename}.xlsx`, {
+    type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  if (!navigator.share || !navigator.canShare?.({ files: [file] })) return false;
+  await navigator.share({ files: [file], title, text });
+  return true;
+}
+
 function worksheet(sheet: ExcelSheet): string {
   const start = sheet.layout?.startColumn ?? 0;
   const headerRow = sheet.layout?.headerRow ?? 1;

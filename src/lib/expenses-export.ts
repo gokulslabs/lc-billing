@@ -14,7 +14,6 @@ function isLedgerSummary(record: ExpenseRecord): boolean {
   const summaryLabel = (record.details[5] ?? "").trim().toUpperCase();
   return (
     label === "TOT EXPENSES" ||
-    label === "SHREEDEVI MAM" ||
     ["CASH RECIPETS", "CASH RECEIPTS", "CASH EXPENSES", "HAND CASH"].includes(summaryLabel)
   );
 }
