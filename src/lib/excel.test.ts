@@ -1,6 +1,6 @@
 import { inflateRawSync } from "node:zlib";
-import { describe, expect, it } from "vitest";
-import { excelFile } from "./excel";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { excelFile, shareExcelFile } from "./excel";
 
 describe("excelFile", () => {
   it("writes an xlsx workbook Excel can open, with text escaped and amounts as numbers", () => {
@@ -32,6 +32,47 @@ describe("excelFile", () => {
     expect(sheet).toContain('<c r="B3"><v>0</v></c>');
     expect(sheet).toContain('state="frozen"');
     expect(text(entries.get("xl/worksheets/sheet2.xml"))).toContain("Cash");
+  });
+});
+
+describe("shareExcelFile", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+  });
+
+  it("shares the generated workbook as an xlsx file when the browser supports file sharing", async () => {
+    const share = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("navigator", { canShare: () => true, share });
+
+    await shareExcelFile(
+      "expenses",
+      [{ name: "Expenses", columns: ["Date"], rows: [] }],
+      "Expenses",
+      "November expenses",
+    );
+
+    expect(share).toHaveBeenCalledOnce();
+    const [shareData] = share.mock.calls[0] ?? [];
+    const file = shareData?.files?.[0];
+    expect(file?.name).toBe("expenses.xlsx");
+    expect(file?.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    expect(shareData?.text).toBe("November expenses");
+  });
+
+  it("returns null when the browser cannot share files", () => {
+    const share = vi.fn();
+    vi.stubGlobal("navigator", { canShare: () => false, share });
+
+    expect(
+      shareExcelFile(
+        "expenses.xlsx",
+        [{ name: "Expenses", columns: [], rows: [] }],
+        "Expenses",
+        "",
+      ),
+    ).toBeNull();
+    expect(share).not.toHaveBeenCalled();
   });
 });
 

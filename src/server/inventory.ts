@@ -148,7 +148,7 @@ inventory.get("/barcodes", async (c) => {
   let items = new Map<string, string>();
   // Manual ranges starting at an individual piece still print distinct existing barcodes.
   if (quantity !== undefined) {
-    numbers = barcodeNumbers(stock?.inventory_no ?? starting, quantity);
+    numbers = barcodeNumbers(starting, quantity);
     if (numbers.length === quantity) {
       const { data, error } = await supabaseAdmin
         .from("inventory_items")
