@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -56,6 +57,14 @@ function SettingsPage() {
       <div>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-4xl font-semibold">Settings</h1>
+          {admin ? (
+            <Button asChild variant="outline" className="rounded-full">
+              <Link to="/admin/employees">
+                <Users className="mr-2 h-4 w-4" />
+                Employees
+              </Link>
+            </Button>
+          ) : null}
           <ExportExcelButton
             filename="settings"
             load={async () => [

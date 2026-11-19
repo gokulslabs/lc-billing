@@ -152,7 +152,7 @@ function AuthenticatedLayout() {
           <SidebarGroup className="flex flex-1 flex-col">
             <SidebarGroupContent className="flex flex-1 flex-col">
               <SidebarMenu className="flex-1 justify-between py-2">
-                {MODULES.filter((m) => m.key !== "employees" || isAdmin).map((m) => (
+                {MODULES.filter((m) => m.key !== "employees").map((m) => (
                   <SidebarMenuItem
                     key={m.key}
                     className="flex flex-1 items-center group-data-[collapsible=icon]:justify-center"
