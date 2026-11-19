@@ -21,7 +21,7 @@ import {
   escapePrint,
   legacyDate,
   plainAmount,
-  printLegacySlipInSameTab,
+  printStitchingSlipInSameTab,
   shopHeading,
   slipRow,
 } from "@/components/app/ShopSlip";
@@ -520,7 +520,7 @@ function OrderScreen({
   function printCopy(next: "customer" | "office") {
     if (!order) return;
     const body = next === "customer" ? customerCopyHtml(order) : officeCopyHtml(order);
-    if (!printLegacySlipInSameTab(body)) toast.error("Could not prepare the printout.");
+    if (!printStitchingSlipInSameTab(body)) toast.error("Could not prepare the printout.");
   }
   const [seen, setSeen] = useState<string | null>(null);
   const savedMeasurements = order?.measurements.length
