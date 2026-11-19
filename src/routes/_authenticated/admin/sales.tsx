@@ -693,67 +693,69 @@ function BillScreen({
 
   return (
     <div className="mx-auto w-full min-w-0 max-w-[100rem] space-y-8 p-6 md:p-10">
-      <div className="flex flex-wrap items-start justify-start gap-8">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <Button variant="outline" className="rounded-full" onClick={onBack}>
-              Bill list
-            </Button>
-            <h1 className="text-4xl font-semibold">
-              {invoice ? `Bill ${invoice.billNo}` : "Bill"}
-            </h1>
+      <div className="space-y-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <h1 className="text-4xl font-semibold">
+                {invoice ? `Bill ${invoice.billNo}` : "Bill"}
+              </h1>
+              {invoice ? (
+                <ExportExcelButton
+                  filename={`bill-${invoice.billNo}`}
+                  load={async () => [
+                    {
+                      name: "Lines",
+                      columns: ["Inventory no.", "Code", "Product", "Qty", "Rate", "Amount"],
+                      rows: invoice.lines.map((line) => [
+                        line.inventoryNo,
+                        line.productCode,
+                        line.productName,
+                        line.quantity,
+                        line.rate,
+                        line.amount,
+                      ]),
+                    },
+                    {
+                      name: "Payments",
+                      columns: ["Date", "Mode", "Showroom", "Amount"],
+                      rows: invoice.payments.map((payment) => [
+                        payment.paidOn,
+                        payment.mode ?? "",
+                        payment.showroom ?? "",
+                        payment.amount,
+                      ]),
+                    },
+                  ]}
+                />
+              ) : null}
+            </div>
             {invoice ? (
-              <ExportExcelButton
-                filename={`bill-${invoice.billNo}`}
-                load={async () => [
-                  {
-                    name: "Lines",
-                    columns: ["Inventory no.", "Code", "Product", "Qty", "Rate", "Amount"],
-                    rows: invoice.lines.map((line) => [
-                      line.inventoryNo,
-                      line.productCode,
-                      line.productName,
-                      line.quantity,
-                      line.rate,
-                      line.amount,
-                    ]),
-                  },
-                  {
-                    name: "Payments",
-                    columns: ["Date", "Mode", "Showroom", "Amount"],
-                    rows: invoice.payments.map((payment) => [
-                      payment.paidOn,
-                      payment.mode ?? "",
-                      payment.showroom ?? "",
-                      payment.amount,
-                    ]),
-                  },
-                ]}
-              />
+              <p className="mt-2 text-sm text-muted-foreground">
+                <Link
+                  to="/admin/customers/$customerId"
+                  params={{ customerId: invoice.customerId }}
+                  className="hover:underline"
+                >
+                  {invoice.customerName}
+                </Link>{" "}
+                · {invoice.billedOn} · {billStatusLabel(invoice.status)}
+              </p>
+            ) : null}
+            {invoice && invoice.status !== "cancelled" ? (
+              <ChangeBillCustomer invoice={invoice} onSaved={refresh} />
             ) : null}
           </div>
-          {invoice ? (
-            <p className="mt-2 text-sm text-muted-foreground">
-              <Link
-                to="/admin/customers/$customerId"
-                params={{ customerId: invoice.customerId }}
-                className="hover:underline"
-              >
-                {invoice.customerName}
-              </Link>{" "}
-              · {invoice.billedOn} · {billStatusLabel(invoice.status)}
-            </p>
-          ) : null}
-          {invoice && invoice.status !== "cancelled" ? (
-            <ChangeBillCustomer invoice={invoice} onSaved={refresh} />
-          ) : null}
+          <Button variant="outline" className="shrink-0 rounded-full" onClick={onBack}>
+            Back
+          </Button>
         </div>
         {invoice && !newEntry ? (
-          <div className="flex w-full max-w-sm shrink-0 flex-col items-stretch gap-3 print:hidden">
-            <div className="flex items-end justify-between gap-3">
+          <section className="w-full max-w-2xl rounded-2xl border border-primary/30 bg-card p-5 shadow-sm print:hidden md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <p className="text-sm text-muted-foreground">Balance</p>
-                <p className="font-display text-4xl font-semibold tabular-nums">
+                <p className="text-base font-semibold text-foreground">Balance due</p>
+                <p className="mt-1 font-display text-4xl font-semibold tabular-nums text-foreground">
                   {formatRupees(invoice.balance)}
                 </p>
               </div>
@@ -774,7 +776,7 @@ function BillScreen({
                 onSaved={refresh}
               />
             ) : null}
-          </div>
+          </section>
         ) : null}
       </div>
       {bill.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
