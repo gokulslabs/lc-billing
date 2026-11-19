@@ -24,13 +24,18 @@ export function plainAmount(value: number): string {
 
 export function printLegacySlipInSameTab(body: string): boolean {
   return printHtmlInSameTab(`<!doctype html><html><head><meta charset="utf-8"><title>${LEGACY_PRINT_TITLE}</title><style>
-    body { width: 400px; margin: 0; color: #333; font-family: "Helvetica Neue", Helvetica, Arial, sans-serif; }
-    table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-    th, td { border: 1px solid #ddd; padding: 5px; text-align: left; vertical-align: top; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; color: #222; font-family: Arial, sans-serif; }
+    body { width: 100%; max-width: 190mm; margin: 0 auto; font-size: 9pt; }
+    table { width: 100%; border-collapse: collapse; margin: 0 0 2mm; break-inside: auto; }
+    thead { display: table-header-group; }
+    tr { break-inside: avoid; page-break-inside: avoid; }
+    th, td { border: 1px solid #555; padding: 2px 4px; text-align: left; vertical-align: top; }
     .center { text-align: center; }
-    h3 { margin: 20px 0 10px; font-size: 24px; font-weight: 500; line-height: 1.1; }
-    h4 { margin: 10px 0; font-size: 18px; font-weight: 500; line-height: 1.1; }
-    @media print { body { width: 100%; } @page { margin: 8mm; } }
+    h3 { margin: 2mm 0; font-size: 14pt; font-weight: 600; line-height: 1.1; }
+    h4 { margin: 1mm 0; font-size: 9pt; font-weight: 600; line-height: 1.15; }
+    @page { size: A4 portrait; margin: 6mm; }
+    @media print { html, body { width: 100%; } body { max-width: none; } }
   </style></head><body>${body}</body></html>`);
 }
 
