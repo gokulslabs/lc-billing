@@ -43,7 +43,7 @@ export function printStitchingSlipInSameTab(body: string): boolean {
   return printHtmlInSameTab(`<!doctype html><html><head><meta charset="utf-8"><title>${LEGACY_PRINT_TITLE}</title><style>
     * { box-sizing: border-box; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     html, body { margin: 0; padding: 0; color: #000; font-family: Arial, sans-serif; }
-    body { width: 100%; max-width: 190mm; margin: 0 auto; font-size: 10pt; font-weight: 600; }
+    body { width: 185mm; max-width: 100%; margin: 0 auto; font-size: 10pt; font-weight: 600; }
     table { width: 100%; border: 1.25pt solid #000; border-collapse: collapse; margin: 0 0 2mm; table-layout: fixed; break-inside: auto; }
     thead { display: table-header-group; }
     tr { break-inside: avoid; page-break-inside: avoid; }
@@ -53,7 +53,7 @@ export function printStitchingSlipInSameTab(body: string): boolean {
     h3 { margin: 1mm 0; font-size: 14pt; font-weight: 700; line-height: 1.1; }
     h4 { margin: 0.5mm 0; font-size: 9.5pt; font-weight: 700; line-height: 1.15; color: #000; }
     @page { size: A4 portrait; margin: 6mm; }
-    @media print { html, body { width: 100%; color: #000 !important; } body { max-width: none; } th, td { border-color: #000; } }
+    @media print { html { width: 100%; } body { width: 185mm; max-width: 100%; margin: 0 auto; color: #000 !important; } th, td { border-color: #000; } }
   </style></head><body>${body}</body></html>`);
 }
 
