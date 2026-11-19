@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Users } from "lucide-react";
+import { Smartphone, Users } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { useIsAdmin } from "@/hooks/use-is-admin";
@@ -53,74 +53,95 @@ function SettingsPage() {
   const processes = settings.data?.processes ?? [];
 
   return (
-    <div className="mx-auto max-w-4xl space-y-8 p-6 md:p-10">
-      <div>
-        <div className="flex flex-wrap items-center gap-3">
+    <div className="mx-auto max-w-5xl space-y-6 p-6 md:p-10">
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
           <h1 className="text-4xl font-semibold">Settings</h1>
-          {admin ? (
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
+            {admin
+              ? "Manage stitching options, staff access, and this device’s app setup."
+              : "Install the shop app on this device. Stitching settings can be changed by an admin."}
+          </p>
+        </div>
+        {admin ? (
+          <div className="flex flex-wrap gap-2 sm:justify-end">
             <Button asChild variant="outline" className="rounded-full">
               <Link to="/admin/employees">
                 <Users className="mr-2 h-4 w-4" />
                 Employees
               </Link>
             </Button>
-          ) : null}
-          <ExportExcelButton
-            filename="settings"
-            load={async () => [
-              {
-                name: "Garments",
-                columns: ["Garment"],
-                rows: garments.map((garment) => [garment.name]),
-              },
-              {
-                name: "Measurements",
-                columns: ["Garment", "Field"],
-                rows: garments.flatMap((garment) =>
-                  garment.measurements.map((field) => [garment.name, field.label]),
-                ),
-              },
-              {
-                name: "Processes",
-                columns: ["Process"],
-                rows: processes.map((process) => [process.name]),
-              },
-            ]}
-          />
-        </div>
-        <p className="mt-2 text-sm text-muted-foreground">
-          {admin ? (
-            <>
-              Stitching garments, the measurement heads for each garment, and the process list.
-              Names can be added or removed.
-            </>
-          ) : (
-            "Only an admin can change stitching settings."
-          )}
-        </p>
-      </div>
+            <ExportExcelButton
+              filename="settings"
+              label="Export settings"
+              load={async () => [
+                {
+                  name: "Garments",
+                  columns: ["Garment"],
+                  rows: garments.map((garment) => [garment.name]),
+                },
+                {
+                  name: "Measurements",
+                  columns: ["Garment", "Field"],
+                  rows: garments.flatMap((garment) =>
+                    garment.measurements.map((field) => [garment.name, field.label]),
+                  ),
+                },
+                {
+                  name: "Processes",
+                  columns: ["Process"],
+                  rows: processes.map((process) => [process.name]),
+                },
+              ]}
+            />
+          </div>
+        ) : null}
+      </header>
       <InstallApp />
-      {settings.isLoading ? <p className="text-sm text-muted-foreground">Loading…</p> : null}
+      {settings.isLoading ? (
+        <p role="status" className="text-sm text-muted-foreground">
+          Loading stitching settings…
+        </p>
+      ) : null}
       {settings.error instanceof Error ? (
-        <p className="text-sm text-destructive">{settings.error.message}</p>
+        <p
+          role="alert"
+          className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 text-sm text-destructive"
+        >
+          {settings.error.message}
+        </p>
       ) : null}
       {admin && settings.data ? (
-        <Tabs defaultValue="products">
-          <TabsList className="h-auto max-w-full justify-start overflow-x-auto">
-            <TabsTrigger value="products">Stitching products</TabsTrigger>
-            <TabsTrigger value="measurements">Measurements</TabsTrigger>
-            <TabsTrigger value="processes">Processes</TabsTrigger>
-          </TabsList>
-          <TabsContent value="products" className="mt-6">
-            <Garments garments={garments} />
-          </TabsContent>
-          <TabsContent value="measurements" className="mt-6">
-            <Measurements garments={garments} />
-          </TabsContent>
-          <TabsContent value="processes" className="mt-6">
-            <Processes processes={processes} />
-          </TabsContent>
-        </Tabs>
+        <section className="space-y-5 rounded-3xl border border-border bg-card p-4 shadow-sm md:p-6">
+          <div>
+            <h2 className="text-xl font-semibold">Stitching setup</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Add and maintain the options staff use when recording tailoring orders.
+            </p>
+          </div>
+          <Tabs defaultValue="products">
+            <TabsList className="grid h-auto w-full max-w-2xl grid-cols-3">
+              <TabsTrigger value="products" className="min-w-0 px-2 py-2.5 text-xs sm:text-sm">
+                Garments <span className="ml-1 text-muted-foreground">{garments.length}</span>
+              </TabsTrigger>
+              <TabsTrigger value="measurements" className="min-w-0 px-2 py-2.5 text-xs sm:text-sm">
+                Measurements
+              </TabsTrigger>
+              <TabsTrigger value="processes" className="min-w-0 px-2 py-2.5 text-xs sm:text-sm">
+                Processes <span className="ml-1 text-muted-foreground">{processes.length}</span>
+              </TabsTrigger>
+            </TabsList>
+            <TabsContent value="products" className="mt-5 space-y-5">
+              <Garments garments={garments} />
+            </TabsContent>
+            <TabsContent value="measurements" className="mt-5">
+              <Measurements garments={garments} />
+            </TabsContent>
+            <TabsContent value="processes" className="mt-5">
+              <Processes processes={processes} />
+            </TabsContent>
+          </Tabs>
+        </section>
       ) : null}
     </div>
   );
@@ -147,20 +168,28 @@ function InstallApp() {
   }
 
   return (
-    <section className="rounded-2xl border border-border bg-card p-4">
-      <h2 className="text-lg font-semibold">Phone app</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Puts Products, Customers and Inventory on the phone home screen.
-      </p>
+    <section className="flex flex-col gap-4 rounded-2xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-center sm:justify-between md:p-5">
+      <div className="flex items-start gap-3">
+        <div className="rounded-xl bg-background p-2.5 text-primary">
+          <Smartphone className="h-5 w-5" aria-hidden="true" />
+        </div>
+        <div>
+          <h2 className="font-semibold">Install on this device</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Add Products, Customers, and Inventory to this device’s home screen.
+          </p>
+          {help ? <p className="mt-2 text-sm text-muted-foreground">{help}</p> : null}
+        </div>
+      </div>
       <Button
         type="button"
-        className="mt-3 rounded-full"
+        variant={installed ? "secondary" : "outline"}
+        className="shrink-0 rounded-full"
         disabled={installed}
         onClick={() => void install()}
       >
-        {installed ? "App installed" : "Install app"}
+        {installed ? "Installed" : "Install app"}
       </Button>
-      {help ? <p className="mt-3 text-sm text-muted-foreground">{help}</p> : null}
     </section>
   );
 }
@@ -188,18 +217,19 @@ function Garments({ garments }: { garments: StitchingGarment[] }) {
   });
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <NameForm
         id="garment-name"
-        label="Product name"
+        label="Add a garment"
         value={name}
         onChange={setName}
         pending={add.isPending}
-        action="Save"
+        action="Add garment"
         onSubmit={() => add.mutate()}
       />
       <NameTable
-        heading="Product name"
+        heading={`Garments (${garments.length})`}
+        emptyMessage="No garments yet. Add the first garment above."
         sortable
         rows={garments.map((garment) => ({ id: garment.id, name: garment.name }))}
         onRemove={(row) => {
@@ -244,9 +274,9 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
   });
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
       <div className="space-y-2">
-        <Label htmlFor="measurement-garment">Product name</Label>
+        <Label htmlFor="measurement-garment">Choose a garment</Label>
         <Select value={garment?.id} onValueChange={setProductId}>
           <SelectTrigger id="measurement-garment" className="w-full max-w-xs">
             <SelectValue placeholder="Choose" />
@@ -262,8 +292,18 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
       </div>
       {garment ? (
         <>
+          <NameForm
+            id="measurement-head"
+            label={`Add a measurement for ${garment.name}`}
+            value={label}
+            onChange={setLabel}
+            pending={add.isPending}
+            action="Add measurement"
+            onSubmit={() => add.mutate()}
+          />
           <NameTable
-            heading="Measurement head"
+            heading={`Measurements for ${garment.name} (${garment.measurements.length})`}
+            emptyMessage="No measurements are set up for this garment yet."
             rows={garment.measurements.map((field) => ({ id: field.id, name: field.label }))}
             onRemove={(row) => {
               if (
@@ -275,15 +315,6 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
               }
               remove.mutate(row.id);
             }}
-          />
-          <NameForm
-            id="measurement-head"
-            label="Measurement head"
-            value={label}
-            onChange={setLabel}
-            pending={add.isPending}
-            action="Add"
-            onSubmit={() => add.mutate()}
           />
         </>
       ) : (
@@ -316,23 +347,24 @@ function Processes({ processes }: { processes: StitchingProcess[] }) {
   });
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-5">
+      <NameForm
+        id="process-name"
+        label="Add a process"
+        value={name}
+        onChange={setName}
+        pending={add.isPending}
+        action="Add process"
+        onSubmit={() => add.mutate()}
+      />
       <NameTable
-        heading="Process"
+        heading={`Processes (${processes.length})`}
+        emptyMessage="No processes yet. Add the first process above."
         rows={processes.map((process) => ({ id: process.id, name: process.name }))}
         onRemove={(row) => {
           if (!window.confirm(`Remove ${row.name}? This cannot be undone.`)) return;
           remove.mutate(row.id);
         }}
-      />
-      <NameForm
-        id="process-name"
-        label="Process"
-        value={name}
-        onChange={setName}
-        pending={add.isPending}
-        action="Add"
-        onSubmit={() => add.mutate()}
       />
     </section>
   );
@@ -360,19 +392,23 @@ function NameForm({
     onSubmit();
   }
   return (
-    <form className="flex flex-wrap items-end gap-3" onSubmit={submit}>
-      <div className="space-y-2">
+    <form
+      className="flex flex-col gap-3 rounded-2xl border border-border bg-muted/20 p-4 sm:flex-row sm:items-end"
+      onSubmit={submit}
+    >
+      <div className="w-full max-w-md flex-1 space-y-2">
         <Label htmlFor={id}>{label}</Label>
         <Input
           id={id}
           value={value}
           onChange={(event) => onChange(event.target.value)}
           maxLength={40}
-          className="w-72"
+          className="w-full"
+          placeholder="Type a name"
           required
         />
       </div>
-      <Button type="submit" className="rounded-full" disabled={pending}>
+      <Button type="submit" className="w-full rounded-full sm:w-auto" disabled={pending}>
         {pending ? "Saving…" : action}
       </Button>
     </form>
@@ -384,11 +420,13 @@ function NameTable({
   rows,
   onRemove,
   sortable = false,
+  emptyMessage = "No items added yet.",
 }: {
   heading: string;
   rows: { id: string; name: string }[];
   onRemove: (row: { id: string; name: string }) => void;
   sortable?: boolean;
+  emptyMessage?: string;
 }) {
   const [direction, setDirection] = useState<"ascending" | "descending">();
   const ordered = direction
@@ -444,7 +482,7 @@ function NameTable({
           {rows.length === 0 ? (
             <TableRow>
               <TableCell colSpan={3} className="text-muted-foreground">
-                None yet.
+                {emptyMessage}
               </TableCell>
             </TableRow>
           ) : null}
