@@ -308,7 +308,6 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                 {sortHeader("Customer", "customer")}
                 {sortHeader("Product", "product")}
                 {sortHeader("Date", "ordered_on")}
-                {sortHeader("Status", "status")}
                 <TableHead />
               </TableRow>
             </TableHeader>
@@ -336,7 +335,6 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                       {order.deliveryOn ? slashDate(order.deliveryOn) : "—"}
                     </div>
                   </TableCell>
-                  <TableCell>{order.status}</TableCell>
                   <TableCell className="text-right">
                     <Button
                       variant="outline"
