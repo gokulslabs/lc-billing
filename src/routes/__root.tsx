@@ -4,13 +4,13 @@ import {
   Link,
   createRootRouteWithContext,
   useRouter,
+  useRouterState,
   HeadContent,
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 
-import { supabase } from "@/integrations/supabase/client";
 import { Toaster } from "@/components/ui/sonner";
 import { registerShopApp } from "@/lib/pwa";
 import { themeBootScript } from "@/lib/theme";
@@ -130,19 +130,39 @@ function RootShell({ children }: { children: ReactNode }) {
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const router = useRouter();
+  const pathname = useRouterState({ select: (state) => state.location.pathname });
 
   useEffect(() => {
     registerShopApp();
   }, []);
 
   useEffect(() => {
-    const { data } = supabase.auth.onAuthStateChange((event) => {
-      if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
-      router.invalidate();
-      if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+    const isPublicStorePage =
+      pathname === "/" ||
+      pathname.startsWith("/shop") ||
+      pathname.startsWith("/cart") ||
+      pathname.startsWith("/checkout") ||
+      pathname.startsWith("/trial-room");
+    if (isPublicStorePage) return;
+
+    let unsubscribe: (() => void) | undefined;
+    let cancelled = false;
+
+    void import("@/integrations/supabase/client").then(({ supabase }) => {
+      if (cancelled) return;
+      const { data } = supabase.auth.onAuthStateChange((event) => {
+        if (event !== "SIGNED_IN" && event !== "SIGNED_OUT" && event !== "USER_UPDATED") return;
+        router.invalidate();
+        if (event !== "SIGNED_OUT") queryClient.invalidateQueries();
+      });
+      unsubscribe = () => data.subscription.unsubscribe();
     });
-    return () => data.subscription.unsubscribe();
-  }, [router, queryClient]);
+
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+    };
+  }, [pathname, router, queryClient]);
 
   return (
     <QueryClientProvider client={queryClient}>

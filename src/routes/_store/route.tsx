@@ -1,10 +1,8 @@
 import { createFileRoute, Link, Outlet } from "@tanstack/react-router";
-import { ArrowUpRight, LogOut, Search, ShoppingBag, Sparkles, UserRound } from "lucide-react";
+import { ArrowUpRight, Search, ShoppingBag, Sparkles, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { CartContext, type Cart } from "@/components/store/cart-state";
 import { categories, MAX_QUANTITY, productById } from "@/lib/storefront";
-import { useAuth } from "@/hooks/use-auth";
-import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/_store")({ component: StoreLayout });
 const cartKey = "lc-store-cart-v1";
@@ -26,7 +24,6 @@ function Brand() {
 function StoreLayout() {
   const [cart, setCart] = useState<Cart>({});
   const [ready, setReady] = useState(false);
-  const { user } = useAuth();
 
   useEffect(() => {
     try {
@@ -144,26 +141,14 @@ function StoreLayout() {
               >
                 <Search size={19} strokeWidth={1.6} />
               </Link>
-              {user ? (
-                <button
-                  type="button"
-                  aria-label="Sign out of your account"
-                  title="Sign out"
-                  className="store-header-action"
-                  onClick={() => void supabase.auth.signOut()}
-                >
-                  <LogOut size={18} strokeWidth={1.6} />
-                </button>
-              ) : (
-                <Link
-                  to="/auth"
-                  aria-label="Customer sign in"
-                  title="Customer sign in"
-                  className="store-header-action"
-                >
-                  <UserRound size={19} strokeWidth={1.6} />
-                </Link>
-              )}
+              <Link
+                to="/auth"
+                aria-label="Customer account"
+                title="Customer account"
+                className="store-header-action"
+              >
+                <UserRound size={19} strokeWidth={1.6} />
+              </Link>
               <Link
                 to="/cart"
                 aria-label={`Shopping bag, ${count} items`}
