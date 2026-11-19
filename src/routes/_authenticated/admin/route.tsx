@@ -199,12 +199,14 @@ function AuthenticatedLayout() {
           </SidebarGroup>
         </SidebarContent>
         <SidebarFooter className="border-t border-sidebar-border p-4 group-data-[collapsible=icon]:items-center group-data-[collapsible=icon]:p-2">
-          <ExportExcelButton
-            filename="ladies-collections"
-            label="Export all data"
-            className="mb-2 w-full group-data-[collapsible=icon]:hidden"
-            load={loadMasterExport}
-          />
+          {isAdmin ? (
+            <ExportExcelButton
+              filename="ladies-collections"
+              label="Export all data"
+              className="mb-2 w-full group-data-[collapsible=icon]:hidden"
+              load={loadMasterExport}
+            />
+          ) : null}
           <ThemeToggle className="mb-2" />
         </SidebarFooter>
         <SidebarRail />
