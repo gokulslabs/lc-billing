@@ -101,7 +101,7 @@ export function expenseExportSheets(
     ]);
     rowStyles[ledger.length] = "total";
     ledger.push([
-      "SHREEDEVI MAM",
+      "SREEDEVI MAM",
       "",
       "",
       "",

@@ -1,5 +1,5 @@
 export const LEDGER_COLUMNS = [
-  "EXPENSCES",
+  "EXPENSES",
   "MAM GPAY / CHEQUE",
   "CASH",
   "INCOME",

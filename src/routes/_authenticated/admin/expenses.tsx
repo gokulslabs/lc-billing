@@ -591,7 +591,7 @@ function LedgerFooterRows({ totals }: { totals: ReturnType<typeof expenseLedgerT
       />
       <LedgerFooterRow
         cells={[
-          "SHREEDEVI MAM",
+          "SREEDEVI MAM",
           "",
           "",
           "",
