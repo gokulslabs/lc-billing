@@ -5,7 +5,6 @@ import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
 import { useUnsavedWork } from "@/hooks/use-unsaved-work";
 import type { Customer } from "@/lib/customers";
-import { formatRupees } from "@/lib/products";
 import type { StitchingProcess } from "@/lib/settings";
 import { NEW_COUNTER_FROM } from "@/lib/sales";
 import {
@@ -22,7 +21,6 @@ import {
   escapePrint,
   legacyDate,
   plainAmount,
-  printHtmlInSameTab,
   printLegacySlipInSameTab,
   shopHeading,
   slipRow,
@@ -321,7 +319,12 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
                   <TableCell className="font-medium">{order.orderNo}</TableCell>
                   <TableCell>{order.bagNo || "—"}</TableCell>
                   <TableCell>
-                    <div>{order.customerName || "—"}</div>
+                    {customerNameLines(order.customerName).map((line, lineIndex) => (
+                      <div key={`${lineIndex}-${line}`}>
+                        {lineIndex > 0 ? "/ " : ""}
+                        {line}
+                      </div>
+                    ))}
                     {order.customerPhone ? (
                       <div className="text-xs text-muted-foreground">{order.customerPhone}</div>
                     ) : null}
@@ -491,10 +494,6 @@ function OrderScreen({
     queryFn: () => apiFetch<{ order: StitchingOrder }>(`/api/stitching-orders/${id}`),
   });
   const order = existing.data?.order;
-  function printOrder(copy: "customer" | "office") {
-    if (!order) return;
-    printHtmlInSameTab(stitchingMeasurementDocument(order, copy));
-  }
   const processOptions = useQuery({
     queryKey: ["settings"],
     queryFn: () => apiFetch<{ processes: StitchingProcess[] }>("/api/settings"),
@@ -641,55 +640,44 @@ function OrderScreen({
   return (
     <div className="mx-auto max-w-3xl space-y-8 p-6 md:p-10">
       <div>
-        <Button variant="outline" className="rounded-full" onClick={onBack}>
-          Back
-        </Button>
-        <div className="mt-4 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
           <h1 className="text-4xl font-semibold">
             {order ? `Order ${order.orderNo}` : "New order"}
           </h1>
-          {order ? (
-            <>
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => printCopy("customer")}
-              >
-                Customer copy
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => printCopy("office")}
-              >
-                Office copy
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="rounded-full"
-                onClick={() => printOrder("office")}
-              >
-                Print order sheet
-              </Button>
-              <ExportExcelButton
-                filename={`order-${order.orderNo}`}
-                load={async () => [
-                  {
-                    name: "Measurements",
-                    columns: ["Field", "Value"],
-                    rows: order.measurements.map((measurement) => [
-                      measurement.label,
-                      measurement.value,
-                    ]),
-                  },
-                ]}
-              />
-            </>
-          ) : null}
         </div>
+        {order ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => printCopy("customer")}
+            >
+              Customer copy
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              onClick={() => printCopy("office")}
+            >
+              Office copy
+            </Button>
+            <ExportExcelButton
+              filename={`order-${order.orderNo}`}
+              load={async () => [
+                {
+                  name: "Measurements",
+                  columns: ["Field", "Value"],
+                  rows: order.measurements.map((measurement) => [
+                    measurement.label,
+                    measurement.value,
+                  ]),
+                },
+              ]}
+            />
+          </div>
+        ) : null}
         <p className="mt-2 text-sm text-muted-foreground">
           Measurements stay as written, including values such as 36+4.
         </p>
@@ -943,6 +931,14 @@ function garmentName(name: string): string {
   return name.replace(/ stitching$/i, "");
 }
 
+function customerNameLines(name: string): string[] {
+  const parts = name
+    .split(/\s+\/\s+/)
+    .map((part) => part.trim())
+    .filter(Boolean);
+  return parts.length ? parts : ["—"];
+}
+
 function customerCopyHtml(order: StitchingOrder): string {
   return `<table><tbody>${shopHeading()}<tr><th class="center" colspan="2"><h4>CUSTOMER STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("NAME", order.customerName)}${slipRow("MOBILE NO.", order.customerPhone)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("EXPECTED RETURN DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("AMOUNT", plainAmount(order.amount))}<tr><th colspan="2"><h4>NOTE : <br>1. Any complaint for goods should be made within 3 days.<br>2. We are not responsible for any damage or colour fades.<br>3. Amount may vary as per the execution duration.</h4></th></tr></tbody></table>`;
 }
@@ -962,38 +958,6 @@ function officeCopyHtml(order: StitchingOrder): string {
     )
     .join("");
   return `<table><tbody>${shopHeading(false)}<tr><th class="center" colspan="2"><h4>STITCHING ORDER COPY</h4></th></tr>${slipRow("ORDER NO.", order.orderNo)}${slipRow("DATE", legacyDate(order.orderedOn))}${slipRow("EXPECTED DATE", order.deliveryOn ? legacyDate(order.deliveryOn) : "")}${slipRow("NAME", order.customerName)}${slipRow("PRODUCT", garmentName(order.productName))}${slipRow("DESCRIPTION", order.description ?? "")}</tbody></table><table><thead><tr><th colspan="2"><h4>PROCESS DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>PROCESS</h4></th></tr></thead><tbody>${processes}</tbody></table><table><thead><tr><th colspan="3"><h4>MEASUREMENT DETAILS</h4></th></tr><tr><th><h4>SL.NO.</h4></th><th><h4>TITLE</h4></th><th><h4>MEASUREMENT</h4></th></tr></thead><tbody>${measurements}</tbody></table>`;
-}
-
-function stitchingMeasurementDocument(order: StitchingOrder, copy: "customer" | "office"): string {
-  const office = copy === "office";
-  const row = (label: string, value: string) =>
-    `<tr><td class="label">${escapePrint(label)}</td><td>${escapePrint(value || "—")}</td></tr>`;
-  const measurements = order.measurements.length
-    ? order.measurements
-        .map(
-          (measurement) =>
-            `<tr><td>${escapePrint(measurement.label)}</td><td>${escapePrint(measurement.value)}</td></tr>`,
-        )
-        .join("")
-    : `<tr><td colspan="2" class="empty">No measurements saved for this order.</td></tr>`;
-  const measurementTable = office
-    ? `<table class="measurements"><thead><tr><th>Measurement</th><th>Value</th></tr></thead><tbody>${measurements}</tbody></table>`
-    : "";
-  const description =
-    office && order.description
-      ? `<p><b>Description:</b> ${escapePrint(order.description)}</p>`
-      : "";
-  const process =
-    office && order.processes?.length
-      ? `<p><b>Process:</b> ${escapePrint(order.processes.join(", "))}</p>`
-      : "";
-  const amount = office ? "" : row("Amount", formatRupees(order.amount));
-  return `<!doctype html><html><head><meta charset="utf-8"><title>Stitching order ${escapePrint(String(order.orderNo))}</title><style>
-    *{box-sizing:border-box} @page{size:A5;margin:8mm} html,body{margin:0;padding:0;background:#fff;color:#202020;font-family:Arial,sans-serif}
-    body{font-size:11pt}.header{border-bottom:2px solid #202020;padding-bottom:8px}.title{margin:0;font:24pt Georgia,serif}.subtitle{margin:3px 0 0;font-size:9pt;letter-spacing:.06em;text-transform:uppercase}
-    table{width:100%;border-collapse:collapse;margin-top:12px}.meta td{padding:3px 0;vertical-align:top}.label{width:30%;color:#555;font-size:8pt;text-transform:uppercase}.measurements{margin-top:16px}.measurements th,.measurements td{padding:6px 8px;border:1px solid #aaa;text-align:left}.measurements th{background:#eee;font-size:8pt;text-transform:uppercase}.measurements td:last-child{font-weight:600}.empty{text-align:center;color:#555;padding:18px 8px}.footer{margin-top:18px;border-top:1px solid #aaa;padding-top:7px;color:#555;font-size:8pt}
-  </style></head><body><header class="header"><h1 class="title">Ladies Collections</h1><p class="subtitle">${office ? "Stitching order copy · Office" : "Customer stitching order copy"}</p></header>
-    <table class="meta"><tbody>${row("Customer", order.customerName)}${order.customerPhone ? row("Phone", order.customerPhone) : ""}${row("Garment", garmentName(order.productName))}${row("Order / bag", `${order.orderNo}${order.bagNo ? ` / ${order.bagNo}` : ""}`)}${row("Order date", slashDate(order.orderedOn))}${row("Expected delivery", order.deliveryOn ? slashDate(order.deliveryOn) : "")}${amount}</tbody></table>${description}${process}${measurementTable}<p class="footer">Order status: ${escapePrint(order.status)}</p></body></html>`;
 }
 
 function updateRow(
