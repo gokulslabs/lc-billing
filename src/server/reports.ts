@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
-import { monthStart, rangeProblem, stockGap } from "@/lib/reports";
+import { monthStart, rangeProblem } from "@/lib/reports";
 import { isPendingPayment, NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
@@ -147,69 +147,9 @@ reports.get("/pending", async (c) => {
 });
 
 reports.get("/mismatch", async (c) => {
-  const [stock, lines, invoices] = await Promise.all([
-    readAll<{
-      id: string;
-      inventory_no: string;
-      product_id: string;
-      quantity: number | string;
-      received_quantity: number | string;
-    }>((from, to) =>
-      supabaseAdmin
-        .from("inventory_items")
-        .select("id, inventory_no, product_id, quantity, received_quantity")
-        .order("id")
-        .range(from, to),
-    ),
-    readAll<{ inventory_item_id: string | null; invoice_id: string; quantity: number | string }>(
-      (from, to) =>
-        supabaseAdmin
-          .from("invoice_lines")
-          .select("inventory_item_id, invoice_id, quantity")
-          .order("id")
-          .range(from, to),
-    ),
-    readAll<{ id: string; status: string }>((from, to) =>
-      supabaseAdmin
-        .from("invoices")
-        .select("id, status")
-        .neq("status", "cancelled")
-        .order("id")
-        .range(from, to),
-    ),
-  ]);
-  if (!stock || !lines || !invoices) return c.json({ error: "Could not check stock." }, 500);
-  const active = new Set(invoices.rows.map((row) => row.id));
-  const billed = new Map<string, number>();
-  for (const line of lines.rows) {
-    if (!line.inventory_item_id || !active.has(line.invoice_id)) continue;
-    billed.set(
-      line.inventory_item_id,
-      (billed.get(line.inventory_item_id) ?? 0) + Number(line.quantity),
-    );
-  }
-  const catalogue = await loadProducts(stock.rows.map((row) => row.product_id));
-  if (!catalogue) return c.json({ error: "Could not load products." }, 500);
-  const mismatches = stock.rows.flatMap((row) => {
-    const received = Number(row.received_quantity);
-    const onHand = Number(row.quantity);
-    const sold = Math.round((billed.get(row.id) ?? 0) * 1000) / 1000;
-    const difference = stockGap(received, onHand, sold);
-    if (difference === 0) return [];
-    const product = catalogue.get(row.product_id);
-    return [
-      {
-        inventoryNo: row.inventory_no,
-        productCode: product?.code ?? "",
-        productName: product?.name ?? "",
-        received,
-        billed: sold,
-        onHand,
-        difference,
-      },
-    ];
-  });
-  return c.json({ mismatches });
+  const { data, error } = await supabaseAdmin.rpc("shop_inventory_mismatches");
+  if (error || !data) return c.json({ error: "Could not check stock." }, 500);
+  return c.json({ mismatches: data });
 });
 
 reports.get("/returns", async (c) => {

@@ -476,6 +476,18 @@ export type Database = {
       };
     };
     Functions: {
+      shop_inventory_mismatches: {
+        Args: Record<PropertyKey, never>;
+        Returns: {
+          inventoryNo: string;
+          productCode: string;
+          productName: string;
+          received: number;
+          billed: number;
+          onHand: number;
+          difference: number;
+        }[];
+      };
       shop_bills_by_date: {
         Args: {
           p_from: string | null;
