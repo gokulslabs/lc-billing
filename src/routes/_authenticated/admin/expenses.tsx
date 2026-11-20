@@ -136,7 +136,7 @@ function ExpensesPage() {
               "_blank",
               "noopener,noreferrer",
             );
-            toast.info("Daily Excel downloaded. Attach it in the WhatsApp group and send it.");
+            toast.info("Excel downloaded. Attach it in the WhatsApp group and send it.");
           }}
         >
           WhatsApp
