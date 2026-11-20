@@ -143,11 +143,11 @@ function ReportsPage() {
               <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                 <AnalyticsMetric
                   label="Bills in range"
-                  value={String(analytics.data.summary.billCount)}
+                  value={String(analytics.data.summary.bill_count)}
                 />
                 <AnalyticsMetric
                   label="Net sales in range"
-                  value={formatRupees(analytics.data.summary.netSales)}
+                  value={formatRupees(analytics.data.summary.net_sales)}
                 />
                 <AnalyticsMetric
                   label="Collected in range"
@@ -155,19 +155,19 @@ function ReportsPage() {
                 />
                 <AnalyticsMetric
                   label="Paying customers · lifetime"
-                  value={String(analytics.data.summary.payingCustomers)}
+                  value={String(analytics.data.summary.paying_customers)}
                 />
                 <AnalyticsMetric
                   label="Styles in stock"
-                  value={`${analytics.data.summary.stockedStyles} / ${analytics.data.summary.catalogueStyles}`}
+                  value={`${analytics.data.summary.stocked_styles} / ${analytics.data.summary.catalogue_styles}`}
                 />
                 <AnalyticsMetric
                   label="Stock value at retail price"
-                  value={formatRupees(analytics.data.summary.retailStockValue)}
+                  value={formatRupees(analytics.data.summary.retail_stock_value)}
                 />
                 <AnalyticsMetric
                   label="Customers in database"
-                  value={String(analytics.data.summary.customerCount)}
+                  value={String(analytics.data.summary.customer_count)}
                 />
               </div>
               <div className="grid gap-4 xl:grid-cols-2">
@@ -280,11 +280,11 @@ function ReportsPage() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <AnalyticsMetric
                   label="Paying customers · lifetime"
-                  value={String(analytics.data.summary.payingCustomers)}
+                  value={String(analytics.data.summary.paying_customers)}
                 />
                 <AnalyticsMetric
                   label="Customers in database"
-                  value={String(analytics.data.summary.customerCount)}
+                  value={String(analytics.data.summary.customer_count)}
                 />
               </div>
               <TopListChart
@@ -471,14 +471,14 @@ type Sheet = {
 
 type Analytics = {
   summary: {
-    billCount: number;
-    netSales: number;
+    bill_count: number;
+    net_sales: number;
     collected: number;
-    stockedStyles: number;
-    catalogueStyles: number;
-    retailStockValue: number;
-    payingCustomers: number;
-    customerCount: number;
+    stocked_styles: number;
+    catalogue_styles: number;
+    retail_stock_value: number;
+    paying_customers: number;
+    customer_count: number;
   };
   bucket: "day" | "month";
   trend: { date: string; label: string; sales: number; collected: number }[];
