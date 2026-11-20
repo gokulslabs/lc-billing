@@ -11,7 +11,7 @@ import {
   type ExpenseRecord,
 } from "@/lib/expenses";
 import { expenseExportSheets } from "@/lib/expenses-export";
-import { downloadExcel, shareExcelFile } from "@/lib/excel";
+import { downloadExcel } from "@/lib/excel";
 import { shopToday } from "@/lib/sales";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { Button } from "@/components/ui/button";
@@ -28,7 +28,6 @@ function ExpensesPage() {
   const [viewMode, setViewMode] = useState<"day" | "month">("day");
   const [exportFrom, setExportFrom] = useState(shopToday());
   const [exportTo, setExportTo] = useState(shopToday());
-  const [sharing, setSharing] = useState(false);
   const month = viewDate.slice(0, 7);
   const query = useQuery({
     queryKey: ["expenses", month],
@@ -107,9 +106,7 @@ function ExpensesPage() {
           type="button"
           variant="outline"
           className="rounded-full"
-          disabled={sharing}
           onClick={() => {
-            const period = viewMode === "day" ? slashDate(viewDate) : month;
             const selected = records.filter(
               (record) =>
                 (record.sheet === "ledger" || record.sheet === "target") &&
@@ -133,38 +130,16 @@ function ExpensesPage() {
               query.data?.previousClosingBalance ?? null,
             );
             const sheets = expenseExportSheets(selected, from, to, startingBalance);
-            const shareText = `Expenses workbook for ${period}`;
-            const share = shareExcelFile(
-              filename,
-              sheets,
-              `Ladies Collections expenses ${period}`,
-              shareText,
+            downloadExcel(filename, sheets);
+            window.open(
+              "https://chat.whatsapp.com/DcfiWl1yjj4KrppdFglUH0",
+              "_blank",
+              "noopener,noreferrer",
             );
-            if (!share) {
-              downloadExcel(filename, sheets);
-              window.open(
-                `https://wa.me/?text=${encodeURIComponent(`${shareText}. The Excel file has been downloaded; attach it to this WhatsApp message.`)}`,
-                "_blank",
-                "noopener,noreferrer",
-              );
-              toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
-              return;
-            }
-            setSharing(true);
-            void share
-              .catch((error: unknown) => {
-                if (error instanceof DOMException && error.name === "AbortError") return;
-                downloadExcel(filename, sheets);
-                toast.info("Excel workbook downloaded. Attach it in WhatsApp.");
-              })
-              .finally(() => setSharing(false));
+            toast.info("Daily Excel downloaded. Attach it in the WhatsApp group and send it.");
           }}
         >
-          {sharing
-            ? "Preparing Excel…"
-            : viewMode === "day"
-              ? "Send daily Excel to owner"
-              : "WhatsApp Excel"}
+          WhatsApp
         </Button>
         <ExportExcelButton
           filename={`expenses-${exportFrom}-to-${exportTo}`}
@@ -219,10 +194,6 @@ function ExpensesPage() {
   );
 }
 
-function slashDate(date: string): string {
-  const [year, month, day] = date.split("-");
-  return day && month && year ? `${day}-${month}-${year}` : date;
-}
 function lastDay(month: string): string {
   const [year = "1970", number = "1"] = month.split("-");
   return new Date(Date.UTC(Number(year), Number(number), 0)).toISOString().slice(0, 10);
