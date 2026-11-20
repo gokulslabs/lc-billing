@@ -3,7 +3,7 @@
   "name": "Ladies Collections",
   "short_name": "LC",
   "description": "Products, customers and stock for Ladies Collections.",
-  "start_url": "/",
+  "start_url": "/admin-login",
   "scope": "/",
   "display": "standalone",
   "background_color": "#fff7f8",
