@@ -33,26 +33,22 @@ export function LabelSheet({ labels }: { labels: BarcodeLabel[] }) {
   const rows: BarcodeLabel[][] = [];
   for (let index = 0; index < labels.length; index += 3) rows.push(labels.slice(index, index + 3));
   return (
-    <div className="barcode-print-area labels w-[500px] bg-white text-black">
-      <table className="w-full border-collapse text-center">
-        <tbody>
-          {rows.map((row, rowIndex) => (
-            <tr key={rowIndex}>
-              {row.map((label, columnIndex) => (
-                <td
-                  key={columnIndex}
-                  className="w-1/3 break-inside-avoid px-2 py-2 align-top font-bold"
-                >
-                  <p className="text-xs">LADIES COLLECTION</p>
-                  <BarcodeMark value={label.number} />
-                  <p className="text-xs">{label.number}</p>
-                  <p className="text-base font-bold">{formatStickerPrice(label.price)}</p>
-                </td>
-              ))}
-            </tr>
+    <div className="barcode-print-area labels w-full max-w-[500px] bg-white text-black">
+      {rows.map((row, rowIndex) => (
+        <div key={rowIndex} className="grid grid-cols-3 break-inside-avoid text-center">
+          {row.map((label, columnIndex) => (
+            <section
+              key={columnIndex}
+              className="flex min-w-0 flex-col items-center px-1 py-1 font-bold break-inside-avoid"
+            >
+              <p className="m-0 text-[8.5pt] leading-tight">LADIES COLLECTION</p>
+              <BarcodeMark value={label.number} />
+              <p className="m-0 text-[8.5pt] leading-tight">{label.number}</p>
+              <p className="m-0 text-[10pt] leading-tight">{formatStickerPrice(label.price)}</p>
+            </section>
           ))}
-        </tbody>
-      </table>
+        </div>
+      ))}
     </div>
   );
 }

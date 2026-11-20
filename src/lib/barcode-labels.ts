@@ -27,7 +27,7 @@ export function barcodeLabelsDocument(labels: BarcodeLabel[]): string {
   const body = rows
     .map(
       (row) =>
-        `<tr>${row
+        `<div class="sticker-row">${row
           .map((label) => {
             const widths = code128Widths(label.number);
             let x = 0;
@@ -44,16 +44,17 @@ export function barcodeLabelsDocument(labels: BarcodeLabel[]): string {
             const barcode = widths
               ? `<svg viewBox="0 0 ${x} 30" role="img" aria-label="${escapeHtml(label.number)}">${bars}</svg>`
               : "";
-            return `<td><p class="brand">LADIES COLLECTION</p>${barcode}<p class="number">${escapeHtml(label.number)}</p><p class="price">${escapeHtml(formatStickerPrice(label.price))}</p></td>`;
+            return `<section class="sticker"><p class="brand">LADIES COLLECTION</p>${barcode}<p class="number">${escapeHtml(label.number)}</p><p class="price">${escapeHtml(formatStickerPrice(label.price))}</p></section>`;
           })
-          .join("")}</tr>`,
+          .join("")}</div>`,
     )
     .join("");
 
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Barcode labels</title><style>
-    *{box-sizing:border-box} @page{margin:5mm} html,body{margin:0;padding:0;background:#fff;color:#000;font-family:Arial,sans-serif}
-    body{width:500px;max-width:100%} table{width:100%;table-layout:fixed;border-collapse:collapse;text-align:center}
-    tr{break-inside:avoid;page-break-inside:avoid} td{width:33.333%;padding:2mm 1mm;vertical-align:top;font-weight:700;break-inside:avoid;page-break-inside:avoid}
-    p{margin:1mm 0}.brand,.number{font-size:9pt}.price{font-size:12pt} svg{display:block;width:100%;height:8mm;fill:#000}
-  </style></head><body><table><tbody>${body}</tbody></table></body></html>`;
+    *{box-sizing:border-box} @page{margin:5mm} html,body{margin:0;padding:0;width:100%;background:#fff;color:#000;font-family:Arial,sans-serif}
+    .sheet{width:100%}.sticker-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;break-inside:avoid;page-break-inside:avoid;}
+    .sticker{display:flex;min-width:0;flex-direction:column;align-items:center;justify-content:flex-start;padding:1mm .8mm;text-align:center;font-weight:700;break-inside:avoid;page-break-inside:avoid;}
+    p{margin:.35mm 0;line-height:1.05}.brand,.number{font-size:8.5pt}.price{font-size:10pt} svg{display:block;flex:none;width:100%;height:7mm;fill:#000}
+    @media print{.sticker-row,.sticker{break-inside:avoid;page-break-inside:avoid}}
+  </style></head><body><main class="sheet">${body}</main></body></html>`;
 }
