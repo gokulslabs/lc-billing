@@ -29,6 +29,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/_authenticated/admin/reports")({
   head: () => ({
@@ -104,18 +105,10 @@ function ReportsPage() {
   });
   const analytics = useQuery({
     queryKey: ["report-analytics", applied.from, applied.to],
-    queryFn: async () => {
-      const dates = `from=${encodeURIComponent(applied.from)}&to=${encodeURIComponent(applied.to)}`;
-      const [invoiceData, paymentData] = await Promise.all([
-        apiFetch<{
-          invoices: { billedOn: string; net: number }[];
-        }>(`/api/reports/invoices?${dates}`),
-        apiFetch<{
-          payments: { paidOn: string; mode: string | null; amount: number }[];
-        }>(`/api/reports/showrooms?${dates}`),
-      ]);
-      return summarizeAnalytics(invoiceData.invoices, paymentData.payments);
-    },
+    queryFn: () =>
+      apiFetch<Analytics>(
+        `/api/reports/analytics?from=${encodeURIComponent(applied.from)}&to=${encodeURIComponent(applied.to)}`,
+      ),
   });
 
   return (
@@ -128,10 +121,11 @@ function ReportsPage() {
       </div>
       <section className="space-y-4 rounded-2xl border border-border bg-card p-4 md:p-6">
         <div>
-          <h2 className="text-xl font-semibold">Business analytics</h2>
+          <h2 className="text-xl font-semibold">Store overview</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Net sales and collected payments for {legacyReportDate(applied.from)} to{" "}
-            {legacyReportDate(applied.to)}. Change the date range below to compare another period.
+            Sales and collections use the selected dates. Product sales and customer lifetime
+            payments cover all available history; draft and cancelled bills are excluded. Stock
+            value uses current selling prices.
           </p>
         </div>
         {analytics.isLoading ? (
@@ -139,90 +133,174 @@ function ReportsPage() {
         ) : analytics.error instanceof Error ? (
           <p className="text-sm text-destructive">{analytics.error.message}</p>
         ) : analytics.data ? (
-          <>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <AnalyticsMetric label="Bills" value={String(analytics.data.billCount)} />
-              <AnalyticsMetric label="Net sales" value={formatRupees(analytics.data.netSales)} />
-              <AnalyticsMetric
-                label="Collected"
-                value={formatRupees(analytics.data.totalCollected)}
+          <Tabs defaultValue="overview" className="space-y-4">
+            <TabsList className="h-auto flex-wrap justify-start">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="products">Products &amp; inventory</TabsTrigger>
+              <TabsTrigger value="customers">Customers</TabsTrigger>
+            </TabsList>
+            <TabsContent value="overview" className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                <AnalyticsMetric
+                  label="Bills in range"
+                  value={String(analytics.data.summary.billCount)}
+                />
+                <AnalyticsMetric
+                  label="Net sales in range"
+                  value={formatRupees(analytics.data.summary.netSales)}
+                />
+                <AnalyticsMetric
+                  label="Collected in range"
+                  value={formatRupees(analytics.data.summary.collected)}
+                />
+                <AnalyticsMetric
+                  label="Paying customers · lifetime"
+                  value={String(analytics.data.summary.payingCustomers)}
+                />
+                <AnalyticsMetric
+                  label="Styles in stock"
+                  value={`${analytics.data.summary.stockedStyles} / ${analytics.data.summary.catalogueStyles}`}
+                />
+                <AnalyticsMetric
+                  label="Stock value at retail price"
+                  value={formatRupees(analytics.data.summary.retailStockValue)}
+                />
+                <AnalyticsMetric
+                  label="Customers in database"
+                  value={String(analytics.data.summary.customerCount)}
+                />
+              </div>
+              <div className="grid gap-4 xl:grid-cols-2">
+                <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
+                  <h3 className="font-medium">
+                    Sales vs collections by {analytics.data.bucket === "month" ? "month" : "day"}
+                  </h3>
+                  {analytics.data.trend.length ? (
+                    <ChartContainer
+                      className="mt-3 h-[280px] w-full aspect-auto"
+                      config={{
+                        sales: { label: "Net sales", color: "var(--chart-1)" },
+                        collected: { label: "Collected", color: "var(--chart-2)" },
+                      }}
+                    >
+                      <BarChart data={analytics.data.trend} accessibilityLayer>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value: number) => compactRupees(value)}
+                          width={72}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatter={(value) => formatRupees(Number(value))}
+                            />
+                          }
+                        />
+                        <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
+                        <Bar
+                          dataKey="collected"
+                          fill="var(--color-collected)"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <p className="py-12 text-sm text-muted-foreground">
+                      No sales or collections in this range.
+                    </p>
+                  )}
+                </div>
+                <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
+                  <h3 className="font-medium">Collections by payment method</h3>
+                  {analytics.data.paymentMethods.length ? (
+                    <ChartContainer
+                      className="mt-3 h-[280px] w-full aspect-auto"
+                      config={{ collected: { label: "Collected", color: "var(--chart-3)" } }}
+                    >
+                      <BarChart data={analytics.data.paymentMethods} accessibilityLayer>
+                        <CartesianGrid vertical={false} />
+                        <XAxis dataKey="method" tickLine={false} axisLine={false} />
+                        <YAxis
+                          tickLine={false}
+                          axisLine={false}
+                          tickFormatter={(value: number) => compactRupees(value)}
+                          width={72}
+                        />
+                        <ChartTooltip
+                          content={
+                            <ChartTooltipContent
+                              formatter={(value) => formatRupees(Number(value))}
+                            />
+                          }
+                        />
+                        <Bar
+                          dataKey="collected"
+                          fill="var(--color-collected)"
+                          radius={[4, 4, 0, 0]}
+                        />
+                      </BarChart>
+                    </ChartContainer>
+                  ) : (
+                    <p className="py-12 text-sm text-muted-foreground">
+                      No payments in this range.
+                    </p>
+                  )}
+                </div>
+              </div>
+            </TabsContent>
+            <TabsContent value="products" className="grid gap-4 xl:grid-cols-2">
+              <TopListChart
+                title="Best selling products · lifetime"
+                emptyLabel="No billed products yet."
+                data={analytics.data.topProducts.map((item) => ({
+                  name: `${item.code} · ${item.name} (${item.unit})`,
+                  amount: item.quantitySold,
+                  detail: formatRupees(item.netSales),
+                }))}
+                valueLabel="Quantity sold"
+                color="var(--chart-4)"
               />
-            </div>
-            <div className="grid gap-4 xl:grid-cols-2">
-              <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
-                <h3 className="font-medium">
-                  Sales vs collections {analytics.data.bucket === "month" ? "by month" : "by day"}
-                </h3>
-                {analytics.data.daily.length ? (
-                  <ChartContainer
-                    className="mt-3 h-[280px] w-full aspect-auto"
-                    config={{
-                      sales: { label: "Net sales", color: "var(--chart-1)" },
-                      collected: { label: "Collected", color: "var(--chart-2)" },
-                    }}
-                  >
-                    <BarChart data={analytics.data.daily} accessibilityLayer>
-                      <CartesianGrid vertical={false} />
-                      <XAxis dataKey="day" tickLine={false} axisLine={false} />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value: number) => compactRupees(value)}
-                        width={72}
-                      />
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent formatter={(value) => formatRupees(Number(value))} />
-                        }
-                      />
-                      <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
-                      <Bar
-                        dataKey="collected"
-                        fill="var(--color-collected)"
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <p className="py-12 text-sm text-muted-foreground">
-                    No sales or collections in this range.
-                  </p>
-                )}
+              <TopListChart
+                title="Current inventory value by product group"
+                emptyLabel="No inventory groups yet."
+                data={analytics.data.inventoryGroups.map((item) => ({
+                  name: item.name,
+                  amount: item.retailValue,
+                  detail: `${item.stockedStyles} styles · ${item.quantity} units`,
+                }))}
+                valueLabel="Retail stock value"
+                color="var(--chart-2)"
+                currency
+              />
+            </TabsContent>
+            <TabsContent value="customers" className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <AnalyticsMetric
+                  label="Paying customers · lifetime"
+                  value={String(analytics.data.summary.payingCustomers)}
+                />
+                <AnalyticsMetric
+                  label="Customers in database"
+                  value={String(analytics.data.summary.customerCount)}
+                />
               </div>
-              <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
-                <h3 className="font-medium">Collections by payment method</h3>
-                {analytics.data.methods.length ? (
-                  <ChartContainer
-                    className="mt-3 h-[280px] w-full aspect-auto"
-                    config={{ collected: { label: "Collected", color: "var(--chart-3)" } }}
-                  >
-                    <BarChart data={analytics.data.methods} accessibilityLayer>
-                      <CartesianGrid vertical={false} />
-                      <XAxis dataKey="method" tickLine={false} axisLine={false} />
-                      <YAxis
-                        tickLine={false}
-                        axisLine={false}
-                        tickFormatter={(value: number) => compactRupees(value)}
-                        width={72}
-                      />
-                      <ChartTooltip
-                        content={
-                          <ChartTooltipContent formatter={(value) => formatRupees(Number(value))} />
-                        }
-                      />
-                      <Bar
-                        dataKey="collected"
-                        fill="var(--color-collected)"
-                        radius={[4, 4, 0, 0]}
-                      />
-                    </BarChart>
-                  </ChartContainer>
-                ) : (
-                  <p className="py-12 text-sm text-muted-foreground">No payments in this range.</p>
-                )}
-              </div>
-            </div>
-          </>
+              <TopListChart
+                title="Highest paying customers · lifetime"
+                emptyLabel="No customer payments yet."
+                data={analytics.data.topCustomers.map((item) => ({
+                  name: item.name,
+                  amount: item.collected,
+                  detail: `${item.billCount} bills · ${formatRupees(item.netSales)} sales`,
+                }))}
+                valueLabel="Total paid"
+                color="var(--chart-5)"
+                currency
+              />
+            </TabsContent>
+          </Tabs>
         ) : null}
       </section>
       <Select
@@ -392,12 +470,33 @@ type Sheet = {
 };
 
 type Analytics = {
-  billCount: number;
-  netSales: number;
-  totalCollected: number;
+  summary: {
+    billCount: number;
+    netSales: number;
+    collected: number;
+    stockedStyles: number;
+    catalogueStyles: number;
+    retailStockValue: number;
+    payingCustomers: number;
+    customerCount: number;
+  };
   bucket: "day" | "month";
-  daily: { day: string; sales: number; collected: number }[];
-  methods: { method: string; collected: number }[];
+  trend: { date: string; label: string; sales: number; collected: number }[];
+  paymentMethods: { method: string; collected: number }[];
+  topProducts: {
+    code: string;
+    name: string;
+    unit: string;
+    quantitySold: number;
+    netSales: number;
+  }[];
+  topCustomers: { name: string; billCount: number; netSales: number; collected: number }[];
+  inventoryGroups: {
+    name: string;
+    stockedStyles: number;
+    quantity: number;
+    retailValue: number;
+  }[];
 };
 
 function AnalyticsMetric({ label, value }: { label: string; value: string }) {
@@ -409,73 +508,81 @@ function AnalyticsMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function summarizeAnalytics(
-  invoices: { billedOn: string; net: number }[],
-  payments: { paidOn: string; mode: string | null; amount: number }[],
-): Analytics {
-  const daySales = new Map<string, number>();
-  const dayCollected = new Map<string, number>();
-  const methodTotals = new Map<string, number>();
-  for (const invoice of invoices) {
-    const key = invoice.billedOn.slice(0, 10);
-    daySales.set(key, (daySales.get(key) ?? 0) + Math.round(invoice.net * 100));
-  }
-  for (const payment of payments) {
-    const key = payment.paidOn.slice(0, 10);
-    const cents = Math.round(payment.amount * 100);
-    dayCollected.set(key, (dayCollected.get(key) ?? 0) + cents);
-    const method = paymentModeLabel(payment.mode);
-    methodTotals.set(method, (methodTotals.get(method) ?? 0) + cents);
-  }
-  const allDays = [...new Set([...daySales.keys(), ...dayCollected.keys()])].sort();
-  const first = allDays[0];
-  const last = allDays.at(-1);
-  const start = first ? new Date(`${first}T00:00:00Z`).getTime() : 0;
-  const end = last ? new Date(`${last}T00:00:00Z`).getTime() : 0;
-  const bucket = end - start > 62 * 24 * 60 * 60 * 1000 ? "month" : "day";
-  const trend = new Map<string, { day: string; sales: number; collected: number }>();
-  for (const day of allDays) {
-    const key = bucket === "month" ? day.slice(0, 7) : day;
-    const current = trend.get(key) ?? {
-      day: bucket === "month" ? monthLabel(key) : shortDayLabel(day),
-      sales: 0,
-      collected: 0,
-    };
-    current.sales += daySales.get(day) ?? 0;
-    current.collected += dayCollected.get(day) ?? 0;
-    trend.set(key, current);
-  }
-  const toRupees = (cents: number) => Math.round(cents) / 100;
-  return {
-    billCount: invoices.length,
-    netSales: toRupees(invoices.reduce((sum, invoice) => sum + Math.round(invoice.net * 100), 0)),
-    totalCollected: toRupees([...methodTotals.values()].reduce((sum, amount) => sum + amount, 0)),
-    bucket,
-    daily: [...trend.values()].map((row) => ({
-      ...row,
-      sales: toRupees(row.sales),
-      collected: toRupees(row.collected),
-    })),
-    methods: [...methodTotals.entries()]
-      .map(([method, amount]) => ({ method, collected: toRupees(amount) }))
-      .sort((a, b) => b.collected - a.collected),
-  };
-}
-
-function shortDayLabel(value: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(new Date(`${value}T00:00:00Z`));
-}
-
-function monthLabel(value: string): string {
-  return new Intl.DateTimeFormat("en-IN", {
-    month: "short",
-    year: "2-digit",
-    timeZone: "UTC",
-  }).format(new Date(`${value}-01T00:00:00Z`));
+function TopListChart({
+  title,
+  emptyLabel,
+  data,
+  valueLabel,
+  color,
+  currency = false,
+}: {
+  title: string;
+  emptyLabel: string;
+  data: { name: string; amount: number; detail: string }[];
+  valueLabel: string;
+  color: string;
+  currency?: boolean;
+}) {
+  return (
+    <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
+      <h3 className="font-medium">{title}</h3>
+      {data.length ? (
+        <ChartContainer
+          className="mt-3 h-[320px] w-full aspect-auto"
+          config={{ amount: { label: valueLabel, color } }}
+        >
+          <BarChart
+            data={data}
+            layout="vertical"
+            accessibilityLayer
+            margin={{ left: 4, right: 16 }}
+          >
+            <CartesianGrid horizontal={false} />
+            <XAxis
+              type="number"
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value: number) =>
+                currency ? compactRupees(value) : Number(value).toLocaleString("en-IN")
+              }
+            />
+            <YAxis
+              type="category"
+              dataKey="name"
+              width={124}
+              tickLine={false}
+              axisLine={false}
+              tickFormatter={(value: string) =>
+                value.length > 18 ? `${value.slice(0, 17)}…` : value
+              }
+            />
+            <ChartTooltip
+              content={
+                <ChartTooltipContent
+                  labelKey="name"
+                  formatter={(value) =>
+                    currency ? formatRupees(Number(value)) : Number(value).toLocaleString("en-IN")
+                  }
+                />
+              }
+            />
+            <Bar dataKey="amount" fill="var(--color-amount)" radius={[0, 4, 4, 0]} />
+          </BarChart>
+        </ChartContainer>
+      ) : (
+        <p className="py-12 text-sm text-muted-foreground">{emptyLabel}</p>
+      )}
+      {data.length ? (
+        <div className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
+          {data.slice(0, 3).map((item) => (
+            <p key={item.name} className="truncate">
+              <span className="font-medium text-foreground">{item.name}:</span> {item.detail}
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
 function compactRupees(value: number): string {

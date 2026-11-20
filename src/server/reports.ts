@@ -37,6 +37,17 @@ type PaymentRow = {
 const reports = new Hono<Env>();
 reports.use("*", requireShop);
 
+reports.get("/analytics", async (c) => {
+  const range = readRange(c.req.query("from"), c.req.query("to"));
+  if ("error" in range) return c.json({ error: range.error }, 400);
+  const { data, error } = await supabaseAdmin.rpc("shop_business_analytics", {
+    p_from: range.from,
+    p_to: range.to,
+  });
+  if (error || !data) return c.json({ error: "Could not load business analytics." }, 500);
+  return c.json(data);
+});
+
 reports.get("/invoices", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);

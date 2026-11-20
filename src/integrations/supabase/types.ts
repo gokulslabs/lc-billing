@@ -595,6 +595,10 @@ export type Database = {
         Args: { p_day: string; p_new_counter_from: string };
         Returns: import("@/lib/dashboard").DashboardStats;
       };
+      shop_business_analytics: {
+        Args: { p_from: string; p_to: string };
+        Returns: Json;
+      };
       shop_invoice_report: {
         Args: { p_from: string; p_to: string; p_cancelled: boolean };
         Returns: (import("@/lib/reports").InvoiceReportRow & { remarks: string | null })[];
