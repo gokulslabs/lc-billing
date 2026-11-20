@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { apiFetch } from "@/lib/api";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
@@ -9,7 +8,7 @@ import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
 import { billStatusLabel, paymentModeLabel, shopToday } from "@/lib/sales";
 import { formatRupees } from "@/lib/products";
-import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import type { ReportAnalytics } from "@/lib/report-analytics";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +56,12 @@ const REPORTS = [
 ] as const;
 
 type ReportId = (typeof REPORTS)[number]["id"];
+
+const AnalyticsVisualizations = lazy(() =>
+  import("@/components/reports/AnalyticsVisualizations").then((module) => ({
+    default: module.AnalyticsVisualizations,
+  })),
+);
 
 const REPORT_NOTES: Record<ReportId, string> = {
   invoices:
@@ -106,7 +111,7 @@ function ReportsPage() {
   const analytics = useQuery({
     queryKey: ["report-analytics", applied.from, applied.to],
     queryFn: () =>
-      apiFetch<Analytics>(
+      apiFetch<ReportAnalytics>(
         `/api/reports/analytics?from=${encodeURIComponent(applied.from)}&to=${encodeURIComponent(applied.to)}`,
       ),
   });
@@ -170,111 +175,10 @@ function ReportsPage() {
                   value={String(analytics.data.summary.customer_count)}
                 />
               </div>
-              <div className="grid gap-4 xl:grid-cols-2">
-                <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
-                  <h3 className="font-medium">
-                    Sales vs collections by {analytics.data.bucket === "month" ? "month" : "day"}
-                  </h3>
-                  {analytics.data.trend.length ? (
-                    <ChartContainer
-                      className="mt-3 h-[280px] w-full aspect-auto"
-                      config={{
-                        sales: { label: "Net sales", color: "var(--chart-1)" },
-                        collected: { label: "Collected", color: "var(--chart-2)" },
-                      }}
-                    >
-                      <BarChart data={analytics.data.trend} accessibilityLayer>
-                        <CartesianGrid vertical={false} />
-                        <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(value: number) => compactRupees(value)}
-                          width={72}
-                        />
-                        <ChartTooltip
-                          content={
-                            <ChartTooltipContent
-                              formatter={(value) => formatRupees(Number(value))}
-                            />
-                          }
-                        />
-                        <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
-                        <Bar
-                          dataKey="collected"
-                          fill="var(--color-collected)"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ChartContainer>
-                  ) : (
-                    <p className="py-12 text-sm text-muted-foreground">
-                      No sales or collections in this range.
-                    </p>
-                  )}
-                </div>
-                <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
-                  <h3 className="font-medium">Collections by payment method</h3>
-                  {analytics.data.paymentMethods.length ? (
-                    <ChartContainer
-                      className="mt-3 h-[280px] w-full aspect-auto"
-                      config={{ collected: { label: "Collected", color: "var(--chart-3)" } }}
-                    >
-                      <BarChart data={analytics.data.paymentMethods} accessibilityLayer>
-                        <CartesianGrid vertical={false} />
-                        <XAxis dataKey="method" tickLine={false} axisLine={false} />
-                        <YAxis
-                          tickLine={false}
-                          axisLine={false}
-                          tickFormatter={(value: number) => compactRupees(value)}
-                          width={72}
-                        />
-                        <ChartTooltip
-                          content={
-                            <ChartTooltipContent
-                              formatter={(value) => formatRupees(Number(value))}
-                            />
-                          }
-                        />
-                        <Bar
-                          dataKey="collected"
-                          fill="var(--color-collected)"
-                          radius={[4, 4, 0, 0]}
-                        />
-                      </BarChart>
-                    </ChartContainer>
-                  ) : (
-                    <p className="py-12 text-sm text-muted-foreground">
-                      No payments in this range.
-                    </p>
-                  )}
-                </div>
-              </div>
+              <DeferredAnalyticsVisualizations data={analytics.data} view="overview" />
             </TabsContent>
-            <TabsContent value="products" className="grid gap-4 xl:grid-cols-2">
-              <TopListChart
-                title="Best selling products · lifetime"
-                emptyLabel="No billed products yet."
-                data={analytics.data.topProducts.map((item) => ({
-                  name: `${item.code} · ${item.name} (${item.unit})`,
-                  amount: item.quantitySold,
-                  detail: formatRupees(item.netSales),
-                }))}
-                valueLabel="Quantity sold"
-                color="var(--chart-4)"
-              />
-              <TopListChart
-                title="Current inventory value by product group"
-                emptyLabel="No inventory groups yet."
-                data={analytics.data.inventoryGroups.map((item) => ({
-                  name: item.name,
-                  amount: item.retailValue,
-                  detail: `${item.stockedStyles} styles · ${item.quantity} units`,
-                }))}
-                valueLabel="Retail stock value"
-                color="var(--chart-2)"
-                currency
-              />
+            <TabsContent value="products" className="space-y-4">
+              <DeferredAnalyticsVisualizations data={analytics.data} view="products" />
             </TabsContent>
             <TabsContent value="customers" className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
@@ -287,18 +191,7 @@ function ReportsPage() {
                   value={String(analytics.data.summary.customer_count)}
                 />
               </div>
-              <TopListChart
-                title="Highest paying customers · lifetime"
-                emptyLabel="No customer payments yet."
-                data={analytics.data.topCustomers.map((item) => ({
-                  name: item.name,
-                  amount: item.collected,
-                  detail: `${item.billCount} bills · ${formatRupees(item.netSales)} sales`,
-                }))}
-                valueLabel="Total paid"
-                color="var(--chart-5)"
-                currency
-              />
+              <DeferredAnalyticsVisualizations data={analytics.data} view="customers" />
             </TabsContent>
           </Tabs>
         ) : null}
@@ -469,36 +362,6 @@ type Sheet = {
   total?: number;
 };
 
-type Analytics = {
-  summary: {
-    bill_count: number;
-    net_sales: number;
-    collected: number;
-    stocked_styles: number;
-    catalogue_styles: number;
-    retail_stock_value: number;
-    paying_customers: number;
-    customer_count: number;
-  };
-  bucket: "day" | "month";
-  trend: { date: string; label: string; sales: number; collected: number }[];
-  paymentMethods: { method: string; collected: number }[];
-  topProducts: {
-    code: string;
-    name: string;
-    unit: string;
-    quantitySold: number;
-    netSales: number;
-  }[];
-  topCustomers: { name: string; billCount: number; netSales: number; collected: number }[];
-  inventoryGroups: {
-    name: string;
-    stockedStyles: number;
-    quantity: number;
-    retailValue: number;
-  }[];
-};
-
 function AnalyticsMetric({ label, value }: { label: string; value: string }) {
   return (
     <div className="rounded-xl border border-border bg-background/40 p-4">
@@ -508,87 +371,46 @@ function AnalyticsMetric({ label, value }: { label: string; value: string }) {
   );
 }
 
-function TopListChart({
-  title,
-  emptyLabel,
+function DeferredAnalyticsVisualizations({
   data,
-  valueLabel,
-  color,
-  currency = false,
+  view,
 }: {
-  title: string;
-  emptyLabel: string;
-  data: { name: string; amount: number; detail: string }[];
-  valueLabel: string;
-  color: string;
-  currency?: boolean;
+  data: ReportAnalytics;
+  view: "overview" | "products" | "customers";
 }) {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    if (shouldLoad) return;
+    const container = containerRef.current;
+    if (!container || typeof IntersectionObserver === "undefined") {
+      setShouldLoad(true);
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry?.isIntersecting) {
+          setShouldLoad(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: "200px" },
+    );
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [shouldLoad]);
+
   return (
-    <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
-      <h3 className="font-medium">{title}</h3>
-      {data.length ? (
-        <ChartContainer
-          className="mt-3 h-[320px] w-full aspect-auto"
-          config={{ amount: { label: valueLabel, color } }}
-        >
-          <BarChart
-            data={data}
-            layout="vertical"
-            accessibilityLayer
-            margin={{ left: 4, right: 16 }}
-          >
-            <CartesianGrid horizontal={false} />
-            <XAxis
-              type="number"
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value: number) =>
-                currency ? compactRupees(value) : Number(value).toLocaleString("en-IN")
-              }
-            />
-            <YAxis
-              type="category"
-              dataKey="name"
-              width={124}
-              tickLine={false}
-              axisLine={false}
-              tickFormatter={(value: string) =>
-                value.length > 18 ? `${value.slice(0, 17)}…` : value
-              }
-            />
-            <ChartTooltip
-              content={
-                <ChartTooltipContent
-                  labelKey="name"
-                  formatter={(value) =>
-                    currency ? formatRupees(Number(value)) : Number(value).toLocaleString("en-IN")
-                  }
-                />
-              }
-            />
-            <Bar dataKey="amount" fill="var(--color-amount)" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ChartContainer>
-      ) : (
-        <p className="py-12 text-sm text-muted-foreground">{emptyLabel}</p>
-      )}
-      {data.length ? (
-        <div className="space-y-1 border-t border-border pt-3 text-xs text-muted-foreground">
-          {data.slice(0, 3).map((item) => (
-            <p key={item.name} className="truncate">
-              <span className="font-medium text-foreground">{item.name}:</span> {item.detail}
-            </p>
-          ))}
-        </div>
+    <div ref={containerRef}>
+      {shouldLoad ? (
+        <Suspense fallback={<p className="text-sm text-muted-foreground">Loading charts…</p>}>
+          <AnalyticsVisualizations data={data} view={view} />
+        </Suspense>
       ) : null}
     </div>
   );
-}
-
-function compactRupees(value: number): string {
-  if (Math.abs(value) >= 1_000_000) return `₹${(value / 1_000_000).toFixed(1)}m`;
-  if (Math.abs(value) >= 1_000) return `₹${(value / 1_000).toFixed(0)}k`;
-  return `₹${value}`;
 }
 
 const MONEY = new Set([
