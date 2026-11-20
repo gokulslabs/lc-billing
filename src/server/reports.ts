@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PAGE_SIZE, readPage } from "@/lib/paging";
 import { monthStart, rangeProblem } from "@/lib/reports";
+import type { ReportAnalytics } from "@/lib/report-analytics";
 import { isPendingPayment, NEW_COUNTER_FROM, shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
@@ -45,7 +46,8 @@ reports.get("/analytics", async (c) => {
     p_to: range.to,
   });
   if (error || !data) return c.json({ error: "Could not load business analytics." }, 500);
-  return c.json(data);
+  const analytics = data as unknown as ReportAnalytics;
+  return c.json(analytics);
 });
 
 reports.get("/invoices", async (c) => {

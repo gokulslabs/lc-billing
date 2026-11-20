@@ -197,7 +197,13 @@ sales.get("/due", async (c) => {
     p_limit: exporting ? null : 50,
   });
   if (error || !data) return c.json({ error: "Could not load unpaid bills." }, 500);
-  return c.json({ ...data, page: exporting ? 1 : page });
+  const dueReport = data as unknown as {
+    invoices: InvoiceSummary[];
+    total: number;
+    balance: number;
+    books: "old" | "new";
+  };
+  return c.json({ ...dueReport, page: exporting ? 1 : page });
 });
 
 sales.get("/pending", async (c) => {

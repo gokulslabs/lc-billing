@@ -266,7 +266,12 @@ inventory.get("/purchases", async (c) => {
 inventory.get("/summary", async (c) => {
   const { data, error } = await supabaseAdmin.rpc("shop_inventory_summary");
   if (error || !data) return c.json({ error: "Could not load current stock." }, 500);
-  return c.json(data);
+  const summary = data as unknown as {
+    groups: { id: string; name: string; quantity: number; amount: number }[];
+    slips: number;
+    quantity: number;
+  };
+  return c.json(summary);
 });
 
 inventory.get("/verification/count", async (c) => {

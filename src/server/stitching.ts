@@ -41,7 +41,11 @@ stitching.get("/board", async (c) => {
     p_today: shopToday(),
   });
   if (error || !data) return c.json({ error: "Could not load the stitching board." }, 500);
-  return c.json(data);
+  const board = data as unknown as Record<
+    "overdue" | "today" | "week" | "ready",
+    { orders: StitchingOrder[]; total: number }
+  >;
+  return c.json(board);
 });
 
 stitching.get("/products", async (c) => {
