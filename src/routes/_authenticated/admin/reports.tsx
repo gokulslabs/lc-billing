@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
 import { apiFetch } from "@/lib/api";
 import { ExportExcelButton } from "@/components/app/ExportExcelButton";
 import { PrintTableButton } from "@/components/app/PrintTableButton";
@@ -8,6 +9,7 @@ import { ListFooter } from "@/components/app/ListFooter";
 import { monthStart } from "@/lib/reports";
 import { billStatusLabel, paymentModeLabel, shopToday } from "@/lib/sales";
 import { formatRupees } from "@/lib/products";
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -100,6 +102,21 @@ function ReportsPage() {
     queryKey: ["reports", report, applied, page],
     queryFn: () => loadReport(report, applied, page),
   });
+  const analytics = useQuery({
+    queryKey: ["report-analytics", applied.from, applied.to],
+    queryFn: async () => {
+      const dates = `from=${encodeURIComponent(applied.from)}&to=${encodeURIComponent(applied.to)}`;
+      const [invoiceData, paymentData] = await Promise.all([
+        apiFetch<{
+          invoices: { billedOn: string; net: number }[];
+        }>(`/api/reports/invoices?${dates}`),
+        apiFetch<{
+          payments: { paidOn: string; mode: string | null; amount: number }[];
+        }>(`/api/reports/showrooms?${dates}`),
+      ]);
+      return summarizeAnalytics(invoiceData.invoices, paymentData.payments);
+    },
+  });
 
   return (
     <div className="mx-auto max-w-[100rem] space-y-8 p-6 md:p-10">
@@ -109,6 +126,105 @@ function ReportsPage() {
           Bills, collections, pending payments, and stock.
         </p>
       </div>
+      <section className="space-y-4 rounded-2xl border border-border bg-card p-4 md:p-6">
+        <div>
+          <h2 className="text-xl font-semibold">Business analytics</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Net sales and collected payments for {legacyReportDate(applied.from)} to{" "}
+            {legacyReportDate(applied.to)}. Change the date range below to compare another period.
+          </p>
+        </div>
+        {analytics.isLoading ? (
+          <p className="text-sm text-muted-foreground">Loading analytics…</p>
+        ) : analytics.error instanceof Error ? (
+          <p className="text-sm text-destructive">{analytics.error.message}</p>
+        ) : analytics.data ? (
+          <>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <AnalyticsMetric label="Bills" value={String(analytics.data.billCount)} />
+              <AnalyticsMetric label="Net sales" value={formatRupees(analytics.data.netSales)} />
+              <AnalyticsMetric
+                label="Collected"
+                value={formatRupees(analytics.data.totalCollected)}
+              />
+            </div>
+            <div className="grid gap-4 xl:grid-cols-2">
+              <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
+                <h3 className="font-medium">
+                  Sales vs collections {analytics.data.bucket === "month" ? "by month" : "by day"}
+                </h3>
+                {analytics.data.daily.length ? (
+                  <ChartContainer
+                    className="mt-3 h-[280px] w-full aspect-auto"
+                    config={{
+                      sales: { label: "Net sales", color: "var(--chart-1)" },
+                      collected: { label: "Collected", color: "var(--chart-2)" },
+                    }}
+                  >
+                    <BarChart data={analytics.data.daily} accessibilityLayer>
+                      <CartesianGrid vertical={false} />
+                      <XAxis dataKey="day" tickLine={false} axisLine={false} />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value: number) => compactRupees(value)}
+                        width={72}
+                      />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent formatter={(value) => formatRupees(Number(value))} />
+                        }
+                      />
+                      <Bar dataKey="sales" fill="var(--color-sales)" radius={[4, 4, 0, 0]} />
+                      <Bar
+                        dataKey="collected"
+                        fill="var(--color-collected)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <p className="py-12 text-sm text-muted-foreground">
+                    No sales or collections in this range.
+                  </p>
+                )}
+              </div>
+              <div className="min-w-0 rounded-xl border border-border p-3 md:p-4">
+                <h3 className="font-medium">Collections by payment method</h3>
+                {analytics.data.methods.length ? (
+                  <ChartContainer
+                    className="mt-3 h-[280px] w-full aspect-auto"
+                    config={{ collected: { label: "Collected", color: "var(--chart-3)" } }}
+                  >
+                    <BarChart data={analytics.data.methods} accessibilityLayer>
+                      <CartesianGrid vertical={false} />
+                      <XAxis dataKey="method" tickLine={false} axisLine={false} />
+                      <YAxis
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(value: number) => compactRupees(value)}
+                        width={72}
+                      />
+                      <ChartTooltip
+                        content={
+                          <ChartTooltipContent formatter={(value) => formatRupees(Number(value))} />
+                        }
+                      />
+                      <Bar
+                        dataKey="collected"
+                        fill="var(--color-collected)"
+                        radius={[4, 4, 0, 0]}
+                      />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <p className="py-12 text-sm text-muted-foreground">No payments in this range.</p>
+                )}
+              </div>
+            </div>
+          </>
+        ) : null}
+      </section>
       <Select
         value={report}
         onValueChange={(value) => {
@@ -274,6 +390,99 @@ type Sheet = {
   totalRow?: SheetCell[];
   total?: number;
 };
+
+type Analytics = {
+  billCount: number;
+  netSales: number;
+  totalCollected: number;
+  bucket: "day" | "month";
+  daily: { day: string; sales: number; collected: number }[];
+  methods: { method: string; collected: number }[];
+};
+
+function AnalyticsMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-background/40 p-4">
+      <p className="text-sm text-muted-foreground">{label}</p>
+      <p className="mt-1 text-2xl font-semibold tabular-nums">{value}</p>
+    </div>
+  );
+}
+
+function summarizeAnalytics(
+  invoices: { billedOn: string; net: number }[],
+  payments: { paidOn: string; mode: string | null; amount: number }[],
+): Analytics {
+  const daySales = new Map<string, number>();
+  const dayCollected = new Map<string, number>();
+  const methodTotals = new Map<string, number>();
+  for (const invoice of invoices) {
+    const key = invoice.billedOn.slice(0, 10);
+    daySales.set(key, (daySales.get(key) ?? 0) + Math.round(invoice.net * 100));
+  }
+  for (const payment of payments) {
+    const key = payment.paidOn.slice(0, 10);
+    const cents = Math.round(payment.amount * 100);
+    dayCollected.set(key, (dayCollected.get(key) ?? 0) + cents);
+    const method = paymentModeLabel(payment.mode);
+    methodTotals.set(method, (methodTotals.get(method) ?? 0) + cents);
+  }
+  const allDays = [...new Set([...daySales.keys(), ...dayCollected.keys()])].sort();
+  const first = allDays[0];
+  const last = allDays.at(-1);
+  const start = first ? new Date(`${first}T00:00:00Z`).getTime() : 0;
+  const end = last ? new Date(`${last}T00:00:00Z`).getTime() : 0;
+  const bucket = end - start > 62 * 24 * 60 * 60 * 1000 ? "month" : "day";
+  const trend = new Map<string, { day: string; sales: number; collected: number }>();
+  for (const day of allDays) {
+    const key = bucket === "month" ? day.slice(0, 7) : day;
+    const current = trend.get(key) ?? {
+      day: bucket === "month" ? monthLabel(key) : shortDayLabel(day),
+      sales: 0,
+      collected: 0,
+    };
+    current.sales += daySales.get(day) ?? 0;
+    current.collected += dayCollected.get(day) ?? 0;
+    trend.set(key, current);
+  }
+  const toRupees = (cents: number) => Math.round(cents) / 100;
+  return {
+    billCount: invoices.length,
+    netSales: toRupees(invoices.reduce((sum, invoice) => sum + Math.round(invoice.net * 100), 0)),
+    totalCollected: toRupees([...methodTotals.values()].reduce((sum, amount) => sum + amount, 0)),
+    bucket,
+    daily: [...trend.values()].map((row) => ({
+      ...row,
+      sales: toRupees(row.sales),
+      collected: toRupees(row.collected),
+    })),
+    methods: [...methodTotals.entries()]
+      .map(([method, amount]) => ({ method, collected: toRupees(amount) }))
+      .sort((a, b) => b.collected - a.collected),
+  };
+}
+
+function shortDayLabel(value: string): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(new Date(`${value}T00:00:00Z`));
+}
+
+function monthLabel(value: string): string {
+  return new Intl.DateTimeFormat("en-IN", {
+    month: "short",
+    year: "2-digit",
+    timeZone: "UTC",
+  }).format(new Date(`${value}-01T00:00:00Z`));
+}
+
+function compactRupees(value: number): string {
+  if (Math.abs(value) >= 1_000_000) return `₹${(value / 1_000_000).toFixed(1)}m`;
+  if (Math.abs(value) >= 1_000) return `₹${(value / 1_000).toFixed(0)}k`;
+  return `₹${value}`;
+}
 
 const MONEY = new Set([
   "Gross",
