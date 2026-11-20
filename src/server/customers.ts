@@ -323,43 +323,13 @@ function toCustomer(row: CustomerRow): Customer {
 async function customerTotals(
   customerId: string,
 ): Promise<{ billed: number; collected: number } | null> {
-  const loaded = await readAll<{ id: string }>((from, to) =>
-    supabaseAdmin
-      .from("invoices")
-      .select("id")
-      .eq("customer_id", customerId)
-      .order("id")
-      .range(from, to),
-  );
-  if (!loaded) return null;
-  const ids = loaded.rows.map((row) => row.id);
-  if (ids.length === 0) return { billed: 0, collected: 0 };
-  const [lines, payments] = await Promise.all([
-    readIn<{ amount: number | string }>(ids, (chunk, from, to) =>
-      supabaseAdmin
-        .from("invoice_lines")
-        .select("amount")
-        .in("invoice_id", chunk)
-        .order("id")
-        .range(from, to),
-    ),
-    readIn<{ amount: number | string; mode: string | null }>(ids, (chunk, from, to) =>
-      supabaseAdmin
-        .from("payments")
-        .select("amount, mode")
-        .in("invoice_id", chunk)
-        .order("id")
-        .range(from, to),
-    ),
-  ]);
-  if (!lines || !payments) return null;
+  const { data, error } = await supabaseAdmin.rpc("shop_customer_totals", {
+    p_customer_id: customerId,
+  });
+  if (error || !data?.[0]) return null;
   return {
-    billed: round2(lines.reduce((sum, row) => sum + Number(row.amount), 0)),
-    collected: round2(
-      payments
-        .filter((row) => !isPendingPayment(row.mode))
-        .reduce((sum, row) => sum + Number(row.amount), 0),
-    ),
+    billed: round2(Number(data[0].billed)),
+    collected: round2(Number(data[0].collected)),
   };
 }
 

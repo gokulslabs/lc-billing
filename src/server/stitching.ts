@@ -36,6 +36,14 @@ type OrderRow = {
 const stitching = new Hono<Env>();
 stitching.use("*", requireShop);
 
+stitching.get("/board", async (c) => {
+  const { data, error } = await supabaseAdmin.rpc("shop_stitching_board", {
+    p_today: shopToday(),
+  });
+  if (error || !data) return c.json({ error: "Could not load the stitching board." }, 500);
+  return c.json(data);
+});
+
 stitching.get("/products", async (c) => {
   const products = await loadProducts();
   if (!products) return c.json({ error: "Could not load garments." }, 500);

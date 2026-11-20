@@ -16,7 +16,7 @@ import {
   type InventoryItem,
   type PurchaseRow,
 } from "@/lib/inventory";
-import { lineAmount, shopToday } from "@/lib/sales";
+import { shopToday } from "@/lib/sales";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { pageRange, readPage } from "@/lib/paging";
 import { readAll } from "@/server/read-all";
@@ -264,40 +264,9 @@ inventory.get("/purchases", async (c) => {
 });
 
 inventory.get("/summary", async (c) => {
-  const catalogue = await loadCatalogue();
-  if (!catalogue) return c.json({ error: "Could not load products." }, 500);
-  const loaded = await readAll<{ product_id: string; quantity: number | string }>((from, to) =>
-    supabaseAdmin
-      .from("inventory_items")
-      .select("product_id, quantity")
-      .eq("status", "available")
-      .order("id")
-      .range(from, to),
-  );
-  if (!loaded) return c.json({ error: "Could not load current stock." }, 500);
-
-  const groups = new Map<string, { id: string; name: string; quantity: number; amount: number }>();
-  let quantity = 0;
-  let slips = 0;
-  for (const row of loaded.rows) {
-    const product = catalogue.get(row.product_id);
-    if (!product) continue;
-    const rowQuantity = Number(row.quantity);
-    slips += 1;
-    quantity = Math.round((quantity + rowQuantity) * 1000) / 1000;
-    const current = groups.get(product.groupId) ?? {
-      id: product.groupId,
-      name: product.groupName,
-      quantity: 0,
-      amount: 0,
-    };
-    current.quantity = Math.round((current.quantity + rowQuantity) * 1000) / 1000;
-    current.amount =
-      Math.round((current.amount + lineAmount(rowQuantity, product.price)) * 100) / 100;
-    groups.set(product.groupId, current);
-  }
-  const summary = [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
-  return c.json({ groups: summary, slips, quantity });
+  const { data, error } = await supabaseAdmin.rpc("shop_inventory_summary");
+  if (error || !data) return c.json({ error: "Could not load current stock." }, 500);
+  return c.json(data);
 });
 
 inventory.get("/verification/count", async (c) => {

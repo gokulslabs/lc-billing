@@ -620,6 +620,27 @@ export type Database = {
           totals: { invoiced: number; paid: number; balance: number };
         };
       };
+      shop_due_report: {
+        Args: {
+          p_new_counter_from: string;
+          p_old: boolean;
+          p_offset: number;
+          p_limit: number | null;
+        };
+        Returns: Json;
+      };
+      shop_inventory_summary: {
+        Args: Record<PropertyKey, never>;
+        Returns: Json;
+      };
+      shop_customer_totals: {
+        Args: { p_customer_id: string };
+        Returns: { billed: number; collected: number }[];
+      };
+      shop_stitching_board: {
+        Args: { p_today: string };
+        Returns: Json;
+      };
       customer_signup_enabled: { Args: Record<PropertyKey, never>; Returns: boolean };
       start_stock_count: {
         Args: { actor: string; expected_start: string | null };

@@ -357,39 +357,21 @@ function OrderList({ onOpen }: { onOpen: (id: string | "new") => void }) {
 
 function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
   const queryClient = useQueryClient();
-  const overdue = useQuery({
-    queryKey: ["stitching-board", "overdue"],
+  const board = useQuery({
+    queryKey: ["stitching-board"],
     queryFn: () =>
-      apiFetch<{ orders: StitchingOrder[]; total: number }>(
-        "/api/stitching-orders?due=overdue&page=1",
-      ),
-  });
-  const today = useQuery({
-    queryKey: ["stitching-board", "today"],
-    queryFn: () =>
-      apiFetch<{ orders: StitchingOrder[]; total: number }>(
-        "/api/stitching-orders?due=today&page=1",
-      ),
-  });
-  const week = useQuery({
-    queryKey: ["stitching-board", "week"],
-    queryFn: () =>
-      apiFetch<{ orders: StitchingOrder[]; total: number }>(
-        "/api/stitching-orders?due=week&page=1",
-      ),
-  });
-  const ready = useQuery({
-    queryKey: ["stitching-board", "ready"],
-    queryFn: () =>
-      apiFetch<{ orders: StitchingOrder[]; total: number }>(
-        "/api/stitching-orders?status=READY&page=1",
-      ),
+      apiFetch<{
+        overdue: { orders: StitchingOrder[]; total: number };
+        today: { orders: StitchingOrder[]; total: number };
+        week: { orders: StitchingOrder[]; total: number };
+        ready: { orders: StitchingOrder[]; total: number };
+      }>("/api/stitching-orders/board"),
   });
   const columns = [
-    ["Past the delivery date", overdue],
-    ["Due today", today],
-    ["This week", week],
-    ["Ready for pickup", ready],
+    ["Past the delivery date", board.data?.overdue],
+    ["Due today", board.data?.today],
+    ["This week", board.data?.week],
+    ["Ready for pickup", board.data?.ready],
   ] as const;
   return (
     <div className="grid gap-4 lg:grid-cols-2">
@@ -397,20 +379,20 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
         <section key={title} className="rounded-2xl border border-border bg-card p-4">
           <h2 className="text-lg font-semibold">
             {title}
-            {query.data ? ` · ${query.data.total}` : ""}
+            {query ? ` · ${query.total}` : ""}
           </h2>
-          {query.data && query.data.total > Math.min(8, query.data.orders.length) ? (
+          {query && query.total > Math.min(8, query.orders.length) ? (
             <p className="mt-1 text-sm text-muted-foreground">
-              Showing 8 of {query.data.total}. The orders list has the rest. Older orders stay on
-              that list.
+              Showing 8 of {query.total}. The orders list has the rest. Older orders stay on that
+              list.
             </p>
           ) : null}
-          {query.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}
-          {query.error instanceof Error ? (
-            <p className="mt-3 text-sm text-destructive">{query.error.message}</p>
+          {board.isLoading ? <p className="mt-3 text-sm text-muted-foreground">Loading…</p> : null}
+          {board.error instanceof Error ? (
+            <p className="mt-3 text-sm text-destructive">{board.error.message}</p>
           ) : null}
           <div className="mt-3 space-y-3">
-            {(query.data?.orders ?? []).slice(0, 8).map((order) => (
+            {(query?.orders ?? []).slice(0, 8).map((order) => (
               <article key={order.id} className="rounded-xl border border-border px-3 py-3">
                 <button
                   type="button"
@@ -457,7 +439,7 @@ function StitchingBoard({ onOpen }: { onOpen: (id: string) => void }) {
                 </div>
               </article>
             ))}
-            {!query.isLoading && (query.data?.orders.length ?? 0) === 0 ? (
+            {!board.isLoading && (query?.orders.length ?? 0) === 0 ? (
               <p className="text-sm text-muted-foreground">None.</p>
             ) : null}
           </div>

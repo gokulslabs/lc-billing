@@ -12,12 +12,12 @@ import {
   BILL_PAYS,
   BILL_SORTS,
   lineAmount,
+  NEW_COUNTER_FROM,
   cancelInvoiceSchema,
   assignCustomerSchema,
   createInvoiceSchema,
   invoiceLineSchema,
   invoiceDiscountSchema,
-  billBook,
   selectBills,
   PAYMENT_MODES,
   isPendingPayment,
@@ -190,40 +190,14 @@ sales.get("/due", async (c) => {
   }
   const page = readPage(c.req.query("page"));
   const books = c.req.query("books") === "old" ? "old" : "new";
-  const loaded = await readAll<InvoiceRow>((start, end) =>
-    supabaseAdmin
-      .from("invoices")
-      .select("id, bill_no, customer_id, billed_on, status, remarks")
-      .in("status", ["open", "partial"])
-      .order("billed_on", { ascending: true })
-      .order("id")
-      .range(start, end),
-  );
-  if (!loaded) return c.json({ error: "Could not load unpaid bills." }, 500);
-  const summaries = await summarize(loaded.rows);
-  if ("error" in summaries) return c.json({ error: summaries.error }, 500);
-  const due = summaries.invoices.filter(
-    (invoice) => invoice.balance > 0.001 && billBook(invoice.billedOn) === books,
-  );
-  if (exporting) {
-    const balance = due.reduce(
-      (sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100,
-      0,
-    );
-    return c.json({ invoices: due, total: due.length, page: 1, books, balance });
-  }
-  const start = (page - 1) * 50;
-  const balance = due.reduce(
-    (sum, invoice) => (Math.round(sum * 100) + Math.round(invoice.balance * 100)) / 100,
-    0,
-  );
-  return c.json({
-    invoices: due.slice(start, start + 50),
-    total: due.length,
-    page,
-    books,
-    balance,
+  const { data, error } = await supabaseAdmin.rpc("shop_due_report", {
+    p_new_counter_from: NEW_COUNTER_FROM,
+    p_old: books === "old",
+    p_offset: exporting ? 0 : (page - 1) * 50,
+    p_limit: exporting ? null : 50,
   });
+  if (error || !data) return c.json({ error: "Could not load unpaid bills." }, 500);
+  return c.json({ ...data, page: exporting ? 1 : page });
 });
 
 sales.get("/pending", async (c) => {
