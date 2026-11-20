@@ -21,6 +21,7 @@ import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { pageRange, readPage } from "@/lib/paging";
 import { readAll } from "@/server/read-all";
 import { getCatalogue, type CatalogueProduct } from "@/server/catalogue-cache";
+import { inventoryNumberLikePattern } from "@/server/inventory-number";
 
 type Env = { Variables: { userId: string } };
 
@@ -99,14 +100,19 @@ inventory.get("/barcodes", async (c) => {
   const catalogue = await loadCatalogue();
   if (!catalogue) return c.json({ error: "Could not load product prices." }, 500);
 
-  const { data: stockRows, error: stockError } = await supabaseAdmin
+  let { data: stock, error: stockError } = await supabaseAdmin
     .from("inventory_items")
     .select("inventory_no, product_id, quantity")
-    .in("inventory_no", [starting, code]);
+    .eq("inventory_no", starting)
+    .maybeSingle();
+  if (!stockError && !stock) {
+    ({ data: stock, error: stockError } = await supabaseAdmin
+      .from("inventory_items")
+      .select("inventory_no, product_id, quantity")
+      .ilike("inventory_no", inventoryNumberLikePattern(starting))
+      .maybeSingle());
+  }
   if (stockError) return c.json({ error: "Could not look up that inventory number." }, 500);
-  const stock =
-    stockRows?.find((row) => row.inventory_no === starting) ??
-    stockRows?.find((row) => row.inventory_no === code);
 
   if (stock) {
     const product = catalogue.get(stock.product_id);
@@ -150,11 +156,18 @@ inventory.get("/barcodes", async (c) => {
   if (quantity !== undefined) {
     numbers = barcodeNumbers(starting, quantity);
     if (numbers.length === quantity) {
+      const variants = [
+        ...new Set(
+          numbers.flatMap((number) => [number, number.toUpperCase(), number.toLowerCase()]),
+        ),
+      ];
       const { data, error } = await supabaseAdmin
         .from("inventory_items")
         .select("inventory_no, product_id")
-        .in("inventory_no", numbers);
+        .in("inventory_no", variants);
       if (error) return c.json({ error: "Could not load inventory for these labels." }, 500);
+      const matched = new Map((data ?? []).map((item) => [item.inventory_no.toUpperCase(), item]));
+      numbers = numbers.map((number) => matched.get(number.toUpperCase())?.inventory_no ?? number);
       items = new Map((data ?? []).map((item) => [item.inventory_no, item.product_id]));
     }
   }
@@ -348,8 +361,12 @@ inventory.get("/verification/lookup", async (c) => {
       .eq("inventory_no", value)
       .maybeSingle();
   let { data, error } = await lookup(number);
-  if (!error && !data && number !== number.toUpperCase()) {
-    ({ data, error } = await lookup(number.toUpperCase()));
+  if (!error && !data) {
+    ({ data, error } = await supabaseAdmin
+      .from("stock_verification_report")
+      .select("*")
+      .ilike("inventory_no", inventoryNumberLikePattern(number))
+      .maybeSingle());
   }
   if (error) return c.json({ error: "Could not look up stock." }, 500);
   return c.json({ item: data ? toReportItem(data) : null });

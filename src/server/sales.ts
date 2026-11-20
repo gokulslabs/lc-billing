@@ -38,6 +38,7 @@ import {
 import { PAGE_SIZE, pageRange, readPage } from "@/lib/paging";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
 import { readAll, readIn } from "@/server/read-all";
+import { inventoryNumberLikePattern } from "@/server/inventory-number";
 
 type Env = { Variables: { userId: string } };
 
@@ -799,13 +800,20 @@ async function findInvoice(id: string): Promise<InvoiceRow | null> {
 }
 
 async function findStock(inventoryNo: string): Promise<StockRow | null> {
-  const { data, error } = await supabaseAdmin
+  const exact = await supabaseAdmin
     .from("inventory_items")
     .select("id, inventory_no, product_id, quantity, status")
     .eq("inventory_no", inventoryNo)
     .maybeSingle();
-  if (error || !data) return null;
-  return data as StockRow;
+  if (exact.error) return null;
+  if (exact.data) return exact.data as StockRow;
+
+  const insensitive = await supabaseAdmin
+    .from("inventory_items")
+    .select("id, inventory_no, product_id, quantity, status")
+    .ilike("inventory_no", inventoryNumberLikePattern(inventoryNo))
+    .maybeSingle();
+  return insensitive.error || !insensitive.data ? null : (insensitive.data as StockRow);
 }
 
 async function loadProducts(ids: string[]): Promise<Map<string, ProductInfo> | null> {
