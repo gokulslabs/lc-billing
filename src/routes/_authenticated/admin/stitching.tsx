@@ -720,7 +720,7 @@ function OrderScreen({
           </div>
         ) : (
           <Field label="Garment" id="stitch-product">
-            <Select value={productId || undefined} onValueChange={chooseProduct}>
+            <Select {...(productId ? { value: productId } : {})} onValueChange={chooseProduct}>
               <SelectTrigger id="stitch-product">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>

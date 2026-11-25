@@ -37,6 +37,7 @@ import {
 } from "@/lib/sales";
 import { PAGE_SIZE, pageRange, readPage } from "@/lib/paging";
 import { denyUnlessAdmin, requireShop } from "@/server/guard";
+import { missingOperation, requestHash } from "@/server/idempotency";
 import { readAll, readIn } from "@/server/read-all";
 import { inventoryNumberLikePattern } from "@/server/inventory-number";
 
@@ -57,6 +58,9 @@ type LineRow = {
   inventory_item_id: string | null;
   product_id: string;
   inventory_no: string;
+  product_code: string | null;
+  product_name: string | null;
+  group_name: string | null;
   quantity: number | string;
   rate: number | string;
   amount: number | string;
@@ -127,7 +131,9 @@ sales.get("/items", async (c) => {
   const data = await readIn<LineRow>([...byId.keys()], (chunk, from, to) =>
     supabaseAdmin
       .from("invoice_lines")
-      .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
+      .select(
+        "id, invoice_id, inventory_item_id, product_id, inventory_no, product_code, product_name, group_name, quantity, rate, amount",
+      )
       .in("invoice_id", chunk)
       .order("id")
       .range(from, to),
@@ -147,9 +153,9 @@ sales.get("/items", async (c) => {
       billedOn: invoice.billed_on,
       customerName: names.get(invoice.customer_id) ?? "",
       inventoryNo: row.inventory_no,
-      productCode: product.code,
-      groupName: product.groupName,
-      productName: product.name,
+      productCode: row.product_code ?? product.code,
+      groupName: row.group_name ?? product.groupName,
+      productName: row.product_name ?? product.name,
       quantity: Number(row.quantity),
       rate: Number(row.rate),
       amount: Number(row.amount),
@@ -452,7 +458,7 @@ sales.post("/:id/lines", async (c) => {
     parsed.data.extraOff,
     parsed.data.discountPercent,
   );
-  const { data: lineId, error } = await supabaseAdmin.rpc("shop_add_invoice_line", {
+  const lineArgs = {
     p_invoice_id: invoice.id,
     p_customer_id: invoice.customer_id,
     p_stock_id: stock.id,
@@ -463,11 +469,33 @@ sales.post("/:id/lines", async (c) => {
     p_rate: priced.rate,
     p_amount: priced.amount,
     p_is_piece: product.unit === "NO",
-  });
+  };
+  const keyed = parsed.data.idempotencyKey
+    ? await supabaseAdmin.rpc("shop_add_invoice_line_once", {
+        p_key: parsed.data.idempotencyKey,
+        p_hash: requestHash([
+          invoice.id,
+          stock.inventory_no,
+          parsed.data.quantity,
+          priced.rate,
+          priced.amount,
+          parsed.data.discountPercent ?? "",
+          parsed.data.extraOff ?? "",
+        ]),
+        p_actor: c.get("userId"),
+        ...lineArgs,
+      })
+    : null;
+  const used =
+    keyed && !missingOperation(keyed.error)
+      ? keyed
+      : await supabaseAdmin.rpc("shop_add_invoice_line", lineArgs);
+  const lineId = used.data;
+  const error = used.error;
   if (error?.code === "PT409") return c.json({ error: error.message }, 409);
   if (error || !lineId) return c.json({ error: "Could not add the line." }, 500);
   const detail = await loadDetail(invoice.id);
-  if ("error" in detail) return c.json({ error: detail.error }, detail.status);
+  if ("error" in detail) return c.json({ saved: true, lineId }, 201);
   const savedLine = detail.invoice.lines.find((line) => line.id === lineId);
   if (!savedLine) return c.json({ error: "The saved line could not be loaded." }, 500);
   return c.json({ invoice: detail.invoice, line: savedLine }, 201);
@@ -495,18 +523,30 @@ sales.post("/:id/lines/:lineId/return", async (c) => {
   if (quantityError) return c.json({ error: quantityError }, 400);
   const next = returnQuantity(Number(row.quantity), Number(row.amount), parsed.data.quantity);
   if (typeof next === "string") return c.json({ error: next }, 400);
-  const { error } = await supabaseAdmin.rpc("shop_return_invoice_line", {
+  const returnArgs = {
     p_invoice_id: invoice.id,
     p_line_id: row.id,
     p_expected_quantity: Number(row.quantity),
     p_expected_amount: Number(row.amount),
     p_new_quantity: next.quantity,
     p_new_amount: next.amount,
-  });
-  if (error?.code === "PT409") return c.json({ error: error.message }, 409);
-  if (error) return c.json({ error: "Could not return this line." }, 500);
+  };
+  const keyed = parsed.data.idempotencyKey
+    ? await supabaseAdmin.rpc("shop_return_invoice_line_once", {
+        p_key: parsed.data.idempotencyKey,
+        p_hash: requestHash([invoice.id, row.id, next.quantity, next.amount]),
+        p_actor: c.get("userId"),
+        ...returnArgs,
+      })
+    : null;
+  const used =
+    keyed && !missingOperation(keyed.error)
+      ? keyed
+      : await supabaseAdmin.rpc("shop_return_invoice_line", returnArgs);
+  if (used.error?.code === "PT409") return c.json({ error: used.error.message }, 409);
+  if (used.error) return c.json({ error: "Could not return this line." }, 500);
   const detail = await loadDetail(invoice.id);
-  if ("error" in detail) return c.json({ error: detail.error }, detail.status);
+  if ("error" in detail) return c.json({ saved: true }, 200);
   return c.json({ invoice: detail.invoice });
 });
 
@@ -557,13 +597,33 @@ sales.post("/:id/payments", async (c) => {
   const parsed = paymentSchema.safeParse(await readJson(c));
   if (!parsed.success) return c.json({ error: zodMessage(parsed.error) }, 400);
   const id = c.req.param("id");
-  const { data: outcome, error } = await supabaseAdmin.rpc("shop_collect_invoice", {
+  const collectArgs = {
     p_invoice_id: id,
     p_amount: parsed.data.amount,
     p_paid_on: parsed.data.paidOn,
     p_mode: parsed.data.mode,
     p_showroom: blankToNull(parsed.data.showroom),
-  });
+  };
+  const keyed = parsed.data.idempotencyKey
+    ? await supabaseAdmin.rpc("shop_collect_invoice_once", {
+        p_key: parsed.data.idempotencyKey,
+        p_hash: requestHash([
+          id,
+          parsed.data.amount,
+          parsed.data.paidOn,
+          parsed.data.mode,
+          parsed.data.showroom,
+        ]),
+        p_actor: c.get("userId"),
+        ...collectArgs,
+      })
+    : null;
+  const used =
+    keyed && !missingOperation(keyed.error)
+      ? keyed
+      : await supabaseAdmin.rpc("shop_collect_invoice", collectArgs);
+  const outcome = used.data;
+  const error = used.error;
   if (error || !outcome) return c.json({ error: "Could not save the collection." }, 500);
   if (outcome === "not_found") return c.json({ error: "Bill not found." }, 404);
   if (outcome === "cancelled") return c.json({ error: "This bill is cancelled." }, 400);
@@ -571,7 +631,7 @@ sales.post("/:id/payments", async (c) => {
   if (outcome === "exceeds_balance")
     return c.json({ error: "Amount is more than the balance." }, 400);
   const next = await loadDetail(id);
-  if ("error" in next) return c.json({ error: next.error }, next.status);
+  if ("error" in next) return c.json({ saved: true }, 201);
   return c.json({ invoice: next.invoice }, 201);
 });
 
@@ -696,7 +756,9 @@ async function loadDetail(
   const [lines, payments, customer] = await Promise.all([
     supabaseAdmin
       .from("invoice_lines")
-      .select("id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount")
+      .select(
+        "id, invoice_id, inventory_item_id, product_id, inventory_no, product_code, product_name, group_name, quantity, rate, amount",
+      )
       .eq("invoice_id", id),
     supabaseAdmin
       .from("payments")
@@ -904,9 +966,9 @@ function toLine(row: LineRow, product: ProductInfo, status: string): InvoiceLine
   return {
     id: row.id,
     inventoryNo: row.inventory_no,
-    productCode: product.code,
-    groupName: product.groupName,
-    productName: product.name,
+    productCode: row.product_code ?? product.code,
+    groupName: row.group_name ?? product.groupName,
+    productName: row.product_name ?? product.name,
     quantity: Number(row.quantity),
     rate: Number(row.rate),
     discount: round2(lineAmount(Number(row.quantity), Number(row.rate)) - Number(row.amount)),

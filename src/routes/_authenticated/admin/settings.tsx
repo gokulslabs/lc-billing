@@ -277,7 +277,7 @@ function Measurements({ garments }: { garments: StitchingGarment[] }) {
     <section className="space-y-5">
       <div className="space-y-2">
         <Label htmlFor="measurement-garment">Choose a garment</Label>
-        <Select value={garment?.id} onValueChange={setProductId}>
+        <Select {...(garment?.id ? { value: garment.id } : {})} onValueChange={setProductId}>
           <SelectTrigger id="measurement-garment" className="w-full max-w-xs">
             <SelectValue placeholder="Choose" />
           </SelectTrigger>

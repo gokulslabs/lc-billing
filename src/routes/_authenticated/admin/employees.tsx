@@ -390,7 +390,7 @@ function EmployeeDialog({
           </Field>
           <Field label="Department" id="department">
             <Select
-              value={draft.department || undefined}
+              {...(draft.department ? { value: draft.department } : {})}
               onValueChange={(value) => setDraft({ ...draft, department: value })}
             >
               <SelectTrigger id="department">

@@ -3,6 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { apiFetch } from "@/lib/api";
+import { completeOperation, operationId } from "@/lib/operation-id";
 import { isUnrecordedName, type Customer } from "@/lib/customers";
 import { formatRupees } from "@/lib/products";
 import type { InvoiceDetail, InvoiceItem, InvoiceSummary } from "@/lib/sales";
@@ -1283,16 +1284,26 @@ function LineForm({
           throw new Error("Enter a discount percent.");
         if (typedExtra !== undefined && !Number.isFinite(typedExtra))
           throw new Error("Enter the extra off.");
+        const payload = JSON.stringify({
+          invoiceId,
+          inventoryNo: next,
+          quantity: amount,
+          rate: typedRate ?? null,
+          discountPercent: typedPercent ?? null,
+          extraOff: typedExtra ?? null,
+        });
         await apiFetch(`/api/invoices/${invoiceId}/lines`, {
           method: "POST",
           body: JSON.stringify({
             inventoryNo: next,
             quantity: amount,
+            idempotencyKey: operationId(payload),
             ...(typedRate === undefined ? {} : { rate: typedRate }),
             ...(typedPercent === undefined ? {} : { discountPercent: typedPercent }),
             ...(typedExtra === undefined ? {} : { extraOff: typedExtra }),
           }),
         });
+        completeOperation(payload);
         if (newEntry) {
           valueRef.current = "";
           setInventoryNo("");
@@ -1485,11 +1496,13 @@ function ReturnLine({
             ? `Remove ${line.inventoryNo} from this bill and put it back in stock?`
             : `Return ${quantity} of ${line.inventoryNo}? It goes back on the shelf.`;
           if (!window.confirm(prompt)) return;
+          const payload = JSON.stringify({ invoiceId, lineId: line.id, quantity });
           void apiFetch(`/api/invoices/${invoiceId}/lines/${line.id}/return`, {
             method: "POST",
-            body: JSON.stringify({ quantity }),
+            body: JSON.stringify({ quantity, idempotencyKey: operationId(payload) }),
           })
             .then(() => {
+              completeOperation(payload);
               toast.success(
                 quantity >= line.quantity
                   ? `${line.inventoryNo} is back on the shelf.`
@@ -1599,9 +1612,19 @@ function CollectForm({
     mutationFn: () => {
       const value = Number(amount);
       if (!Number.isFinite(value)) throw new Error("Enter an amount.");
+      const payload = JSON.stringify({ invoiceId, amount: value, paidOn, mode, showroom });
       return apiFetch(`/api/invoices/${invoiceId}/payments`, {
         method: "POST",
-        body: JSON.stringify({ amount: value, paidOn, mode, showroom }),
+        body: JSON.stringify({
+          amount: value,
+          paidOn,
+          mode,
+          showroom,
+          idempotencyKey: operationId(payload),
+        }),
+      }).then((result) => {
+        completeOperation(payload);
+        return result;
       });
     },
     onSuccess: () => {

@@ -665,7 +665,7 @@ function ProductDialog({
           }}
         >
           <Field label="Group" id="product-group">
-            <Select value={groupId || undefined} onValueChange={setGroupId}>
+            <Select {...(groupId ? { value: groupId } : {})} onValueChange={setGroupId}>
               <SelectTrigger id="product-group">
                 <SelectValue placeholder="Choose" />
               </SelectTrigger>

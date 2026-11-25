@@ -174,7 +174,10 @@ export type Database = {
           inventory_item_id: string | null;
           inventory_no: string;
           invoice_id: string;
+          product_code: string | null;
           product_id: string;
+          product_name: string | null;
+          group_name: string | null;
           quantity: number;
           rate: number;
         };
@@ -184,7 +187,10 @@ export type Database = {
           inventory_item_id?: string | null;
           inventory_no: string;
           invoice_id: string;
+          product_code?: string | null;
           product_id: string;
+          product_name?: string | null;
+          group_name?: string | null;
           quantity: number;
           rate: number;
         };
@@ -194,7 +200,10 @@ export type Database = {
           inventory_item_id?: string | null;
           inventory_no?: string;
           invoice_id?: string;
+          product_code?: string | null;
           product_id?: string;
+          product_name?: string | null;
+          group_name?: string | null;
           quantity?: number;
           rate?: number;
         };
@@ -542,6 +551,51 @@ export type Database = {
           p_rate: number;
           p_amount: number;
           p_is_piece: boolean;
+        };
+        Returns: string;
+      };
+      shop_add_invoice_line_once: {
+        Args: {
+          p_key: string;
+          p_hash: string;
+          p_actor: string;
+          p_invoice_id: string;
+          p_customer_id: string;
+          p_stock_id: string;
+          p_product_id: string;
+          p_inventory_no: string;
+          p_expected_stock: number;
+          p_quantity: number;
+          p_rate: number;
+          p_amount: number;
+          p_is_piece: boolean;
+        };
+        Returns: string;
+      };
+      shop_collect_invoice_once: {
+        Args: {
+          p_key: string;
+          p_hash: string;
+          p_actor: string;
+          p_invoice_id: string;
+          p_amount: number;
+          p_paid_on: string;
+          p_mode: string;
+          p_showroom: string | null;
+        };
+        Returns: string;
+      };
+      shop_return_invoice_line_once: {
+        Args: {
+          p_key: string;
+          p_hash: string;
+          p_actor: string;
+          p_invoice_id: string;
+          p_line_id: string;
+          p_expected_quantity: number;
+          p_expected_amount: number;
+          p_new_quantity: number;
+          p_new_amount: number;
         };
         Returns: string;
       };
