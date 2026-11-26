@@ -58,13 +58,44 @@ type LineRow = {
   inventory_item_id: string | null;
   product_id: string;
   inventory_no: string;
-  product_code: string | null;
-  product_name: string | null;
-  group_name: string | null;
+  product_code?: string | null;
+  product_name?: string | null;
+  group_name?: string | null;
   quantity: number | string;
   rate: number | string;
   amount: number | string;
 };
+
+const LINE_COLUMNS_WITH_SNAPSHOT =
+  "id, invoice_id, inventory_item_id, product_id, inventory_no, product_code, product_name, group_name, quantity, rate, amount";
+const LINE_COLUMNS_WITHOUT_SNAPSHOT =
+  "id, invoice_id, inventory_item_id, product_id, inventory_no, quantity, rate, amount";
+
+let cachedLineColumns: string | null = null;
+
+function snapshotColumnsMissing(error: { code?: string; message?: string } | null): boolean {
+  if (error?.code !== "42703") return false;
+  const message = error.message ?? "";
+  return (
+    message.includes("product_code") ||
+    message.includes("product_name") ||
+    message.includes("group_name")
+  );
+}
+
+async function invoiceLineColumns(): Promise<string> {
+  if (cachedLineColumns) return cachedLineColumns;
+  const probe = await supabaseAdmin.from("invoice_lines").select("product_code").limit(1);
+  if (!probe.error) {
+    cachedLineColumns = LINE_COLUMNS_WITH_SNAPSHOT;
+    return cachedLineColumns;
+  }
+  if (snapshotColumnsMissing(probe.error)) {
+    cachedLineColumns = LINE_COLUMNS_WITHOUT_SNAPSHOT;
+    return cachedLineColumns;
+  }
+  return LINE_COLUMNS_WITH_SNAPSHOT;
+}
 
 type PaymentRow = {
   id: string;
@@ -128,12 +159,11 @@ sales.get("/items", async (c) => {
   if ("error" in invoices) return c.json({ error: invoices.error }, 500);
   if (invoices.rows.length === 0) return c.json({ items: [], total: 0 });
   const byId = new Map(invoices.rows.map((row) => [row.id, row]));
+  const columns = await invoiceLineColumns();
   const data = await readIn<LineRow>([...byId.keys()], (chunk, from, to) =>
     supabaseAdmin
       .from("invoice_lines")
-      .select(
-        "id, invoice_id, inventory_item_id, product_id, inventory_no, product_code, product_name, group_name, quantity, rate, amount",
-      )
+      .select(columns as typeof LINE_COLUMNS_WITH_SNAPSHOT)
       .in("invoice_id", chunk)
       .order("id")
       .range(from, to),
@@ -753,12 +783,11 @@ async function loadDetail(
 ): Promise<{ invoice: InvoiceDetail } | { error: string; status: 404 | 500 }> {
   const invoice = await findInvoice(id);
   if (!invoice) return { error: "Bill not found.", status: 404 };
+  const columns = await invoiceLineColumns();
   const [lines, payments, customer] = await Promise.all([
     supabaseAdmin
       .from("invoice_lines")
-      .select(
-        "id, invoice_id, inventory_item_id, product_id, inventory_no, product_code, product_name, group_name, quantity, rate, amount",
-      )
+      .select(columns as typeof LINE_COLUMNS_WITH_SNAPSHOT)
       .eq("invoice_id", id),
     supabaseAdmin
       .from("payments")
