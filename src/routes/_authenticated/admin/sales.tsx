@@ -1839,27 +1839,28 @@ function NewBillForm({ onCreated }: { onCreated: (id: string) => void }) {
       let id = selectedId;
       if (!id) {
         if (!walkIn.trim()) throw new Error("Choose a customer, or type a name.");
+        const typedName = walkIn.trim().toLowerCase();
         if (phone.trim()) {
-          const found = await apiFetch<{ customer: Customer | null }>(
-            `/api/customers/lookup?phone=${encodeURIComponent(phone.trim())}`,
+          const params = new URLSearchParams({ q: phone.trim(), picker: "1" });
+          const found = await apiFetch<{ customers: Customer[] }>(`/api/customers?${params}`);
+          const samePerson = found.customers.find(
+            (customer) => customer.name.trim().toLowerCase() === typedName,
           );
-          if (found.customer) {
-            return apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
-              method: "POST",
-              body: JSON.stringify({ customerId: found.customer.id }),
-            });
-          }
+          if (samePerson) id = samePerson.id;
         }
-        const saved = await apiFetch<{ customer: Customer }>("/api/customers", {
-          method: "POST",
-          body: JSON.stringify({
-            name: walkIn.trim(),
-            address: "",
-            phone: phone.trim(),
-            bookNo: "",
-          }),
-        });
-        id = saved.customer.id;
+        if (!id) {
+          const saved = await apiFetch<{ customer: Customer }>("/api/customers", {
+            method: "POST",
+            body: JSON.stringify({
+              name: walkIn.trim(),
+              address: "",
+              phone: phone.trim(),
+              bookNo: "",
+              confirmDuplicate: true,
+            }),
+          });
+          id = saved.customer.id;
+        }
       }
       return apiFetch<{ invoice: InvoiceDetail }>("/api/invoices", {
         method: "POST",
