@@ -94,6 +94,11 @@ begin
     )
     select jsonb_build_object('rows',coalesce((select jsonb_agg(to_jsonb(page_rows)) from page_rows),'[]'::jsonb),
       'total',(select count(*) from ranked),
+      'customerSummary',(select jsonb_build_object('customerCount',count(*),'newCustomers',count(*) filter(where customer_type='New'),
+        'returningCustomers',count(*) filter(where customer_type='Returning'),
+        'returningShare',case when count(*)=0 then 0 else count(*) filter(where customer_type='Returning')::numeric/count(*)*100 end,
+        'top10SpendShare',case when coalesce(sum(spend),0)=0 then 0 else
+          (select coalesce(sum(spend),0) from (select spend from ranked order by spend desc limit 10) top_rows)::numeric/sum(spend)*100 end) from ranked),
       'topSpend',coalesce((select jsonb_agg(to_jsonb(t) order by spend desc) from (select * from ranked order by spend desc, name limit 10) t),'[]'::jsonb),
       'topVisitDays',coalesce((select jsonb_agg(to_jsonb(t) order by visit_days desc) from (select * from ranked order by visit_days desc, spend desc, name limit 10) t),'[]'::jsonb),
       'topBills',coalesce((select jsonb_agg(to_jsonb(t) order by bill_count desc) from (select * from ranked order by bill_count desc, spend desc, name limit 10) t),'[]'::jsonb)) into v_result;
@@ -210,7 +215,7 @@ begin
         'delivered',(select count(*) from public.stitching_orders where status in ('DELIVERED','COMPLETED') and ordered_on between p_from and p_to),
         'legacyPending',(select count(*) from public.stitching_orders where status in ('PENDING','TRIAL') and ordered_on < (created_at at time zone 'Asia/Kolkata')::date)),
       'garments',coalesce((select jsonb_agg(jsonb_build_object('garment',garment,'received',received,'pending',pending,'overdue',overdue,'ready',ready,'delivered',delivered) order by received desc)
-        from (select garment,count(*) filter(where ordered_on between p_from and p_to)::integer received,count(*) filter(where status in ('PENDING','TRIAL'))::integer pending,count(*) filter(where overdue)::integer overdue,count(*) filter(where status='READY')::integer ready,count(*) filter(where status in ('DELIVERED','COMPLETED'))::integer delivered from orders group by garment) g),'[]'::jsonb)
+        from (select garment,count(*) filter(where ordered_on between p_from and p_to)::integer received,count(*) filter(where status in ('PENDING','TRIAL'))::integer pending,count(*) filter(where overdue)::integer overdue,count(*) filter(where status='READY')::integer ready,count(*) filter(where status in ('DELIVERED','COMPLETED') and ordered_on between p_from and p_to)::integer delivered from orders group by garment) g),'[]'::jsonb)
     ) into v_result;
   else
     raise exception 'Unknown analytics section';

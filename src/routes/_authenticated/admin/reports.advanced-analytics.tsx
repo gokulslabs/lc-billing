@@ -9,6 +9,15 @@ import { shopToday } from "@/lib/sales";
 import { formatRupees } from "@/lib/products";
 import { useIsAdmin } from "@/hooks/use-is-admin";
 import { toast } from "sonner";
+import {
+  AgingChart,
+  InventoryGroupChart,
+  PaymentMixChart,
+  RankingChart,
+  StitchingChart,
+  TopSellingChart,
+  TrendChart,
+} from "@/components/reports/AdvancedAnalyticsCharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -133,6 +142,13 @@ type Payload = {
   groupTotal?: number;
   productTotal?: number;
   stockFlagTotal?: number;
+  customerSummary?: {
+    customerCount?: number;
+    newCustomers?: number;
+    returningCustomers?: number;
+    returningShare?: number;
+    top10SpendShare?: number;
+  };
   total?: number;
   billTotal?: number;
   aging?: Record<string, number | string>;
@@ -308,6 +324,17 @@ function AdvancedAnalyticsPage() {
         sheets.push(makeSheet("Top selling", data.topSelling ?? []));
       }
       if (section === "customers" && data) {
+        sheets.push({
+          name: "Customer metrics",
+          columns: ["Metric", "Value"],
+          rows: [
+            ["Billed customers", data.customerSummary?.customerCount ?? 0],
+            ["New customers", data.customerSummary?.newCustomers ?? 0],
+            ["Returning customers", data.customerSummary?.returningCustomers ?? 0],
+            ["Returning customer share (%)", data.customerSummary?.returningShare ?? 0],
+            ["Top 10 spend share (%)", data.customerSummary?.top10SpendShare ?? 0],
+          ],
+        });
         sheets.push(makeSheet("Top spend", data.topSpend ?? []));
         sheets.push(makeSheet("Top visit days", data.topVisitDays ?? []));
         sheets.push(makeSheet("Top bills", data.topBills ?? []));
@@ -688,27 +715,8 @@ function Overview({
             ))}
           </div>
         </div>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2">
-          {(chart ?? []).map((row: TrendPoint) => (
-            <div
-              key={row.date}
-              className="grid grid-cols-[6rem_1fr_auto_auto] items-center gap-2 border-b py-2 text-sm"
-            >
-              <span>{row.date}</span>
-              <div className="h-2 overflow-hidden rounded-full bg-muted">
-                <div
-                  className="h-full bg-primary"
-                  style={{
-                    width: `${Math.min(100, (Number(row.sales) / Math.max(1, ...(chart ?? []).map((x: TrendPoint) => Number(x.sales)))) * 100)}%`,
-                  }}
-                />
-              </div>
-              <span title="Net sales billed">{formatRupees(Number(row.sales))}</span>
-              <span title="Collections received" className="text-muted-foreground">
-                {formatRupees(Number(row.collected))}
-              </span>
-            </div>
-          ))}
+        <div className="mt-4">
+          <TrendChart data={chart ?? []} />
         </div>
         <div className="mt-4 grid gap-2 text-sm sm:grid-cols-3">
           <Comparison
@@ -768,13 +776,40 @@ function Comparison({
 }
 
 function CustomerSummary({ data }: { data: Payload }) {
+  const summary = data.customerSummary ?? {};
   return (
     <div className="space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        {[
+          ["Billed customers", Number(summary.customerCount ?? 0).toLocaleString("en-IN")],
+          ["New in range", Number(summary.newCustomers ?? 0).toLocaleString("en-IN")],
+          [
+            "Returning customers",
+            `${Number(summary.returningCustomers ?? 0).toLocaleString("en-IN")} (${Number(summary.returningShare ?? 0).toFixed(1)}%)`,
+          ],
+          ["Top 10 spend share", `${Number(summary.top10SpendShare ?? 0).toFixed(1)}%`],
+        ].map(([label, value]) => (
+          <article key={label} className="rounded-2xl border bg-card p-4">
+            <p className="text-sm text-muted-foreground">{label}</p>
+            <p className="mt-2 text-xl font-semibold">{value}</p>
+          </article>
+        ))}
+      </div>
       <p className="text-sm text-muted-foreground">
         Billed visit days count distinct bill dates; multiple bills on one date count as one visit
         day and multiple bills. Website visits or shop footfall are not shown because reliable
         tracking is not recorded.
       </p>
+      <RankingChart
+        title="Customer spend ranking"
+        data={(data.topSpend ?? []).map((row) => ({
+          label: String(row.name ?? "Unnamed customer"),
+          value: Number(row.spend ?? 0),
+          detail: `${row.visit_days ?? 0} billed visit days · ${row.bill_count ?? 0} bills`,
+        }))}
+        currency
+        color="var(--chart-5)"
+      />
       <div className="grid gap-4 xl:grid-cols-3">
         <CustomerRanking title="Top customers by spend" rows={data.topSpend ?? []} metric="spend" />
         <CustomerRanking
@@ -849,6 +884,43 @@ function SalesSummary({ data }: { data: Payload }) {
           </article>
         ))}
       </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <PaymentMixChart
+          data={(data.methods ?? []).map((row) => ({
+            method: String(row.method ?? "Not recorded"),
+            amount: Number(row.amount ?? 0),
+          }))}
+        />
+        <AgingChart data={data.aging ?? {}} />
+        <RankingChart
+          title="Product groups by net billed sales"
+          data={(data.groups ?? []).map((row) => ({
+            label: String(row.name ?? ""),
+            value: Number(row.net_sales ?? 0),
+            detail: `${Number(row.pieces_sold ?? 0)} pieces · ${Number(row.metres_sold ?? 0)} metres`,
+          }))}
+          currency
+        />
+        <TopSellingChart
+          data={(data.products ?? []).map((row) => ({
+            code: String(row.code ?? ""),
+            name: String(row.name ?? ""),
+            unit: String(row.unit ?? "NO"),
+            net_sales: Number(row.net_sales ?? 0),
+            quantity_sold: Number(row.quantity_sold ?? 0),
+          }))}
+        />
+        <TopSellingChart
+          data={(data.productsByQuantity ?? []).map((row) => ({
+            code: String(row.code ?? ""),
+            name: String(row.name ?? ""),
+            unit: String(row.unit ?? "NO"),
+            net_sales: Number(row.net_sales ?? 0),
+            quantity_sold: Number(row.quantity_sold ?? 0),
+          }))}
+          metric="quantity"
+        />
+      </div>
       <div className="rounded-2xl border p-4">
         <h2 className="font-semibold">Outstanding by age at period end</h2>
         <p className="mt-2 text-sm">
@@ -894,6 +966,25 @@ function InventorySummary({ data }: { data: Payload }) {
           </article>
         ))}
       </div>
+      <div className="grid gap-4 xl:grid-cols-2">
+        <InventoryGroupChart
+          data={(data.groups ?? []).map((row) => ({
+            group_name: String(row.group_name ?? ""),
+            unit: String(row.unit ?? "NO"),
+            available_quantity: Number(row.available_quantity ?? 0),
+            retail_value: Number(row.retail_value ?? 0),
+          }))}
+        />
+        <TopSellingChart
+          data={(data.topSelling ?? []).map((row) => ({
+            code: String(row.code ?? ""),
+            name: String(row.name ?? ""),
+            unit: String(row.unit ?? "NO"),
+            net_sales: Number(row.net_sales ?? 0),
+            quantity_sold: Number(row.quantity_sold ?? 0),
+          }))}
+        />
+      </div>
       <p className="text-sm text-muted-foreground">
         Stock quantities and retail value are a current snapshot. Sales use the selected range. Cost
         coverage counts stock records with recorded purchase cost; no margin estimate is shown
@@ -922,6 +1013,16 @@ function StitchingSummary({ data }: { data: Payload }) {
           </article>
         ))}
       </div>
+      <StitchingChart
+        data={(data.garments ?? []).map((row) => ({
+          garment: String(row.garment ?? "Unspecified"),
+          pending: Number(row.pending ?? 0),
+          overdue: Number(row.overdue ?? 0),
+          ready: Number(row.ready ?? 0),
+          delivered: Number(row.delivered ?? 0),
+          received: Number(row.received ?? 0),
+        }))}
+      />
       <p className="text-xs text-muted-foreground">
         “Legacy dated pending” is a candidate flag where order date predates its record creation
         date; legacy origin is not explicitly stored, so treat it as an indicator for review.
