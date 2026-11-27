@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from, setRoleRows } = vi.hoisted(() => {
+const { from, rpc, setRoleRows } = vi.hoisted(() => {
   let roleRows: { data: { role: string }[] | null; error: null } = { data: [], error: null };
   let filters: [string, string][] = [];
   const builder = {
@@ -22,14 +22,15 @@ const { from, setRoleRows } = vi.hoisted(() => {
     },
   };
   const from = vi.fn(() => builder);
+  const rpc = vi.fn(async () => ({ data: {}, error: null }));
   const setRoleRows = (rows: { role: string }[]) => {
     roleRows = { data: rows, error: null };
   };
-  return { from, setRoleRows };
+  return { from, rpc, setRoleRows };
 });
 
 vi.mock("@/integrations/supabase/client.server", () => ({
-  supabaseAdmin: { from },
+  supabaseAdmin: { from, rpc },
 }));
 
 import { denyUnlessAdmin, requireShop } from "./guard";
@@ -37,6 +38,7 @@ import { customerRoutes } from "./customers";
 import { inventoryRoutes } from "./inventory";
 import { salesRoutes } from "./sales";
 import { stitchingRoutes } from "./stitching";
+import { reportRoutes } from "./reports";
 
 function shopApp() {
   const app = new Hono<{ Variables: { userId: string } }>();
@@ -83,6 +85,27 @@ describe("shop role guards", () => {
 
     expect((await app.request("/shop")).status).toBe(200);
     expect((await app.request("/admin-export")).status).toBe(200);
+  });
+
+  it("restricts advanced analytics exports to admins", async () => {
+    const app = shopApp();
+    app.route("/reports", reportRoutes);
+    setRoleRows([{ role: "staff" }]);
+    const staffResponse = await app.request(
+      "/reports/advanced-analytics?from=2026-11-01&to=2026-11-28&section=customers&export=1",
+    );
+    expect(staffResponse.status).toBe(403);
+    expect(rpc).not.toHaveBeenCalled();
+
+    setRoleRows([{ role: "admin" }]);
+    const adminResponse = await app.request(
+      "/reports/advanced-analytics?from=2026-11-01&to=2026-11-28&section=customers&export=1",
+    );
+    expect(adminResponse.status).toBe(200);
+    expect(rpc).toHaveBeenCalledWith(
+      "shop_advanced_analytics",
+      expect.objectContaining({ p_section: "customers" }),
+    );
   });
 
   it.each([

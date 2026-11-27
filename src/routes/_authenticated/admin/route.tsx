@@ -32,6 +32,9 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
   SidebarProvider,
   SidebarRail,
   SidebarTrigger,
@@ -192,6 +195,18 @@ function AuthenticatedLayout() {
                         </Badge>
                       </SidebarMenuButton>
                     )}
+                    {m.key === "reports" && pathname.startsWith("/admin/reports") ? (
+                      <SidebarMenuSub className="group-data-[collapsible=icon]:hidden">
+                        <SidebarMenuSubItem>
+                          <SidebarMenuSubButton
+                            asChild
+                            isActive={pathname.startsWith("/admin/reports/advanced-analytics")}
+                          >
+                            <Link to="/admin/reports/advanced-analytics">Advanced Analytics</Link>
+                          </SidebarMenuSubButton>
+                        </SidebarMenuSubItem>
+                      </SidebarMenuSub>
+                    ) : null}
                   </SidebarMenuItem>
                 ))}
               </SidebarMenu>

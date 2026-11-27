@@ -50,6 +50,36 @@ reports.get("/analytics", async (c) => {
   return c.json(analytics);
 });
 
+reports.get("/advanced-analytics", async (c) => {
+  const range = readRange(c.req.query("from"), c.req.query("to"));
+  if ("error" in range) return c.json({ error: range.error }, 400);
+  const section = c.req.query("section") || "overview";
+  if (!["overview", "customers", "sales", "inventory", "stitching"].includes(section)) {
+    return c.json({ error: "Choose a valid analytics section." }, 400);
+  }
+  const exporting = c.req.query("export") === "1";
+  if (exporting) {
+    const denied = await denyUnlessAdmin(c);
+    if (denied) return denied;
+  }
+  const page = readPage(c.req.query("page"), 10000);
+  const requestedPageSize = Number(c.req.query("pageSize") || 25);
+  const pageSize = Number.isFinite(requestedPageSize)
+    ? Math.min(Math.max(Math.floor(requestedPageSize), 1), 100)
+    : 25;
+  const search = (c.req.query("search") || "").trim().slice(0, 100);
+  const { data, error } = await supabaseAdmin.rpc("shop_advanced_analytics", {
+    p_from: range.from,
+    p_to: range.to,
+    p_section: section,
+    p_page: page,
+    p_page_size: pageSize,
+    p_search: search,
+  });
+  if (error || !data) return c.json({ error: "Could not load advanced analytics." }, 500);
+  return c.json(data as unknown as Record<string, unknown>);
+});
+
 reports.get("/invoices", async (c) => {
   const range = readRange(c.req.query("from"), c.req.query("to"));
   if ("error" in range) return c.json({ error: range.error }, 400);

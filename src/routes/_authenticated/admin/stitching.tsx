@@ -57,7 +57,9 @@ export const Route = createFileRoute("/_authenticated/admin/stitching")({
 });
 
 function StitchingPage() {
-  const [orderId, setOrderId] = useState<string | "new" | null>(null);
+  const [orderId, setOrderId] = useState<string | "new" | null>(() =>
+    typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("order") : null,
+  );
   if (orderId)
     return (
       <OrderScreen

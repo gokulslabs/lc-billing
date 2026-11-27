@@ -599,6 +599,17 @@ export type Database = {
         Args: { p_from: string; p_to: string };
         Returns: Json;
       };
+      shop_advanced_analytics: {
+        Args: {
+          p_from: string;
+          p_to: string;
+          p_section?: string;
+          p_page?: number;
+          p_page_size?: number;
+          p_search?: string;
+        };
+        Returns: Json;
+      };
       shop_invoice_report: {
         Args: { p_from: string; p_to: string; p_cancelled: boolean };
         Returns: (import("@/lib/reports").InvoiceReportRow & { remarks: string | null })[];

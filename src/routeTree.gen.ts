@@ -35,6 +35,7 @@ import { Route as AuthenticatedAdminStockVerificationRouteImport } from './route
 import { Route as StoreShopSlugRouteImport } from './routes/_store/shop_.$slug'
 import { Route as AuthenticatedAdminCustomersIndexRouteImport } from './routes/_authenticated/admin/customers.index'
 import { Route as AuthenticatedAdminCustomersCustomerIdRouteImport } from './routes/_authenticated/admin/customers.$customerId'
+import { Route as AuthenticatedAdminReportsAdvancedAnalyticsRouteImport } from './routes/_authenticated/admin/reports.advanced-analytics'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -176,6 +177,12 @@ const AuthenticatedAdminCustomersCustomerIdRoute =
     path: '/$customerId',
     getParentRoute: () => AuthenticatedAdminCustomersRoute,
   } as any)
+const AuthenticatedAdminReportsAdvancedAnalyticsRoute =
+  AuthenticatedAdminReportsAdvancedAnalyticsRouteImport.update({
+    id: '/advanced-analytics',
+    path: '/advanced-analytics',
+    getParentRoute: () => AuthenticatedAdminReportsRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof StoreIndexRoute
@@ -193,7 +200,7 @@ export interface FileRoutesByFullPath {
   '/admin/expenses': typeof AuthenticatedAdminExpensesRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
   '/admin/products': typeof AuthenticatedAdminProductsRoute
-  '/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/admin/reports': typeof AuthenticatedAdminReportsRouteWithChildren
   '/admin/sales': typeof AuthenticatedAdminSalesRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/stitching': typeof AuthenticatedAdminStitchingRoute
@@ -201,6 +208,7 @@ export interface FileRoutesByFullPath {
   '/shop/$slug': typeof StoreShopSlugRoute
   '/admin/': typeof AuthenticatedAdminIndexRoute
   '/admin/customers/$customerId': typeof AuthenticatedAdminCustomersCustomerIdRoute
+  '/admin/reports/advanced-analytics': typeof AuthenticatedAdminReportsAdvancedAnalyticsRoute
   '/admin/customers/': typeof AuthenticatedAdminCustomersIndexRoute
 }
 export interface FileRoutesByTo {
@@ -217,7 +225,7 @@ export interface FileRoutesByTo {
   '/admin/expenses': typeof AuthenticatedAdminExpensesRoute
   '/admin/inventory': typeof AuthenticatedAdminInventoryRoute
   '/admin/products': typeof AuthenticatedAdminProductsRoute
-  '/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/admin/reports': typeof AuthenticatedAdminReportsRouteWithChildren
   '/admin/sales': typeof AuthenticatedAdminSalesRoute
   '/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/admin/stitching': typeof AuthenticatedAdminStitchingRoute
@@ -225,6 +233,7 @@ export interface FileRoutesByTo {
   '/shop/$slug': typeof StoreShopSlugRoute
   '/admin': typeof AuthenticatedAdminIndexRoute
   '/admin/customers/$customerId': typeof AuthenticatedAdminCustomersCustomerIdRoute
+  '/admin/reports/advanced-analytics': typeof AuthenticatedAdminReportsAdvancedAnalyticsRoute
   '/admin/customers': typeof AuthenticatedAdminCustomersIndexRoute
 }
 export interface FileRoutesById {
@@ -246,7 +255,7 @@ export interface FileRoutesById {
   '/_authenticated/admin/expenses': typeof AuthenticatedAdminExpensesRoute
   '/_authenticated/admin/inventory': typeof AuthenticatedAdminInventoryRoute
   '/_authenticated/admin/products': typeof AuthenticatedAdminProductsRoute
-  '/_authenticated/admin/reports': typeof AuthenticatedAdminReportsRoute
+  '/_authenticated/admin/reports': typeof AuthenticatedAdminReportsRouteWithChildren
   '/_authenticated/admin/sales': typeof AuthenticatedAdminSalesRoute
   '/_authenticated/admin/settings': typeof AuthenticatedAdminSettingsRoute
   '/_authenticated/admin/stitching': typeof AuthenticatedAdminStitchingRoute
@@ -254,6 +263,7 @@ export interface FileRoutesById {
   '/_store/shop_/$slug': typeof StoreShopSlugRoute
   '/_authenticated/admin/': typeof AuthenticatedAdminIndexRoute
   '/_authenticated/admin/customers/$customerId': typeof AuthenticatedAdminCustomersCustomerIdRoute
+  '/_authenticated/admin/reports/advanced-analytics': typeof AuthenticatedAdminReportsAdvancedAnalyticsRoute
   '/_authenticated/admin/customers/': typeof AuthenticatedAdminCustomersIndexRoute
 }
 export interface FileRouteTypes {
@@ -282,6 +292,7 @@ export interface FileRouteTypes {
     | '/shop/$slug'
     | '/admin/'
     | '/admin/customers/$customerId'
+    | '/admin/reports/advanced-analytics'
     | '/admin/customers/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -306,6 +317,7 @@ export interface FileRouteTypes {
     | '/shop/$slug'
     | '/admin'
     | '/admin/customers/$customerId'
+    | '/admin/reports/advanced-analytics'
     | '/admin/customers'
   id:
     | '__root__'
@@ -334,6 +346,7 @@ export interface FileRouteTypes {
     | '/_store/shop_/$slug'
     | '/_authenticated/admin/'
     | '/_authenticated/admin/customers/$customerId'
+    | '/_authenticated/admin/reports/advanced-analytics'
     | '/_authenticated/admin/customers/'
   fileRoutesById: FileRoutesById
 }
@@ -529,6 +542,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAdminCustomersCustomerIdRouteImport
       parentRoute: typeof AuthenticatedAdminCustomersRoute
     }
+    '/_authenticated/admin/reports/advanced-analytics': {
+      id: '/_authenticated/admin/reports/advanced-analytics'
+      path: '/advanced-analytics'
+      fullPath: '/admin/reports/advanced-analytics'
+      preLoaderRoute: typeof AuthenticatedAdminReportsAdvancedAnalyticsRouteImport
+      parentRoute: typeof AuthenticatedAdminReportsRoute
+    }
   }
 }
 
@@ -550,6 +570,21 @@ const AuthenticatedAdminCustomersRouteWithChildren =
     AuthenticatedAdminCustomersRouteChildren,
   )
 
+interface AuthenticatedAdminReportsRouteChildren {
+  AuthenticatedAdminReportsAdvancedAnalyticsRoute: typeof AuthenticatedAdminReportsAdvancedAnalyticsRoute
+}
+
+const AuthenticatedAdminReportsRouteChildren: AuthenticatedAdminReportsRouteChildren =
+  {
+    AuthenticatedAdminReportsAdvancedAnalyticsRoute:
+      AuthenticatedAdminReportsAdvancedAnalyticsRoute,
+  }
+
+const AuthenticatedAdminReportsRouteWithChildren =
+  AuthenticatedAdminReportsRoute._addFileChildren(
+    AuthenticatedAdminReportsRouteChildren,
+  )
+
 interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminCustomersRoute: typeof AuthenticatedAdminCustomersRouteWithChildren
   AuthenticatedAdminDashboardRoute: typeof AuthenticatedAdminDashboardRoute
@@ -557,7 +592,7 @@ interface AuthenticatedAdminRouteRouteChildren {
   AuthenticatedAdminExpensesRoute: typeof AuthenticatedAdminExpensesRoute
   AuthenticatedAdminInventoryRoute: typeof AuthenticatedAdminInventoryRoute
   AuthenticatedAdminProductsRoute: typeof AuthenticatedAdminProductsRoute
-  AuthenticatedAdminReportsRoute: typeof AuthenticatedAdminReportsRoute
+  AuthenticatedAdminReportsRoute: typeof AuthenticatedAdminReportsRouteWithChildren
   AuthenticatedAdminSalesRoute: typeof AuthenticatedAdminSalesRoute
   AuthenticatedAdminSettingsRoute: typeof AuthenticatedAdminSettingsRoute
   AuthenticatedAdminStitchingRoute: typeof AuthenticatedAdminStitchingRoute
@@ -574,7 +609,7 @@ const AuthenticatedAdminRouteRouteChildren: AuthenticatedAdminRouteRouteChildren
     AuthenticatedAdminExpensesRoute: AuthenticatedAdminExpensesRoute,
     AuthenticatedAdminInventoryRoute: AuthenticatedAdminInventoryRoute,
     AuthenticatedAdminProductsRoute: AuthenticatedAdminProductsRoute,
-    AuthenticatedAdminReportsRoute: AuthenticatedAdminReportsRoute,
+    AuthenticatedAdminReportsRoute: AuthenticatedAdminReportsRouteWithChildren,
     AuthenticatedAdminSalesRoute: AuthenticatedAdminSalesRoute,
     AuthenticatedAdminSettingsRoute: AuthenticatedAdminSettingsRoute,
     AuthenticatedAdminStitchingRoute: AuthenticatedAdminStitchingRoute,

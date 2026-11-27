@@ -29,6 +29,7 @@ export type AppModule = {
     | "/admin/settings"
     | "/admin/stock-verification"
     | "/admin/reports"
+    | "/admin/reports/advanced-analytics"
     | "/admin/expenses";
 };
 
