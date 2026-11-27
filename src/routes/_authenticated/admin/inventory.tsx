@@ -550,7 +550,7 @@ function StockDialog({
             />
           </Field>
           <Field label="Product" id="stock-product">
-            <Select value={productId || undefined} onValueChange={setProductId}>
+            <Select {...(productId ? { value: productId } : {})} onValueChange={setProductId}>
               <SelectTrigger id="stock-product">
                 <SelectValue placeholder={products.isLoading ? "Loading…" : "Choose"} />
               </SelectTrigger>

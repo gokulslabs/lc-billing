@@ -39,6 +39,14 @@ type EmployeeRow = {
 
 const api = new Hono<{ Variables: Variables }>();
 
+api.get("/api/health", (c) => c.json({ ok: true }));
+
+api.get("/api/ready", async (c) => {
+  const { error } = await supabaseAdmin.from("product_groups").select("id").limit(1);
+  if (error) return c.json({ ok: false }, 503);
+  return c.json({ ok: true });
+});
+
 api.use("/api/*", async (c, next) => {
   const header = c.req.header("authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";

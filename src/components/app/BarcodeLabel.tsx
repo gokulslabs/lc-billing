@@ -39,12 +39,12 @@ export function LabelSheet({ labels }: { labels: BarcodeLabel[] }) {
           {row.map((label, columnIndex) => (
             <section
               key={columnIndex}
-              className="flex min-w-0 flex-col items-center px-1 py-1 font-bold break-inside-avoid"
+              className="flex min-w-0 flex-col items-center px-0.5 font-bold break-inside-avoid"
             >
-              <p className="m-0 text-[8.5pt] leading-tight">LADIES COLLECTION</p>
+              <p className="m-0 text-[7pt] leading-none">LADIES COLLECTION</p>
               <BarcodeMark value={label.number} />
-              <p className="m-0 text-[8.5pt] leading-tight">{label.number}</p>
-              <p className="m-0 text-[10pt] leading-tight">{formatStickerPrice(label.price)}</p>
+              <p className="m-0 text-[7pt] leading-none">{label.number}</p>
+              <p className="m-0 text-[8pt] leading-none">{formatStickerPrice(label.price)}</p>
             </section>
           ))}
         </div>

@@ -200,10 +200,12 @@ export const invoiceLineSchema = z.object({
     .min(0, "Extra off cannot be negative.")
     .max(9_999_999, "Extra off is too large.")
     .optional(),
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
 });
 
 export const returnLineSchema = z.object({
   quantity: z.number().positive("Enter a quantity.").max(999_999, "Quantity is too large."),
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
 });
 
 export const invoiceDiscountSchema = z.object({
@@ -226,6 +228,7 @@ export const paymentSchema = z.object({
   paidOn: day,
   mode: z.enum(PAYMENT_MODES, { message: "Choose a payment method." }),
   showroom: z.string().trim().max(80, "Showroom is too long."),
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
 });
 
 export function nextBillNo(existing: readonly string[]): string {
