@@ -53,10 +53,10 @@ export function barcodeLabelsDocument(labels: BarcodeLabel[]): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Barcode labels</title><style>
     *{box-sizing:border-box} @page{margin:1mm} html,body{margin:0;padding:0;width:100%;background:#fff;color:#000;font-family:Arial,sans-serif}
     .sheet{width:100%}.sticker-row{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));width:100%;break-inside:avoid;page-break-inside:avoid;}
-    .sticker{display:flex;min-width:0;flex-direction:column;align-items:center;justify-content:flex-start;padding:.4mm .25mm .55mm;gap:.25mm;text-align:center;font-weight:700;break-inside:avoid;page-break-inside:avoid;}
-    p{margin:0;max-width:100%;line-height:1.05;overflow-wrap:anywhere}
-    .brand,.number{font-size:8pt}.price{font-size:9pt}
-    svg{display:block;flex:none;width:100%;max-width:29mm;height:5.8mm;fill:#000}
+    .sticker{display:flex;min-width:0;flex-direction:column;align-items:center;justify-content:flex-start;padding:0 .25mm;text-align:center;font-weight:700;break-inside:avoid;page-break-inside:avoid;}
+    p{margin:0;max-width:100%;line-height:2.3mm;white-space:nowrap}
+    .brand,.number{font-size:7.5pt}.price{font-size:8.5pt;line-height:2.6mm}
+    svg{display:block;flex:none;width:100%;max-width:27mm;height:5.3mm;fill:#000}
     @media print{.sticker-row,.sticker{break-inside:avoid;page-break-inside:avoid}}
   </style></head><body><main class="sheet">${body}</main></body></html>`;
 }
