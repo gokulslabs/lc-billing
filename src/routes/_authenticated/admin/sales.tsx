@@ -2018,16 +2018,16 @@ function salesBillHtml(invoice: InvoiceDetail): string {
 
 function salesBillDocument(invoice: InvoiceDetail): string {
   return `<!doctype html><html><head><meta charset="utf-8"><title>Bill ${escapePrint(invoice.billNo)}</title><style>
-    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; color: #333; font-family: Arial, sans-serif; }
+    * { box-sizing: border-box; } html, body { margin: 0; padding: 0; color: #111; font-family: Arial, sans-serif; }
     body { width: 100%; max-width: 190mm; margin: 0 auto; padding: 0; font-size: 9.5pt; font-weight: 500; }
     table { width: 100%; border: 0; border-collapse: collapse; margin: 0 0 2mm; table-layout: fixed; break-inside: auto; }
-    th, td { border: 0; padding: 1.2mm 1.8mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; color: #333; }
+    th, td { border: 0; padding: 1.2mm 1.8mm; text-align: left; vertical-align: top; overflow-wrap: anywhere; color: #111; }
     th { background: transparent; font-weight: 600; }
-    .center { text-align: center; } h3 { margin: 1mm 0; font-size: 13pt; font-weight: 600; } h4 { margin: 0.5mm 0; font-size: 8.5pt; line-height: 1.1; font-weight: 500; color: #333; }
+    .center { text-align: center; } h3 { margin: 1mm 0; font-size: 13pt; font-weight: 600; } h4 { margin: 0.5mm 0; font-size: 8.5pt; line-height: 1.1; font-weight: 500; color: #111; }
     .receipt-header, .receipt-totals, .receipt-footer, .receipt-items tr { break-inside: avoid; page-break-inside: avoid; }
     .receipt-items thead { display: table-header-group; }
     @page { size: A4 portrait; margin: 6mm; }
-    @media print { html, body { color: #333 !important; } body { width: 100%; max-width: none; padding: 0; font-weight: 500; } th, td { padding: 1mm 1.5mm; } }
+    @media print { html, body { color: #111 !important; } body { width: 100%; max-width: none; padding: 0; font-weight: 500; } th, td { padding: 1mm 1.5mm; } }
   </style></head><body>${salesBillHtml(invoice)}</body></html>`;
 }
 
